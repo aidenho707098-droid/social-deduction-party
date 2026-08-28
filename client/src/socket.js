@@ -1,10 +1,16 @@
 import { io } from "socket.io-client";
 
-// The server always runs on port 3001. By reusing whatever hostname the
-// browser used to load THIS page (localhost, or your laptop's LAN IP like
-// 192.168.1.23), phones on the same WiFi connect to the right place
-// automatically — no manual config needed.
-export const SERVER_URL = `${window.location.protocol}//${window.location.hostname}:3001`;
+// In a deployed build, VITE_SERVER_URL points at the separately-hosted
+// server (e.g. https://social-deduction-party.onrender.com). It's baked in
+// at build time by Vite.
+//
+// With no env var — i.e. local dev — fall back to reusing whatever hostname
+// the browser used to load THIS page (localhost, or your laptop's LAN IP
+// like 192.168.1.23) on port 3001, so phones on the same WiFi connect to
+// the right place automatically with no config.
+export const SERVER_URL =
+  import.meta.env.VITE_SERVER_URL ||
+  `${window.location.protocol}//${window.location.hostname}:3001`;
 
 export const socket = io(SERVER_URL, {
   autoConnect: true,

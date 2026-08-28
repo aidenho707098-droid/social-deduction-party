@@ -46,6 +46,9 @@ export default function Lobby() {
   const isHost = room?.hostId === myPlayerId
 
   useEffect(() => {
+    // Deployed build: the server is on another domain and its LAN IP is
+    // meaningless — keep baseUrl as window.location.origin (the real site).
+    if (import.meta.env.VITE_SERVER_URL) return
     fetch(`${SERVER_URL}/lan-url`)
       .then((res) => res.json())
       .then((data) => {
