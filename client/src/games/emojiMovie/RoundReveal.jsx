@@ -2,7 +2,7 @@ const DIFFICULTY_LABEL = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 
 export default function RoundReveal({ game, players, myId, isHost, onNext }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
-  const { title, emojis, entries, difficulty } = game.result
+  const { title, emojis, entries, difficulty, categoryName } = game.result
   const isLastRound = game.roundIndex + 1 >= game.totalRounds
   const solvedCount = entries.filter((e) => e.correct).length
   const diffLabel = DIFFICULTY_LABEL[difficulty]
@@ -11,6 +11,7 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
     <div className="screen">
       <p className="wyr-round">
         Round {game.roundIndex + 1} answer
+        {categoryName && <span className="emoji-cat">{categoryName}</span>}
         {diffLabel && (
           <span className={`emoji-diff emoji-diff-${difficulty}`}>{diffLabel}</span>
         )}

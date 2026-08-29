@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import WordPeek from './WordPeek'
 
-export default function Voting({ players, myId, votedPlayerIds, totalVoters, voteLimit, onToggleVote }) {
+export default function Voting({ players, myId, myRole, votedPlayerIds, totalVoters, voteLimit, onToggleVote }) {
   const [myVotes, setMyVotes] = useState([])
 
   const hasFinished = votedPlayerIds.includes(myId)
@@ -20,6 +21,8 @@ export default function Voting({ players, myId, votedPlayerIds, totalVoters, vot
       <p className="hint center-text">
         {voteLimit > 1 ? `Pick ${voteLimit} suspects` : 'Pick 1 suspect'} · {votedPlayerIds.length}/{totalVoters} done
       </p>
+
+      <WordPeek word={myRole?.word ?? null} />
 
       <ul className="player-list">
         {players.map((p) => {

@@ -1,12 +1,21 @@
 import { useState } from 'react'
-import { CATEGORY_NAMES } from './words'
+import { CATEGORY_NAMES, RANDOM_CATEGORY } from './words'
 import HowToPlay from '../HowToPlay'
 
-export default function ImposterSetup({ gameId, playerCount, onStart, onCancel, error }) {
-  const [imposterCount, setImposterCount] = useState(1)
-  const [category, setCategory] = useState(CATEGORY_NAMES[0])
-
+export default function ImposterSetup({ gameId, playerCount, saved, onStart, onCancel, error }) {
   const canUseTwoImposters = playerCount >= 4
+
+  // Pre-fill from the host's last settings for this game this room. Clamp
+  // "2 imposters" back to 1 if there aren't enough players for it now.
+  const [imposterCount, setImposterCount] = useState(() => {
+    const wanted = [1, 2].includes(saved?.imposterCount) ? saved.imposterCount : 1
+    return wanted === 2 && !canUseTwoImposters ? 1 : wanted
+  })
+  const [category, setCategory] = useState(() =>
+    [...CATEGORY_NAMES, RANDOM_CATEGORY].includes(saved?.category)
+      ? saved.category
+      : CATEGORY_NAMES[0],
+  )
 
   return (
     <div className="screen">
@@ -53,7 +62,17 @@ export default function ImposterSetup({ gameId, playerCount, onStart, onCancel, 
               {name}
             </button>
           ))}
+          <button
+            type="button"
+            className={`pill ${category === RANDOM_CATEGORY ? 'pill-active' : ''}`}
+            onClick={() => setCategory(RANDOM_CATEGORY)}
+          >
+            🎲 Random Category
+          </button>
         </div>
+        {category === RANDOM_CATEGORY && (
+          <p className="hint">The app will pick a category at random when the round starts.</p>
+        )}
       </div>
 
       {error && <p className="error">{error}</p>}

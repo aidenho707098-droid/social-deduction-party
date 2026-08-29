@@ -125,6 +125,16 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
                       <span className="fof-score-line-pts">+{rs.truthPoints}</span>
                     </div>
                   )}
+                  {foundTruth && rs.truthBonus > 0 && (
+                    <div className="fof-score-line fof-score-line-truth">
+                      <span className="fof-score-line-icon">💎</span>
+                      <span className="fof-score-line-label">
+                        Rare guess — only {game.result.truthFinderCount}{' '}
+                        {game.result.truthFinderCount === 1 ? 'player' : 'players'} found it
+                      </span>
+                      <span className="fof-score-line-pts">+{rs.truthBonus}</span>
+                    </div>
+                  )}
                   {fooled > 0 && (
                     <div className="fof-score-line fof-score-line-fool">
                       <span className="fof-score-line-icon">🎣</span>

@@ -81,6 +81,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Twemoji: every emoji glyph is swapped for an <img class="emoji"> that
+   sizes to the surrounding text (so the 56px .emoji-clue, 48px role icons
+   and inline button emoji all scale as before, just cross-device stable). */
+img.emoji {
+  height: 1em;
+  width: 1em;
+  margin: 0 0.05em 0 0.1em;
+  vertical-align: -0.1em;
+  display: inline-block;
+}
+
 #root {
   min-height: 100svh;
   display: flex;
@@ -553,6 +564,18 @@ body {
   color: var(--muted);
 }
 
+/* Right-aligned "View rules" hint on Game Catalogue cards. */
+.game-card-cta {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--violet);
+}
+
 /* ============================================================
    "How to Play" trigger + modal
    ============================================================ */
@@ -595,6 +618,143 @@ body {
   cursor: pointer;
   box-shadow: var(--shadow-md);
   z-index: 900;
+}
+
+/* ---- Host controls panel (host-only, bottom-left, all screens) ---- */
+.host-panel {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 950;
+}
+
+.host-panel-toggle {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--violet);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+}
+
+.host-panel-open {
+  width: min(300px, calc(100vw - 32px));
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  padding: 12px;
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
+
+.host-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+
+.host-panel-x {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.host-panel-players {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.host-panel-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.host-panel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+  flex: none;
+}
+
+.host-panel-dot-off {
+  background: var(--border-2);
+}
+
+.host-panel-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.host-panel-btn {
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  flex: none;
+}
+
+.host-panel-btn-armed {
+  background: var(--coral);
+  border-color: var(--coral);
+  color: #fff;
+}
+
+.host-panel-game {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.host-panel-wide {
+  width: 100%;
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.host-panel-danger {
+  color: var(--coral-ink);
+  border-color: var(--coral-tint-2);
+}
+
+.host-panel-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
 }
 
 .modal-overlay {
@@ -756,6 +916,33 @@ body {
   font-size: 32px;
   font-weight: 700;
   margin-top: 10px;
+}
+
+/* Crew-only click-to-reveal of the secret word, available all round. */
+.word-peek {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+
+.word-peek-toggle {
+  border: 2px dashed var(--border-2);
+  border-radius: var(--r-pill);
+  padding: 8px 18px;
+  color: var(--violet);
+  font-weight: 600;
+}
+
+.word-peek-word {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--violet-ink);
+  background: var(--violet-tint);
+  border-radius: var(--r-sm);
+  padding: 10px 22px;
+  letter-spacing: 0.5px;
 }
 
 .player-item-active {
@@ -1322,6 +1509,21 @@ body {
 
 .emoji-diff-hard {
   color: var(--coral-ink);
+}
+
+/* Which Crack the Code category this round is drawn from. */
+.emoji-cat {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--violet-tint);
+  color: var(--violet-ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  vertical-align: middle;
 }
 
 /* ============================================================

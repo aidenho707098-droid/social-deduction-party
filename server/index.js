@@ -83,7 +83,15 @@ function connectedPlayerIds(room) {
 // disconnected) plus, if a game is running, that game's own public state,
 // plus the tournament layer's state when a tournament is active.
 function buildPublicRoom(room) {
-  const base = { ...toPublicRoom(room), status: room.status, game: null, tournament: null };
+  const base = {
+    ...toPublicRoom(room),
+    status: room.status,
+    game: null,
+    tournament: null,
+    // Last host-configured options per game this session, so the setup
+    // screen can pre-fill instead of resetting to defaults on replay.
+    gameSettings: room.gameSettings ?? {},
+  };
   if (room.status === "in-game" && room.game) {
     const gameModule = GAMES[room.game.id];
     base.game = gameModule.getPublicState(room.game, connectedPlayerIds(room));
@@ -144,12 +152,7 @@ function armGraceTimer(code, playerId) {
       const room = getRoom(code);
       const player = room?.players.get(playerId);
       if (!player || player.connected) return; // gone already, or came back
-      removePlayer(code, playerId);
-      reconcileGame(getRoom(code));
-      refreshFibbageVoteRoles(getRoom(code));
-      broadcastRoom(code);
-      syncEmojiTicker(getRoom(code));
-      syncBlackMagicTicker(getRoom(code));
+      finalizePlayerRemoval(code, playerId);
     }, REJOIN_GRACE_MS)
   );
 }
@@ -158,6 +161,21 @@ function clearGraceTimer(code, playerId) {
   const key = graceKey(code, playerId);
   clearTimeout(graceTimers.get(key));
   graceTimers.delete(key);
+}
+
+// Actually drop a player from the room and let the running game (if any)
+// move on without them — the shared end state for BOTH a rejoin grace that
+// expired and a host kick. Their score stays on the board (it lives in the
+// game's own state, keyed to playerId); the game just stops waiting on
+// them. Rejoining later comes in fresh via join_room -> the lobby.
+function finalizePlayerRemoval(code, playerId) {
+  clearGraceTimer(code, playerId);
+  removePlayer(code, playerId);
+  reconcileGame(getRoom(code));
+  refreshFibbageVoteRoles(getRoom(code));
+  broadcastRoom(code);
+  syncEmojiTicker(getRoom(code));
+  syncBlackMagicTicker(getRoom(code));
 }
 
 // Emoji Movie Guess reveals emojis one at a time on a server clock, but
@@ -279,6 +297,18 @@ function clearWheelTimer(code) {
   wheelTimers.delete(code);
 }
 
+// Session-scoped "already used this content" memory, per room, per game.
+// Each game's createGame() draws its rounds skipping keys it's seen before
+// and hands back the updated list on `game.deckMemory`; we stash that on
+// the room so the NEXT game of the same kind (Play Again, or another
+// Tournament round) continues through the bank instead of reshuffling from
+// the top. Lives as long as the room does; cleared only on server restart.
+function recordDeckMemory(room, gameId, game) {
+  if (!game?.deckMemory) return;
+  room.itemMemory = room.itemMemory ?? {};
+  room.itemMemory[gameId] = game.deckMemory;
+}
+
 // Actually start the next game a tournament wants to run (manual pick or a
 // resolved wheel spin). Skips the game gracefully if it can no longer run.
 function startTournamentGameNow(room, gameId) {
@@ -286,12 +316,19 @@ function startTournamentGameNow(room, gameId) {
   const playerIds = [...room.players.keys()];
   let game;
   try {
-    game = mod.createGame(playerIds, tournamentOptionsFor(gameId, playerIds));
+    game = mod.createGame(playerIds, {
+      ...tournamentOptionsFor(gameId, playerIds),
+      // Prefer whatever the host last configured for this game this
+      // session; fall back to the tournament defaults.
+      ...(room.gameSettings?.[gameId] ?? {}),
+      memory: room.itemMemory?.[gameId],
+    });
   } catch (err) {
     console.warn(`Tournament: skipping ${gameId} — ${err.message}`);
     skipGame(room.tournament, gameId);
     return runTournamentStep(room);
   }
+  recordDeckMemory(room, gameId, game);
   beginGame(room.tournament, gameId, playerIds);
   startGameOnRoom(room, game);
   broadcastRoom(room.code);
@@ -393,10 +430,18 @@ io.on("connection", (socket) => {
 
     let game;
     try {
-      game = gameModule.createGame(playerIds, options ?? {});
+      game = gameModule.createGame(playerIds, {
+        ...(options ?? {}),
+        memory: room.itemMemory?.[gameId],
+      });
     } catch (err) {
       return callback?.({ error: err.message });
     }
+    recordDeckMemory(room, gameId, game);
+    // Remember exactly what the host configured, keyed to this game, for
+    // the life of the room — the next setup screen for it pre-fills these.
+    room.gameSettings = room.gameSettings ?? {};
+    room.gameSettings[gameId] = options ?? {};
 
     startGameOnRoom(room, game);
     callback?.({ ok: true });
@@ -684,6 +729,63 @@ io.on("connection", (socket) => {
     syncEmojiTicker(room);
     syncBlackMagicTicker(room);
   });
+
+  // --- Host session-management controls ---------------------------------
+  // All host-only; the client only shows the panel to the host, and every
+  // handler re-checks isRoomHost so a crafted event from a non-host does
+  // nothing.
+
+  // KICK: a TEMPORARY removal. The player is told why, their socket is
+  // closed, and their seat is freed via the exact same path as a rejoin
+  // grace that expired (finalizePlayerRemoval). They can rejoin the room
+  // with the normal code afterwards — landing in the lobby, like any new
+  // joiner, never mid-game.
+  socket.on("kick_player", ({ code, playerId }, callback) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket)) {
+      return callback?.({ error: "Only the host can remove players." });
+    }
+    if (playerId === room.hostId) {
+      return callback?.({ error: "You can't remove yourself." });
+    }
+    const target = room.players.get(playerId);
+    if (!target) return callback?.({ error: "That player isn't in the room." });
+
+    if (target.socketId) {
+      io.to(target.socketId).emit("kicked", { reason: "host" });
+      const sock = io.sockets.sockets.get(target.socketId);
+      if (sock) setTimeout(() => sock.disconnect(true), 250); // let the emit flush
+    }
+    finalizePlayerRemoval(code, playerId);
+    callback?.({ ok: true });
+  });
+
+  // FORCE PROCEED: push the current phase forward as if every player who
+  // hasn't acted this round had no input (auto-forfeit for THIS round
+  // only). Routed through each game's optional forceAdvance() hook so the
+  // per-game "what does 'proceed' mean here" logic lives with the game,
+  // not here.
+  socket.on("host_force_advance", ({ code }, callback) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket)) {
+      return callback?.({ error: "Only the host can do that." });
+    }
+    if (room.status !== "in-game" || !room.game) {
+      return callback?.({ error: "No game is running." });
+    }
+    const gameModule = GAMES[room.game.id];
+    gameModule.forceAdvance?.(room.game, connectedPlayerIds(room));
+    broadcastRoom(room.code); // also folds a now-finished game into a tournament
+    sendPrivateRoles(room);
+    refreshFibbageVoteRoles(room);
+    syncEmojiTicker(room);
+    syncBlackMagicTicker(room);
+    callback?.({ ok: true });
+  });
+
+  // END GAME EARLY reuses "back_to_lobby" above — same effect: abandon the
+  // running mini-game (and any tournament) and drop everyone back to the
+  // lobby. No separate handler needed.
 
   socket.on("disconnect", () => {
     console.log(`Socket disconnected: ${socket.id}`);

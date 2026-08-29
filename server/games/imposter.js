@@ -1,19 +1,47 @@
+import { shuffle, drawWithoutRepeats } from "./deck.js";
+
 const CATEGORIES = {
   Animals: [
     "Elephant", "Penguin", "Kangaroo", "Octopus", "Giraffe",
     "Dolphin", "Tiger", "Panda", "Flamingo", "Koala",
+    "Hedgehog", "Raccoon", "Platypus", "Otter", "Sloth",
+    "Walrus", "Peacock", "Chameleon", "Meerkat", "Armadillo",
   ],
   Food: [
     "Pizza", "Sushi", "Taco", "Pancake", "Burger",
     "Spaghetti", "Sandwich", "Waffle", "Popcorn", "Donut",
+    "Burrito", "Lasagna", "Pretzel", "Nachos", "Dumpling",
+    "Croissant", "Meatball", "Cheesecake", "Omelette", "Pudding",
   ],
   Places: [
     "Beach", "Hospital", "Library", "Airport", "Castle",
     "Zoo", "Concert", "Volcano", "Submarine", "Space Station",
+    "Lighthouse", "Aquarium", "Casino", "Greenhouse", "Cemetery",
+    "Ski Lodge", "Subway", "Campsite", "Courtroom", "Farm",
   ],
   Movies: [
     "Titanic", "Frozen", "Jaws", "Avatar", "Shrek",
     "Inception", "Gladiator", "Cinderella", "Rocky", "Matrix",
+    "Jurassic Park", "Ghostbusters", "Casablanca", "Interstellar", "Braveheart",
+    "Grease", "Twister", "Aladdin", "Coco", "Up",
+  ],
+  Sports: [
+    "Soccer", "Basketball", "Tennis", "Bowling", "Surfing",
+    "Boxing", "Golf", "Archery", "Skateboarding", "Volleyball",
+    "Hockey", "Fencing", "Curling", "Gymnastics", "Rowing",
+    "Badminton", "Cricket", "Snowboarding",
+  ],
+  Jobs: [
+    "Firefighter", "Astronaut", "Plumber", "Chef", "Dentist",
+    "Lifeguard", "Electrician", "Librarian", "Barber", "Pilot",
+    "Farmer", "Judge", "Nurse", "Carpenter", "Journalist",
+    "Zookeeper", "Accountant", "Magician",
+  ],
+  "Around the House": [
+    "Toaster", "Umbrella", "Pillow", "Vacuum", "Doorbell",
+    "Mirror", "Blender", "Ladder", "Thermostat", "Bathtub",
+    "Broom", "Mousetrap", "Chandelier", "Fireplace", "Hairdryer",
+    "Ironing Board", "Coat Rack", "Piggy Bank",
   ],
 };
 
@@ -22,14 +50,9 @@ export const name = "Imposter";
 export const minPlayers = 3;
 export const CATEGORY_NAMES = Object.keys(CATEGORIES);
 
-function shuffle(array) {
-  const copy = [...array];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
+// Sentinel the host's picker can send instead of a real category name — the
+// server then rolls a category itself, so the host doesn't see it coming.
+export const RANDOM_CATEGORY = "__random__";
 
 // playerIds: array of socket ids currently in the room. The host only ever
 // picks a CATEGORY — the server draws the actual word at random from it, so
@@ -37,30 +60,42 @@ function shuffle(array) {
 // the host is assigned a role (crew or imposter) exactly like anyone else;
 // if they'd hand-picked the word themselves, they'd already know it even
 // on rounds where they end up being the imposter.
-export function createGame(playerIds, { imposterCount, category }) {
+export function createGame(playerIds, { imposterCount, category, memory }) {
   if (![1, 2].includes(imposterCount)) {
     throw new Error("Imposter count must be 1 or 2.");
   }
   if (imposterCount >= playerIds.length) {
     throw new Error("Not enough players for that many imposters.");
   }
-  const words = CATEGORIES[category];
+  // "Random Category" — the server rolls one now so nobody (host included)
+  // knew it going in. From here on the round has a concrete category.
+  const resolvedCategory =
+    category === RANDOM_CATEGORY
+      ? CATEGORY_NAMES[Math.floor(Math.random() * CATEGORY_NAMES.length)]
+      : category;
+  const words = CATEGORIES[resolvedCategory];
   if (!words) {
     throw new Error("Unknown category.");
   }
 
-  const word = words[Math.floor(Math.random() * words.length)];
+  // One word per game — but remember which words this session has already
+  // used (across every category) so "Play Again" doesn't keep landing on
+  // the same one. Word strings are unique across categories, so a single
+  // seen list is safe.
+  const { items, seenKeys } = drawWithoutRepeats(words, 1, memory?.seen ?? []);
+  const word = items[0];
   const imposterIds = new Set(shuffle(playerIds).slice(0, imposterCount));
 
   return {
     id,
     phase: "reveal", // reveal -> turns -> voting -> results
-    category,
+    category: resolvedCategory,
     word,
     imposterIds,
     turnOrder: shuffle(playerIds),
     currentTurnIndex: 0,
     votes: new Map(), // voterId -> Set<votedForId>, one vote per imposter in play
+    deckMemory: { seen: seenKeys }, // server-only; harvested by index.js
   };
 }
 
@@ -179,6 +214,19 @@ export function reconcilePresence(game, presentPlayerIds) {
       present.size > 0 &&
       presentPlayerIds.every((id) => (game.votes.get(id)?.size ?? 0) === limit);
     if (allDone) game.phase = "results";
+  }
+}
+
+// Optional framework hook: the host hit "Force proceed" because the round
+// is stuck waiting on someone. Advance the current phase treating anyone
+// who hasn't acted as having no input — for this round only.
+export function forceAdvance(game, presentPlayerIds) {
+  if (game.phase === "reveal") {
+    game.phase = "turns"; // same as the host's "Start Discussion"
+  } else if (game.phase === "turns") {
+    advanceTurn(game, presentPlayerIds); // skip the current speaker; may end turns
+  } else if (game.phase === "voting") {
+    game.phase = "results"; // score whatever votes are in
   }
 }
 

@@ -1,6 +1,6 @@
 import { QRCodeSVG } from 'qrcode.react'
 
-export default function LobbyView({ code, players, isHost, baseUrl, onStartGame, onTournament }) {
+export default function LobbyView({ code, players, isHost, baseUrl, onStartGame, onTournament, onCatalogue }) {
   const joinUrl = `${baseUrl}/join/${code}`
 
   return (
@@ -45,6 +45,10 @@ export default function LobbyView({ code, players, isHost, baseUrl, onStartGame,
       ) : (
         <p className="hint center-text">Waiting for the host to start the game…</p>
       )}
+
+      <button className="btn btn-text" onClick={onCatalogue}>
+        📖 Game Catalogue
+      </button>
     </div>
   )
 }

@@ -10,20 +10,72 @@ const DIFFICULTY_OPTIONS = [
   { key: 'mixed', label: 'Mixed' },
 ]
 
-export default function EmojiMovieSetup({ gameId, onStart, onCancel, error }) {
-  const [rounds, setRounds] = useState(5)
-  const [difficulty, setDifficulty] = useState('mixed')
+// Keep in sync with CATEGORIES in server/games/emoji-movie.js.
+const CATEGORY_OPTIONS = [
+  { key: 'movies', label: 'Movies' },
+  { key: 'tv', label: 'TV Shows' },
+  { key: 'countries', label: 'Countries' },
+  { key: 'video-games', label: 'Video Games' },
+  { key: 'mashup', label: 'Mashup' },
+]
+
+export default function EmojiMovieSetup({ gameId, saved, onStart, onCancel, error }) {
+  // Pre-fill from the last settings the host used for this game THIS room
+  // (`saved`), falling back to defaults the first time / in a fresh room.
+  const [rounds, setRounds] = useState(() =>
+    ROUND_OPTIONS.includes(saved?.rounds) ? saved.rounds : 5,
+  )
+  const [difficulty, setDifficulty] = useState(() =>
+    DIFFICULTY_OPTIONS.some((o) => o.key === saved?.difficulty) ? saved.difficulty : 'mixed',
+  )
+  const [categories, setCategories] = useState(() => {
+    const valid = CATEGORY_OPTIONS.map((c) => c.key)
+    const fromSaved = Array.isArray(saved?.categories)
+      ? saved.categories.filter((k) => valid.includes(k))
+      : []
+    return fromSaved.length ? fromSaved : valid
+  })
+
+  function toggleCategory(key) {
+    setCategories((prev) => {
+      if (prev.includes(key)) {
+        // Never let the host turn off the last category.
+        return prev.length === 1 ? prev : prev.filter((k) => k !== key)
+      }
+      return [...prev, key]
+    })
+  }
 
   return (
     <div className="screen">
-      <h1 className="title">Emoji Movie Guess</h1>
+      <h1 className="title">Crack the Code</h1>
       <HowToPlay gameId={gameId} />
       <p className="hint hint-block">
-        Each round a movie is spelled out in emojis, revealed one at a time.
-        Type the title on your own phone the moment you think you've got it —
-        guessing with fewer emojis showing scores far more. A wrong guess
-        costs nothing; a correct one locks you in for the round.
+        Each round an answer is spelled out in emojis, revealed one at a time.
+        Type it on your own phone the moment you think you've got it — guessing
+        with fewer emojis showing scores far more.
       </p>
+
+      <div>
+        <span className="label">Categories</span>
+        <div className="pill-group pill-group-wrap">
+          {CATEGORY_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              className={`pill ${categories.includes(opt.key) ? 'pill-active' : ''}`}
+              onClick={() => toggleCategory(opt.key)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <p className="hint hint-block">
+          Rounds are drawn from the categories you turn on. Countries always end
+          on the flag; Mashup combines two emojis into one word (⭐ + 🚢 =
+          starship).
+        </p>
+      </div>
 
       <div>
         <span className="label">How many rounds?</span>
@@ -57,8 +109,8 @@ export default function EmojiMovieSetup({ gameId, onStart, onCancel, error }) {
         </div>
         <p className="hint hint-block">
           {difficulty === 'mixed'
-            ? 'Movies of every tier — harder ones are worth more points.'
-            : `Only ${difficulty} movies. If there aren't enough for ${rounds} rounds, the game runs fewer.`}
+            ? 'Answers of every tier — harder ones are worth more points.'
+            : `Only ${difficulty} answers. If there aren't enough for ${rounds} rounds, the game runs fewer.`}
         </p>
       </div>
 
@@ -66,7 +118,7 @@ export default function EmojiMovieSetup({ gameId, onStart, onCancel, error }) {
 
       <button
         className="btn btn-start"
-        onClick={() => onStart({ rounds, difficulty })}
+        onClick={() => onStart({ rounds, difficulty, categories })}
       >
         Start Game
       </button>

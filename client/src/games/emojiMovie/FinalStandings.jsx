@@ -7,14 +7,14 @@ export default function FinalStandings({ game, players, myId, isHost, onBackToLo
   const winnerNames = winnerIds.map((id) => nameById[id] ?? 'Unknown')
 
   let headline
-  if (winnerNames.length === 0) headline = 'Nobody guessed a movie!'
+  if (winnerNames.length === 0) headline = 'Nobody cracked a single code!'
   else if (winnerNames.length === 1) headline = `${winnerNames[0]} wins!`
   else headline = `It's a tie: ${winnerNames.join(' & ')}`
 
   return (
     <div className="screen">
       <div className={`outcome-banner ${iWon ? 'outcome-win' : 'outcome-lose'}`}>
-        <div className="outcome-icon">🎬</div>
+        <div className="outcome-icon">🔠</div>
         <div className="outcome-title">{iWon ? 'You Win!' : 'Game Over'}</div>
         <div className="outcome-subtitle">{headline}</div>
       </div>

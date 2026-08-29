@@ -12,6 +12,8 @@
 // consecutive majority rounds. Minority picks score 0. A tie for the top
 // option means no majority that round — nobody scores, every streak resets.
 
+import { drawWithoutRepeats } from "./deck.js";
+
 const QUESTIONS = [
   // --- Food & drink (2-option) ---
   { options: ["Never eat pizza again", "Never eat chocolate again"] },
@@ -108,6 +110,104 @@ const QUESTIONS = [
   { options: ["Dream home: beach house", "Dream home: city loft", "Dream home: forest cabin", "Dream home: countryside farm"] },
   { options: ["First superpower pick: fly", "First superpower pick: teleport", "First superpower pick: read minds", "First superpower pick: freeze time"] },
   { options: ["Ice cream forever: vanilla", "Ice cream forever: chocolate", "Ice cream forever: strawberry", "Ice cream forever: mint choc chip"] },
+
+  // --- Expansion: Food & drink (2-option) ---
+  { options: ["Only be able to eat with a spoon", "Only be able to eat with your hands"] },
+  { options: ["Every drink you have is room temperature", "Every drink you have is over-iced"] },
+  { options: ["Pizza must always be eaten cold", "Cereal must always be eaten dry"] },
+  { options: ["Give up all condiments and sauces", "Give up all cheese"] },
+  { options: ["Only eat food you cooked yourself", "Only eat food someone else cooked"] },
+  { options: ["Chocolate now tastes like coffee", "Coffee now tastes like chocolate"] },
+  { options: ["Never eat leftovers again", "Never eat a fresh meal, only leftovers"] },
+  { options: ["Every soup is slightly too salty", "Every dessert is slightly not sweet enough"] },
+  { options: ["Only eat crunchy foods", "Only eat soft foods"] },
+  { options: ["Restaurants only, never cook", "Home cooking only, never restaurants"] },
+  { options: ["A great meal but you eat alone", "A mediocre meal with people you love"] },
+  { options: ["Free groceries but a random menu each week", "Pay full price and choose everything"] },
+
+  // --- Expansion: Superpowers & abilities (2-option) ---
+  { options: ["Summon any object, but it vanishes in an hour", "Keep any object, but summoning takes a full day"] },
+  { options: ["Understand any animal, but they find you boring", "Charm any animal, but never know what they mean"] },
+  { options: ["Teleport only when nobody is watching", "Fly, but only in straight lines"] },
+  { options: ["Pause your own aging for 10 years", "Skip the next 10 years and arrive rested"] },
+  { options: ["Always know the fastest route", "Always know the shortest line"] },
+  { options: ["Perfect balance forever", "Perfect aim forever"] },
+  { options: ["Instantly dry off whenever you want", "Instantly warm up whenever you want"] },
+  { options: ["Sleep in 3 hours and feel full-rested", "Eat one meal a day and feel full"] },
+  { options: ["See one minute into the past, anywhere", "See one minute into the future, only where you are"] },
+  { options: ["Speak so persuasively people agree for an hour", "Listen so well people tell you anything"] },
+
+  // --- Expansion: Life & hypotheticals (2-option) ---
+  { options: ["Redo one year of your life", "Skip one year you'd rather not live"] },
+  { options: ["Always remember your dreams vividly", "Never dream again but sleep perfectly"] },
+  { options: ["Know the plot of every book before reading it", "Forget every movie right after watching it"] },
+  { options: ["Be mildly famous in one city forever", "Be completely unknown but very well-off"] },
+  { options: ["Have every stranger trust you instantly", "Have every stranger find you fascinating"] },
+  { options: ["Keep every skill you ever learned, rusty", "Master three skills but lose the rest"] },
+  { options: ["A month off, no phone or internet", "A week off with everything, and pay"] },
+  { options: ["Always find money on the ground, small amounts", "Get one nice unexpected gift a year"] },
+  { options: ["Age only from the neck down", "Age only from the neck up"] },
+  { options: ["Relive your best decision, unaware of the outcome", "Undo your worst decision, keep the lesson"] },
+
+  // --- Expansion: Everyday dilemmas (2-option) ---
+  { options: ["Every website makes you watch a 20s ad", "Every website loads twice as slow"] },
+  { options: ["Your alarm is 10 minutes fast and you can't fix it", "Your clock is 10 minutes slow and you can't fix it"] },
+  { options: ["Autocorrect always changes one word per message", "Voice-to-text always drops the last word"] },
+  { options: ["Shoes always slightly too big", "Sleeves always slightly too short"] },
+  { options: ["Your headphones only work in one ear", "Your speakers only play at two volumes: quiet and blasting"] },
+  { options: ["Every pen you own runs out at the worst moment", "Every charger you own is 2 inches too short"] },
+  { options: ["Always sit in the middle seat", "Always board the plane last"] },
+  { options: ["Perfectly folded laundry that reappears unfolded overnight", "Clean dishes that reappear in the sink each morning"] },
+  { options: ["Your phone screen is always at minimum brightness outdoors", "Your phone is always one update behind"] },
+  { options: ["Every meeting runs 10 minutes long", "Every meeting starts 10 minutes early"] },
+
+  // --- Expansion: Silly & absurd (2-option) ---
+  { options: ["Your shadow is always doing a slightly different pose", "Your reflection waves at you a half-second late"] },
+  { options: ["Everything you write turns into Comic Sans", "Everything you say comes out in a whisper for the first word"] },
+  { options: ["You leave tiny footprints of glitter", "You hum faintly whenever you concentrate and can't stop"] },
+  { options: ["Your hair changes color with your mood", "Your voice changes pitch with the weather"] },
+  { options: ["You can only whisper indoors", "You can only speak loudly outdoors"] },
+  { options: ["A seagull follows you everywhere, judging you", "A tiny rain cloud appears when you tell a lie"] },
+  { options: ["Every door you open creaks dramatically", "Every chair you sit in sighs"] },
+  { options: ["You always smell faintly of campfire", "You always smell faintly of fresh bread"] },
+  { options: ["Sneeze in a musical note every time", "Hiccup a word instead of a sound"] },
+  { options: ["Your keys jingle a little tune", "Your footsteps echo like you're in a cave"] },
+
+  // --- Expansion: World, travel, money (2-option) ---
+  { options: ["One free flight anywhere each month, booked randomly", "Two free flights a year, you choose"] },
+  { options: ["Live by the sea but far from friends", "Live near friends but landlocked and grey"] },
+  { options: ["A paid year abroad in a language you don't speak", "A paid month abroad somewhere familiar"] },
+  { options: ["Always upgraded to first class, flights delayed 2h", "Always economy, flights always on time"] },
+  { options: ["$40 every time it rains where you are", "$300 on the first snowy day of the year"] },
+  { options: ["A job you like, 45-minute commute", "A job you tolerate, work from home"] },
+  { options: ["Instantly fluent in the language of wherever you stand", "Instantly know the history of wherever you stand"] },
+  { options: ["A house that's too big to keep tidy", "A flat that's too small for guests"] },
+  { options: ["A car that's always clean but slow", "A car that's fast but always needs a wash"] },
+  { options: ["Retire five years early on a tight budget", "Retire on time comfortably"] },
+
+  // --- Expansion: 3-option ---
+  { options: ["Weekend away: a quiet cabin", "Weekend away: a lively city", "Weekend away: a beach town"] },
+  { options: ["Pet dragon the size of a cat", "Pet owl that runs errands", "Pet turtle that gives good advice"] },
+  { options: ["Free lifetime coffee", "Free lifetime public transit", "Free lifetime streaming"] },
+  { options: ["Best seat: front row", "Best seat: dead centre", "Best seat: private box"] },
+  { options: ["Superpower: talk to machines", "Superpower: talk to plants", "Superpower: talk to weather"] },
+  { options: ["Always have exact change", "Always have a pen", "Always have a phone charger"] },
+  { options: ["Kitchen that cleans itself", "Garden that tends itself", "Car that parks itself"] },
+  { options: ["Learn every card game", "Learn every board game", "Learn every dice game"] },
+  { options: ["A month as a bird", "A month as a fish", "A month as a house cat"] },
+  { options: ["Perfect memory for names", "Perfect memory for directions", "Perfect memory for numbers"] },
+
+  // --- Expansion: 4-option ---
+  { options: ["Live in: a treehouse", "Live in: a houseboat", "Live in: a lighthouse", "Live in: a converted barn"] },
+  { options: ["Only music: 60s", "Only music: 80s", "Only music: 2000s", "Only music: brand new"] },
+  { options: ["Free class: pottery", "Free class: cooking", "Free class: woodworking", "Free class: dance"] },
+  { options: ["Travel style: road trip", "Travel style: train journey", "Travel style: cruise", "Travel style: backpacking"] },
+  { options: ["Weekend job: bakery", "Weekend job: bookshop", "Weekend job: plant nursery", "Weekend job: record store"] },
+  { options: ["One drink forever: coffee", "One drink forever: tea", "One drink forever: fizzy water", "One drink forever: smoothies"] },
+  { options: ["Talent handed to you: singing", "Talent handed to you: drawing", "Talent handed to you: juggling", "Talent handed to you: mimicry"] },
+  { options: ["Companion on a long trip: a talkative friend", "A quiet friend", "A playlist", "A good book"] },
+  { options: ["Pick a decade to visit: 1920s", "1950s", "1980s", "2050s"] },
+  { options: ["Free upgrade forever: mattress", "Free upgrade forever: shoes", "Free upgrade forever: headphones", "Free upgrade forever: chair"] },
 ];
 
 export const id = "would-you-rather";
@@ -137,15 +237,6 @@ const STREAK_BONUS = 1;
 const letterFor = (i) => String.fromCharCode(65 + i); // 0 -> "A"
 const indexFor = (letter) => letter.charCodeAt(0) - 65; // "A" -> 0
 
-function shuffle(array) {
-  const copy = [...array];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
 function freshStats() {
   return { answered: 0, majority: 0, bestStreak: 0 };
 }
@@ -153,21 +244,28 @@ function freshStats() {
 // The host only picks how many rounds. We draw the whole session's
 // questions up front from a shuffled copy of the bank, so no question can
 // repeat within a game — each session gets its own fresh shuffle.
-export function createGame(playerIds, { rounds }) {
+export function createGame(playerIds, { rounds, memory }) {
   const requested = Number(rounds);
   if (!Number.isInteger(requested) || requested < 1) {
     throw new Error("Choose how many rounds to play.");
   }
 
-  const deck = shuffle(QUESTIONS);
-  const totalRounds = Math.min(requested, deck.length);
+  const totalRounds = Math.min(requested, QUESTIONS.length);
+  // Skip questions already asked earlier this session.
+  const { items, seenKeys } = drawWithoutRepeats(
+    QUESTIONS,
+    totalRounds,
+    memory?.seen ?? [],
+    (q) => q.options.join(" | ")
+  );
 
   return {
     id,
     phase: "answer", // "answer" -> "result" -> ("answer" ...) -> "final"
     totalRounds,
     roundIndex: 0,
-    questions: deck.slice(0, totalRounds), // each { options: string[] }
+    questions: items, // each { options: string[] }
+    deckMemory: { seen: seenKeys }, // server-only; harvested by index.js
     answers: new Map(), // playerId -> "A".."D", cleared between rounds
     scores: new Map(playerIds.map((pid) => [pid, 0])),
     streaks: new Map(playerIds.map((pid) => [pid, 0])), // consecutive majority rounds
@@ -277,6 +375,13 @@ export function reconcilePresence(game, presentPlayerIds) {
   if (presentPlayerIds.every((pid) => game.answers.has(pid))) {
     revealRound(game, presentPlayerIds);
   }
+}
+
+// Host "Force proceed": reveal now, scoring only the answers that are in.
+// Non-answerers get 0 and their streak resets — exactly as if the timer
+// had run out on them.
+export function forceAdvance(game, presentPlayerIds) {
+  if (game.phase === "answer") revealRound(game, presentPlayerIds);
 }
 
 export function nextRound(game) {

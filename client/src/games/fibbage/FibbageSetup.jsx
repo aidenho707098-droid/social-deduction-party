@@ -3,8 +3,11 @@ import HowToPlay from '../HowToPlay'
 
 const ROUND_OPTIONS = [3, 5, 7, 10]
 
-export default function FibbageSetup({ gameId, playerCount, onStart, onCancel, error }) {
-  const [rounds, setRounds] = useState(5)
+export default function FibbageSetup({ gameId, playerCount, saved, onStart, onCancel, error }) {
+  // Pre-fill from the host's last settings for this game this room.
+  const [rounds, setRounds] = useState(() =>
+    ROUND_OPTIONS.includes(saved?.rounds) ? saved.rounds : 5,
+  )
 
   const notEnough = playerCount < 3
 

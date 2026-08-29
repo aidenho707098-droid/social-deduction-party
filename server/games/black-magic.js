@@ -15,6 +15,8 @@
 // getPrivateState() hands the pair to The Witch during the "choose" phase
 // and the chosen one during "active".
 
+import { shuffle, drawWithoutRepeats } from "./deck.js";
+
 // Every Curse carries exactly one category: "physical" (gestures, posture,
 // gaze, props, timing tied to movement) or "verbal" (speech patterns, word
 // rules, how an answer is delivered). Each round offers one of each.
@@ -108,15 +110,6 @@ export const minPlayers = 3;
 // for testing.
 const LIMIT_MS = Number(process.env.BLACK_MAGIC_LIMIT_MS) || 5 * 60 * 1000;
 
-function shuffle(array) {
-  const copy = [...array];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
 // Points for the Player who Lifted the Curse, by elapsed time.
 //   <30s = 4 · 30s-1m = 3 · 1-3m = 2 · 3-5m = 1 · unbroken = 0
 function playerPointsFor(elapsedMs) {
@@ -142,17 +135,22 @@ function witchPointsFor(elapsedMs) {
 // the role is auto-assigned; either way it lands on "choose", where The
 // Witch picks one of two Curses. Picking starts the clock and moves to
 // "active".
-export function createGame(playerIds, { rounds, assignment }) {
+export function createGame(playerIds, { rounds, assignment, memory }) {
   const requested = Number(rounds);
   if (!Number.isInteger(requested) || requested < 1) {
     throw new Error("Choose how many rounds to play.");
   }
 
   const method = assignment === "rotation" ? "rotation" : "host";
-  // Each round offers one fresh Physical and one fresh Verbal Curse — draw
-  // both decks up front so nothing repeats across a game, chosen or not.
+  // Each round offers one fresh Physical and one fresh Verbal Curse. Draw
+  // both decks skipping any Curse this session has already offered (chosen
+  // or not) — Curse texts are unique across both categories, so one shared
+  // seen list covers them.
   const totalRounds = Math.min(requested, VERBAL.length, PHYSICAL.length);
   const rotationOrder = shuffle(playerIds);
+  const keyOf = (c) => c.text;
+  const verbalDraw = drawWithoutRepeats(VERBAL, totalRounds, memory?.seen ?? [], keyOf);
+  const physicalDraw = drawWithoutRepeats(PHYSICAL, totalRounds, verbalDraw.seenKeys, keyOf);
 
   const game = {
     id,
@@ -160,8 +158,9 @@ export function createGame(playerIds, { rounds, assignment }) {
     assignment: method,
     totalRounds,
     roundIndex: 0,
-    verbalDeck: shuffle(VERBAL).slice(0, totalRounds),
-    physicalDeck: shuffle(PHYSICAL).slice(0, totalRounds),
+    verbalDeck: verbalDraw.items,
+    physicalDeck: physicalDraw.items,
+    deckMemory: { seen: physicalDraw.seenKeys }, // server-only; harvested by index.js
     curse: null, // { category, text } — set once The Witch chooses
     rotationOrder,
     witchId: null,
@@ -278,6 +277,15 @@ export function reconcilePresence(game, presentPlayerIds) {
   ) {
     endRound(game, "aborted");
   }
+}
+
+// Host "Force proceed": the round is stuck on The Witch. If they never
+// chose a Curse, abandon the round (nobody scores); if a round is dragging,
+// end it as if The Witch had revealed. Either way the game continues and
+// The Witch can still play later rounds.
+export function forceAdvance(game) {
+  if (game.phase === "choose") endRound(game, "aborted");
+  else if (game.phase === "active") endRound(game, "revealed");
 }
 
 export function nextRound(game, presentPlayerIds) {

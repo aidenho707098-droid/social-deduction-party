@@ -81,6 +81,8 @@ export function createRoom(hostSocketId, hostName) {
     status: "lobby", // "lobby" | "in-game"
     game: null,
     tournament: null, // set by the tournament layer (see server/tournament.js)
+    itemMemory: {}, // gameId -> { seen: string[] }; session no-repeat memory
+    gameSettings: {}, // gameId -> last host-configured options this session
   };
   rooms.set(code, room);
   bindSocket(hostSocketId, code, host.id);

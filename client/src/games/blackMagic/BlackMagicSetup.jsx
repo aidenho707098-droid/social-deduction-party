@@ -8,9 +8,14 @@ const ASSIGN_OPTIONS = [
   { key: 'rotation', label: 'Rotate through players' },
 ]
 
-export default function BlackMagicSetup({ gameId, playerCount, onStart, onCancel, error }) {
-  const [rounds, setRounds] = useState(5)
-  const [assignment, setAssignment] = useState('host')
+export default function BlackMagicSetup({ gameId, playerCount, saved, onStart, onCancel, error }) {
+  // Pre-fill from the host's last settings for this game this room.
+  const [rounds, setRounds] = useState(() =>
+    ROUND_OPTIONS.includes(saved?.rounds) ? saved.rounds : 5,
+  )
+  const [assignment, setAssignment] = useState(() =>
+    ASSIGN_OPTIONS.some((o) => o.key === saved?.assignment) ? saved.assignment : 'host',
+  )
 
   const notEnough = playerCount < 3
 

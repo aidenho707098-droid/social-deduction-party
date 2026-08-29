@@ -41,7 +41,9 @@ export default function HowToPlay({ gameId, variant = 'link', label = 'How to Pl
   )
 }
 
-function RulesModal({ game, onClose }) {
+// The rules popup itself, also reused by the Game Catalogue so the rules
+// text lives in exactly one place (each game's rules.js).
+export function RulesModal({ game, onClose }) {
   const { summary, bullets = [] } = game.rules
 
   // Close on Escape, like a normal dialog.

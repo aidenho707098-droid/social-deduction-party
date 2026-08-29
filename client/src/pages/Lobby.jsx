@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { socket, SERVER_URL, loadSession, clearSession } from '../socket'
 import LobbyView from './LobbyView'
+import HostControls from '../HostControls'
 import GameMenu from '../games/GameMenu'
+import GameCatalogue from '../games/GameCatalogue'
 import HowToPlay from '../games/HowToPlay'
 import { getGame } from '../games/registry'
 import TournamentSetup from '../tournament/TournamentSetup'
@@ -20,6 +22,7 @@ export default function Lobby() {
   const [room, setRoom] = useState(location.state?.room ?? null)
   const [myRole, setMyRole] = useState(null)
   const [error, setError] = useState('')
+  const [kicked, setKicked] = useState(false)
   const [baseUrl, setBaseUrl] = useState(window.location.origin)
   const [connected, setConnected] = useState(socket.connected)
 
@@ -42,6 +45,9 @@ export default function Lobby() {
   const [hostFlow, setHostFlow] = useState('idle') // 'idle' | 'menu' | 'configure'
   const [selectedGameId, setSelectedGameId] = useState(null)
   const [startError, setStartError] = useState('')
+
+  // Any player can open the browse-only Game Catalogue from the lobby.
+  const [showCatalogue, setShowCatalogue] = useState(false)
 
   const isHost = room?.hostId === myPlayerId
 
@@ -98,6 +104,7 @@ export default function Lobby() {
       if (nextRoom.status === 'in-game') {
         setHostFlow('idle')
         setSelectedGameId(null)
+        setShowCatalogue(false)
       }
       // A fresh round's private "your_role" arrives as a separate message
       // right after this one — clear out last round's role now so there's
@@ -116,6 +123,14 @@ export default function Lobby() {
       setMyRole(role)
     }
 
+    function handleKicked() {
+      // Host removed us. Drop our stored seat so we don't try to resume it,
+      // and show the "removed" screen (with a way back to Home / to rejoin).
+      clearSession()
+      redirectedRef.current = true
+      setKicked(true)
+    }
+
     function handleConnect() {
       setConnected(true)
       attemptResume()
@@ -129,6 +144,7 @@ export default function Lobby() {
     socket.on('disconnect', handleDisconnect)
     socket.on('room_update', handleRoomUpdate)
     socket.on('your_role', handleYourRole)
+    socket.on('kicked', handleKicked)
 
     // If the socket is already up (we just came from Host/Join), the
     // 'connect' event won't fire again — kick off the resume now.
@@ -142,6 +158,7 @@ export default function Lobby() {
       socket.off('disconnect', handleDisconnect)
       socket.off('room_update', handleRoomUpdate)
       socket.off('your_role', handleYourRole)
+      socket.off('kicked', handleKicked)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code])
@@ -174,6 +191,8 @@ export default function Lobby() {
     bmReveal: () => socket.emit('black_magic_reveal', { code }),
     bmNextRound: () => socket.emit('black_magic_next_round', { code }),
     backToLobby: () => socket.emit('back_to_lobby', { code }),
+    kickPlayer: (playerId) => socket.emit('kick_player', { code, playerId }),
+    hostForceAdvance: () => socket.emit('host_force_advance', { code }),
     tournamentStart: () => socket.emit('tournament_start', { code }),
     tournamentNext: () => socket.emit('tournament_next', { code }),
     tournamentWheelReady: () => socket.emit('tournament_wheel_ready', { code }),
@@ -187,6 +206,22 @@ export default function Lobby() {
       if (res?.error) setStartError(res.error)
       else setHostFlow('idle')
     })
+  }
+
+  // The active screen. Wrapped in an IIFE so the persistent host panel
+  // below can be rendered alongside whichever branch wins, without
+  // repeating it in every return.
+  const screen = (() => {
+  if (kicked) {
+    return (
+      <div className="screen center">
+        <p className="hint center-text">You've been removed from the room by the host.</p>
+        <p className="hint center-text">You can rejoin any time with the room code.</p>
+        <button className="btn btn-primary" onClick={() => navigate('/')}>
+          Back to Home
+        </button>
+      </div>
+    )
   }
 
   if (error && redirectedRef.current) {
@@ -288,6 +323,11 @@ export default function Lobby() {
     )
   }
 
+  // Any player opened the browse-only Game Catalogue from the lobby.
+  if (showCatalogue) {
+    return <GameCatalogue onClose={() => setShowCatalogue(false)} />
+  }
+
   // Host chose "Tournament Mode" from the lobby — configure it.
   if (isHost && hostFlow === 'tournament') {
     return (
@@ -320,6 +360,7 @@ export default function Lobby() {
       <selectedGame.Setup
         gameId={selectedGameId}
         playerCount={room.players.length}
+        saved={room.gameSettings?.[selectedGameId]}
         onStart={handleStartGame}
         onCancel={() => setHostFlow('menu')}
         error={startError}
@@ -340,7 +381,24 @@ export default function Lobby() {
         baseUrl={baseUrl}
         onStartGame={() => setHostFlow('menu')}
         onTournament={() => setHostFlow('tournament')}
+        onCatalogue={() => setShowCatalogue(true)}
       />
+    </>
+  )
+  })()
+
+  return (
+    <>
+      {screen}
+      {isHost && room && !kicked && (
+        <HostControls
+          room={room}
+          myPlayerId={myPlayerId}
+          onKick={gameActions.kickPlayer}
+          onForceAdvance={gameActions.hostForceAdvance}
+          onEndGame={gameActions.backToLobby}
+        />
+      )}
     </>
   )
 }

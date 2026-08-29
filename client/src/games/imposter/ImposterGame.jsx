@@ -16,6 +16,7 @@ export default function ImposterGame({ game, players, myRole, isHost, myId, acti
           currentTurnPlayerId={game.currentTurnPlayerId}
           imposterCount={game.imposterCount}
           myId={myId}
+          myRole={myRole}
           onNextTurn={actions.nextTurn}
         />
       )
@@ -25,6 +26,7 @@ export default function ImposterGame({ game, players, myRole, isHost, myId, acti
         <Voting
           players={players}
           myId={myId}
+          myRole={myRole}
           votedPlayerIds={game.votedPlayerIds}
           totalVoters={game.totalVoters}
           voteLimit={game.imposterCount}

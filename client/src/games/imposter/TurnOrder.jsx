@@ -1,4 +1,6 @@
-export default function TurnOrder({ players, turnOrder, currentTurnPlayerId, imposterCount, myId, onNextTurn }) {
+import WordPeek from './WordPeek'
+
+export default function TurnOrder({ players, turnOrder, currentTurnPlayerId, imposterCount, myId, myRole, onNextTurn }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
   const awayIds = new Set(players.filter((p) => p.connected === false).map((p) => p.id))
   const isMyTurn = myId === currentTurnPlayerId
@@ -11,6 +13,8 @@ export default function TurnOrder({ players, turnOrder, currentTurnPlayerId, imp
       <p className="hint center-text">
         Say one word out loud related to the secret word — {imposterCount === 1 ? 'the imposter has' : 'the imposters have'} to bluff.
       </p>
+
+      <WordPeek word={myRole?.word ?? null} />
 
       <ul className="player-list">
         {turnOrder.map((id) => (

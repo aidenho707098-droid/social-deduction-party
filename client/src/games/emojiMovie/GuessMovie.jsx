@@ -2,6 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 
 const DIFFICULTY_LABEL = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 
+const PROMPT = {
+  movies: 'Name the movie',
+  tv: 'Name the TV show',
+  countries: 'Name the country',
+  'video-games': 'Name the video game',
+  mashup: 'Two emojis, one word',
+}
+
 export default function GuessMovie({ game, isHost, onGuess, onReveal }) {
   const [guess, setGuess] = useState('')
   const [lockedIn, setLockedIn] = useState(false)
@@ -94,17 +102,19 @@ export default function GuessMovie({ game, isHost, onGuess, onReveal }) {
     ? ''
     : shownCount <= 1
     ? 'Guess now for FULL points'
-    : shownCount === 2
-    ? 'Two emojis — still partial points'
-    : 'All emojis shown — base points'
+    : shownCount >= totalEmojis
+    ? 'All emojis shown — base points'
+    : 'Still worth partial points'
 
   const difficulty = game.currentDifficulty
   const diffLabel = DIFFICULTY_LABEL[difficulty]
+  const prompt = PROMPT[game.category] ?? 'Crack the code'
 
   return (
     <div className="screen">
       <p className="wyr-round">
         Round {game.roundIndex + 1} of {game.totalRounds}
+        {game.categoryName && <span className="emoji-cat">{game.categoryName}</span>}
         {diffLabel && (
           <span className={`emoji-diff emoji-diff-${difficulty}`}>{diffLabel}</span>
         )}
@@ -121,7 +131,7 @@ export default function GuessMovie({ game, isHost, onGuess, onReveal }) {
         {game.totalPlayers} locked in
       </p>
 
-      <p className="wyr-prompt">Name the movie</p>
+      <p className="wyr-prompt">{prompt}</p>
 
       <div className="emoji-clue">
         {Array.from({ length: totalEmojis }).map((_, i) => (

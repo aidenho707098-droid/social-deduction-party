@@ -27,8 +27,8 @@ export default function GameMenu({ playerCount, onPick, onCancel }) {
                   <span className="game-card-name">{game.name}</span>
                   <span className="game-card-meta">
                     {disabled
-                      ? `Needs ${game.minPlayers}+ players`
-                      : `${game.minPlayers}+ players`}
+                      ? `Needs ${game.minPlayers}+ players · ${game.genre}`
+                      : `${game.minPlayers}+ players · ${game.genre}`}
                   </span>
                 </span>
               </button>
