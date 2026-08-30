@@ -1,43 +1,76 @@
 import { useState } from 'react'
-import { GAMES } from '../games/registry'
+import { GAMES, getGame } from '../games/registry'
 import { GameIcon } from '../games/gameStyle'
 import { accentName } from '../games/gamePalette'
+import { describeGameOptions } from '../games/gameSettingsSummary'
 
 const RANDOM_COUNTS = [3, 4, 5, 6]
 
 // Host-only screen for turning a session into a tournament. Local UI until
-// the host locks it in with `onConfigure({ mode, lineup? , totalGames? })`.
-export default function TournamentSetup({ playerCount, onConfigure, onCancel }) {
+// the host locks it in with `onConfigure({ mode, lineup?, lineupSettings?,
+// totalGames? })`. In Manual mode each lineup slot can be configured with
+// that game's own setup UI (pre-filled from the room's last-used settings).
+export default function TournamentSetup({ playerCount, savedByGame = {}, onConfigure, onCancel }) {
   const [mode, setMode] = useState(null) // null | 'manual' | 'random'
   const [lineup, setLineup] = useState([]) // ordered gameIds
+  const [lineupSettings, setLineupSettings] = useState([]) // parallel: createGame options per slot
   const [totalGames, setTotalGames] = useState(4)
+  const [configIndex, setConfigIndex] = useState(null) // lineup slot being configured
   const [error, setError] = useState('')
 
   const eligible = GAMES.filter((g) => playerCount >= g.minPlayers)
 
   function addGame(id) {
     setLineup((l) => [...l, id])
+    // Seed each slot with the room's last-used settings for that game (or
+    // empty, letting the server fall back to defaults) — the host can tweak.
+    setLineupSettings((s) => [...s, savedByGame[id] ? { ...savedByGame[id] } : {}])
   }
   function removeAt(i) {
     setLineup((l) => l.filter((_, idx) => idx !== i))
+    setLineupSettings((s) => s.filter((_, idx) => idx !== i))
   }
   function move(i, dir) {
-    setLineup((l) => {
-      const j = i + dir
-      if (j < 0 || j >= l.length) return l
-      const copy = [...l]
+    const j = i + dir
+    if (j < 0 || j >= lineup.length) return
+    const swap = (arr) => {
+      const copy = [...arr]
       ;[copy[i], copy[j]] = [copy[j], copy[i]]
       return copy
-    })
+    }
+    setLineup(swap)
+    setLineupSettings(swap)
+  }
+  function saveSlotSettings(i, opts) {
+    setLineupSettings((s) => s.map((v, idx) => (idx === i ? opts : v)))
+    setConfigIndex(null)
   }
 
   function submit() {
     setError('')
     if (mode === 'manual') {
       if (lineup.length < 2) return setError('Add at least 2 games to the lineup.')
-      onConfigure({ mode: 'manual', lineup })
+      onConfigure({ mode: 'manual', lineup, lineupSettings })
     } else {
       onConfigure({ mode: 'random', totalGames })
+    }
+  }
+
+  // --- Sub-screen: configure one lineup game with its own setup UI ---
+  if (configIndex != null && lineup[configIndex]) {
+    const gid = lineup[configIndex]
+    const GameSetup = getGame(gid)?.Setup
+    if (GameSetup) {
+      return (
+        <GameSetup
+          gameId={gid}
+          playerCount={playerCount}
+          saved={lineupSettings[configIndex] ?? savedByGame[gid]}
+          submitLabel="Save settings"
+          onStart={(opts) => saveSlotSettings(configIndex, opts)}
+          onCancel={() => setConfigIndex(null)}
+        />
+      )
     }
   }
 
@@ -59,8 +92,8 @@ export default function TournamentSetup({ playerCount, onConfigure, onCancel }) 
           >
             <span className="tour-mode-name">Manual</span>
             <span className="tour-mode-desc">
-              You pick the games and their order. Everyone sees the full lineup
-              before it starts.
+              You pick the games, their order, and each one's settings.
+              Everyone sees the full lineup before it starts.
             </span>
           </button>
           <button
@@ -70,8 +103,8 @@ export default function TournamentSetup({ playerCount, onConfigure, onCancel }) 
           >
             <span className="tour-mode-name">Random</span>
             <span className="tour-mode-desc">
-              Pick a number of games. A spinning wheel reveals each one, just
-              before it's played.
+              Pick a number of games. A spinning wheel reveals each one, then
+              you set it up, just before it's played.
             </span>
           </button>
         </div>
@@ -107,6 +140,7 @@ export default function TournamentSetup({ playerCount, onConfigure, onCancel }) 
               <ol className="tour-lineup-edit">
                 {lineup.map((id, i) => {
                   const g = GAMES.find((x) => x.id === id)
+                  const summary = describeGameOptions(lineupSettings[i])
                   return (
                     <li key={`${id}-${i}`} className="tour-lineup-edit-item">
                       <span className="tour-lineup-num">{i + 1}</span>
@@ -115,7 +149,16 @@ export default function TournamentSetup({ playerCount, onConfigure, onCancel }) 
                       >
                         <GameIcon id={id} />
                       </span>
-                      <span className="tour-lineup-edit-name">{g?.name ?? id}</span>
+                      <span className="tour-lineup-edit-main">
+                        <span className="tour-lineup-edit-name">{g?.name ?? id}</span>
+                        <button
+                          type="button"
+                          className="tour-lineup-config"
+                          onClick={() => setConfigIndex(i)}
+                        >
+                          ⚙ {summary || 'Settings'}
+                        </button>
+                      </span>
                       <button
                         type="button"
                         className="tour-lineup-ctl"
@@ -167,8 +210,8 @@ export default function TournamentSetup({ playerCount, onConfigure, onCancel }) 
             ))}
           </div>
           <p className="hint hint-block">
-            The games and their order stay a mystery — the wheel picks each one
-            live.
+            The games and their order stay a mystery — the wheel picks each
+            one live, then you configure it on the "up next" screen.
           </p>
         </div>
       )}

@@ -13,6 +13,9 @@ import { rules as fibbageRules } from './fibbage/rules'
 import BlackMagicSetup from './blackMagic/BlackMagicSetup'
 import BlackMagicGame from './blackMagic/BlackMagicGame'
 import { rules as blackMagicRules } from './blackMagic/rules'
+import WavelengthSetup from './wavelength/WavelengthSetup'
+import WavelengthGame from './wavelength/WavelengthGame'
+import { rules as wavelengthRules } from './wavelength/rules'
 
 // To add a game: write its Setup + Game components and a rules.js, then
 // add one entry here. Nothing else in the lobby/room framework needs to
@@ -20,10 +23,11 @@ import { rules as blackMagicRules } from './blackMagic/rules'
 // style tag shown in the menu meta line and the Game Catalogue.
 export const GAMES = [
   { id: 'imposter', name: 'Imposter', minPlayers: 3, genre: 'social deduction', Setup: ImposterSetup, Game: ImposterGame, rules: imposterRules },
-  { id: 'would-you-rather', name: 'Would You Rather', minPlayers: 2, genre: 'prediction', Setup: WouldYouRatherSetup, Game: WouldYouRatherGame, rules: wouldYouRatherRules },
+  { id: 'would-you-rather', name: 'Majority Pick', minPlayers: 2, genre: 'read the room', Setup: WouldYouRatherSetup, Game: WouldYouRatherGame, rules: wouldYouRatherRules },
   { id: 'emoji-movie', name: 'Crack the Code', minPlayers: 2, genre: 'emoji guessing', Setup: EmojiMovieSetup, Game: EmojiMovieGame, rules: emojiMovieRules },
   { id: 'fibbage', name: 'Fact or Fake', minPlayers: 3, genre: 'bluffing trivia', Setup: FibbageSetup, Game: FibbageGame, rules: fibbageRules },
   { id: 'black-magic', name: 'Black Magic', minPlayers: 3, genre: 'hidden behaviour', Setup: BlackMagicSetup, Game: BlackMagicGame, rules: blackMagicRules },
+  { id: 'wavelength', name: 'Wavelength', minPlayers: 3, genre: 'spectrum guessing', Setup: WavelengthSetup, Game: WavelengthGame, rules: wavelengthRules },
 ]
 
 export function getGame(id) {

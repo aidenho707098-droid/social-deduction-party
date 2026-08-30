@@ -1,11 +1,15 @@
 import FactPrompt from './FactPrompt'
+import PersonalQuestion from './PersonalQuestion'
+import { PlayerDot } from '../../PlayerDot'
+import { playerColorMap } from '../../playerColors'
 
 export default function RoundReveal({ game, players, myId, isHost, onNext }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
+  const colorById = playerColorMap(players)
   const nameOf = (id) => nameById[id] ?? 'Someone'
   const nameList = (ids) => ids.map(nameOf).join(', ')
 
-  const { prompt, answer, options, roundScores } = game.result
+  const { prompt, answer, options, roundScores, personal, subjectId } = game.result
   const isLastRound = game.roundIndex + 1 >= game.totalRounds
 
   // Players who wrote something identical to the real answer "knew it"
@@ -25,7 +29,16 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
       <p className="wyr-round">Round {game.roundIndex + 1} results</p>
 
       <div className="fof-answer-callout">
-        <FactPrompt prompt={prompt} fill={answer} className="fof-answer-fact" />
+        {personal ? (
+          <PersonalQuestion
+            template={prompt}
+            name={nameOf(subjectId)}
+            color={colorById[subjectId]}
+            className="fof-answer-fact fibbage-fact"
+          />
+        ) : (
+          <FactPrompt prompt={prompt} fill={answer} className="fof-answer-fact" />
+        )}
         <div className="fof-answer-line">
           <span className="fof-answer-check">✓</span> The real answer was{' '}
           <strong>{answer}</strong>
@@ -56,7 +69,7 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
                 <div className="fof-answer-meta">
                   {o.isTruth ? (
                     <span>
-                      The real fact
+                      {personal ? `${nameOf(subjectId)}'s real answer` : 'The real fact'}
                       {truthWriters.length > 0 &&
                         ` — also written by ${nameList(truthWriters)}!`}
                     </span>
@@ -99,6 +112,7 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
             const foundTruth = rs?.foundTruth
             const fooled = rs?.fooled ?? 0
             const gained = rs?.gained ?? 0
+            const isSubject = personal && s.playerId === subjectId
             return (
               <div
                 key={s.playerId}
@@ -106,7 +120,10 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
               >
                 <div className="fof-score-head">
                   <span className="fof-score-rank">{i + 1}</span>
-                  <span className="fof-score-name">{nameOf(s.playerId)}</span>
+                  <span className="fof-score-name">
+                    <PlayerDot color={colorById[s.playerId]} className="player-cdot-inline" />
+                    {nameOf(s.playerId)}
+                  </span>
                   <span className="fof-score-total">
                     <span className="fof-score-total-num">{s.score}</span>
                     <span className="fof-score-total-label">total</span>
@@ -114,7 +131,13 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
                 </div>
 
                 <div className="fof-score-lines">
-                  {foundTruth && (
+                  {isSubject && (
+                    <div className="fof-score-line fof-score-line-none">
+                      <span className="fof-score-line-icon">🫵</span>
+                      <span className="fof-score-line-label">This round was about them — sitting out</span>
+                    </div>
+                  )}
+                  {!isSubject && foundTruth && (
                     <div className="fof-score-line fof-score-line-truth">
                       <span className="fof-score-line-icon">🎯</span>
                       <span className="fof-score-line-label">
@@ -144,7 +167,7 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
                       <span className="fof-score-line-pts">+{rs.foolPoints}</span>
                     </div>
                   )}
-                  {!foundTruth && fooled === 0 && (
+                  {!isSubject && !foundTruth && fooled === 0 && (
                     <div className="fof-score-line fof-score-line-none">
                       <span className="fof-score-line-icon">·</span>
                       <span className="fof-score-line-label">No points this round</span>
@@ -156,7 +179,7 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
                   className={`fof-score-delta ${gained > 0 ? 'fof-score-delta-up' : ''}`}
                 >
                   <span>This round</span>
-                  <strong>{gained > 0 ? `+${gained}` : '+0'}</strong>
+                  <strong>{isSubject ? '—' : gained > 0 ? `+${gained}` : '+0'}</strong>
                 </div>
               </div>
             )

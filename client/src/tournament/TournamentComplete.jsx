@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { accentName } from '../games/gamePalette'
+import { PlayerDot } from '../PlayerDot'
+import { playerColorMap } from '../playerColors'
 import Confetti from './Confetti'
+import { useSound } from '../sound/SoundContext'
 
 const REVEAL_GAP = 850
 const FINALE_PAUSE = 1500
@@ -65,6 +68,7 @@ function computeBonusStats(history, nameOf) {
 // the champion, with a celebratory moment and a couple of fun bonus stats.
 export default function TournamentComplete({ t, players, myId, isHost, onDone }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
+  const colorById = playerColorMap(players)
   const nameOf = (id) => nameById[id] ?? 'Unknown'
   const accentOf = (id) => {
     const i = players.findIndex((p) => p.id === id)
@@ -79,6 +83,14 @@ export default function TournamentComplete({ t, players, myId, isHost, onDone })
 
   const [revealed, setRevealed] = useState(0)
   const [finale, setFinale] = useState(false)
+  const { play } = useSound()
+
+  // The big moment — the champion is on screen. Bigger + more celebratory
+  // than any per-game win sound.
+  useEffect(() => {
+    if (!finale) return
+    play(winnerCount > 0 ? 'grand-finale' : 'game-over')
+  }, [finale, winnerCount, play])
 
   useEffect(() => {
     const timers = []
@@ -121,7 +133,14 @@ export default function TournamentComplete({ t, players, myId, isHost, onDone })
                 className={`tour-hero tour-hero-${acc} tour-anim-in`}
               >
                 <div className="tour-hero-crown">👑</div>
-                <div className="tour-hero-name">{nameOf(row.playerId)}</div>
+                <div className="tour-hero-name">
+                  <PlayerDot
+                    color={colorById[row.playerId]}
+                    className="player-cdot-inline"
+                    onColor
+                  />
+                  {nameOf(row.playerId)}
+                </div>
                 <div className="tour-hero-pts">
                   <span className="tour-hero-pts-num">{row.points}</span> pts
                 </div>
@@ -140,7 +159,10 @@ export default function TournamentComplete({ t, players, myId, isHost, onDone })
               }`}
             >
               <span className={`tour-podium-rank tour-podium-rank-${acc}`}>{idx + 1}</span>
-              <span className="tour-podium-name">{nameOf(row.playerId)}</span>
+              <span className="tour-podium-name">
+                <PlayerDot color={colorById[row.playerId]} className="player-cdot-inline" />
+                {nameOf(row.playerId)}
+              </span>
               <span className="tour-podium-pts">{row.points} pts</span>
             </div>
           )
@@ -181,7 +203,10 @@ export default function TournamentComplete({ t, players, myId, isHost, onDone })
                 className={`tour-break-card ${p.playerId === myId ? 'tour-break-me' : ''}`}
               >
                 <div className="tour-break-head">
-                  <span className="tour-break-name">{nameOf(p.playerId)}</span>
+                  <span className="tour-break-name">
+                    <PlayerDot color={colorById[p.playerId]} className="player-cdot-inline" />
+                    {nameOf(p.playerId)}
+                  </span>
                   <span className="tour-break-total">
                     <span className="tour-break-total-num">{p.points}</span>
                     <span className="tour-break-total-label">pts</span>

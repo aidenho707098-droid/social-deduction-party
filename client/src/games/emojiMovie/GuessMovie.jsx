@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSound } from '../../sound/SoundContext'
 
 const DIFFICULTY_LABEL = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 
@@ -23,7 +24,9 @@ export default function GuessMovie({ game, isHost, onGuess, onReveal }) {
   // in between so the countdown and "next emoji" timer stay smooth.
   const [elapsed, setElapsed] = useState(() => game.answerMs - game.msLeft)
   const firedReveal = useRef(false)
+  const firedTimeout = useRef(false)
   const inputRef = useRef(null)
+  const { play } = useSound()
 
   const totalEmojis = game.totalEmojis ?? game.emojis.length
   const revealInterval = game.revealIntervalMs ?? 6000
@@ -43,6 +46,7 @@ export default function GuessMovie({ game, isHost, onGuess, onReveal }) {
     setShake(false)
     setPending(false)
     firedReveal.current = false
+    firedTimeout.current = false
     setElapsed(game.answerMs - game.msLeft)
     inputRef.current?.focus()
     const timer = setInterval(() => setElapsed((e) => e + 250), 250)
@@ -69,6 +73,14 @@ export default function GuessMovie({ game, isHost, onGuess, onReveal }) {
     }
   }, [timeUp, isHost, onReveal])
 
+  // Time's up and this player never locked in a correct guess — soft buzzer.
+  useEffect(() => {
+    if (timeUp && !lockedIn && !firedTimeout.current) {
+      firedTimeout.current = true
+      play('wrong')
+    }
+  }, [timeUp, lockedIn, play])
+
   // Seconds until the next emoji pops (based on the local clock). The Nth
   // extra emoji is due at elapsed === revealInterval * N.
   const nextEmojiInSec = allRevealed
@@ -86,10 +98,12 @@ export default function GuessMovie({ game, isHost, onGuess, onReveal }) {
         setLockedIn(true)
         setLockedPoints(res.points ?? 0)
         setLockedAt(res.revealedAtGuess ?? revealedEmojis.length)
+        play('correct')
       } else {
         setAttempted(true)
         setShake(true)
         setTimeout(() => setShake(false), 450)
+        play('wrong')
       }
     })
   }

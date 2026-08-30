@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { GameIcon } from '../games/gameStyle'
+import { useSound } from '../sound/SoundContext'
 
 const SEG_COLORS = ['#5b3e99', '#ff7a50', '#f0b429']
 const R = 118
@@ -25,11 +26,36 @@ export default function TournamentWheel({ t, isHost, onReady }) {
   const [spinning, setSpinning] = useState(false)
   const [landed, setLanded] = useState(false)
   const firedRef = useRef(false)
+  const { play, stop } = useSound()
 
   useEffect(() => {
     if (!wheel) return
     firedRef.current = false
     setLanded(false)
+
+    // Pace the spin SFX to the wheel. The wheel eases out over ~4.4s
+    // (cubic-bezier below), so its angular speed starts high and tails off
+    // to nearly nothing. Ride the spin sound's playbackRate down the same
+    // curve so its ticking spaces out as the wheel slows, rather than
+    // racing at one flat tempo for the whole spin.
+    const spinEl = play('wheel-spin')
+    const SPIN_MS = 4400
+    const RATE_START = 0.85
+    const RATE_END = 0.3
+    let rateRaf = 0
+    let rateT0 = 0
+    const rampRate = (now) => {
+      if (!rateT0) rateT0 = now
+      const p = Math.min(1, (now - rateT0) / SPIN_MS)
+      const speed = (1 - p) ** 2 // ease-out velocity: fast, then trailing off
+      try {
+        spinEl.playbackRate = RATE_END + (RATE_START - RATE_END) * speed
+      } catch {
+        // some browsers clamp playbackRate — leave it at the default
+      }
+      if (p < 1) rateRaf = requestAnimationFrame(rampRate)
+    }
+    if (spinEl) rateRaf = requestAnimationFrame(rampRate)
 
     const k = Math.max(0, pool.findIndex((p) => p.id === wheel.landedOn))
     const center = ((k + 0.5) * seg) % 360
@@ -46,6 +72,8 @@ export default function TournamentWheel({ t, isHost, onReady }) {
       })
     })
     const done = setTimeout(() => {
+      stop('wheel-spin')
+      play('wheel-land')
       setLanded(true)
       if (isHost && !firedRef.current) {
         firedRef.current = true
@@ -55,7 +83,9 @@ export default function TournamentWheel({ t, isHost, onReady }) {
 
     return () => {
       cancelAnimationFrame(raf)
+      cancelAnimationFrame(rateRaf)
       clearTimeout(done)
+      stop('wheel-spin')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wheel?.spinId])

@@ -1,7 +1,11 @@
+import { PlayerDot } from '../../PlayerDot'
+import { playerColorMap } from '../../playerColors'
+
 const DIFFICULTY_LABEL = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 
 export default function RoundReveal({ game, players, myId, isHost, onNext }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
+  const colorById = playerColorMap(players)
   const { title, emojis, entries, difficulty, categoryName } = game.result
   const isLastRound = game.roundIndex + 1 >= game.totalRounds
   const solvedCount = entries.filter((e) => e.correct).length
@@ -34,7 +38,10 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
               <span className={`emoji-verdict ${e.correct ? 'ok' : 'no'}`}>
                 {e.correct ? '✓' : '✗'}
               </span>
-              <span>{nameById[e.playerId] ?? 'Unknown'}</span>
+              <span>
+                <PlayerDot color={colorById[e.playerId]} className="player-cdot-inline" />
+                {nameById[e.playerId] ?? 'Unknown'}
+              </span>
               <span className="emoji-guess-text">{e.guess ? `"${e.guess}"` : '—'}</span>
               {e.correct && (
                 <span className="wyr-plus">
@@ -61,7 +68,10 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
               className={`wyr-board-row ${s.playerId === myId ? 'wyr-me' : ''}`}
             >
               <span className="wyr-board-rank">{i + 1}</span>
-              <span>{nameById[s.playerId] ?? 'Unknown'}</span>
+              <span>
+                <PlayerDot color={colorById[s.playerId]} className="player-cdot-inline" />
+                {nameById[s.playerId] ?? 'Unknown'}
+              </span>
               <span className="wyr-board-score">{s.score}</span>
             </div>
           ))}

@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import WordPeek from './WordPeek'
+import { PlayerDot } from '../../PlayerDot'
+import { useSound } from '../../sound/SoundContext'
 
 export default function Voting({ players, myId, myRole, votedPlayerIds, totalVoters, voteLimit, onToggleVote }) {
   const [myVotes, setMyVotes] = useState([])
+  const { play } = useSound()
 
   const hasFinished = votedPlayerIds.includes(myId)
   const remaining = voteLimit - myVotes.length
@@ -11,6 +14,7 @@ export default function Voting({ players, myId, myRole, votedPlayerIds, totalVot
     const isSelected = myVotes.includes(playerId)
     if (!isSelected && myVotes.length >= voteLimit) return // already used all votes
 
+    if (!isSelected) play('confirm') // casting a vote (not taking one back)
     setMyVotes((prev) => (isSelected ? prev.filter((id) => id !== playerId) : [...prev, playerId]))
     onToggleVote(playerId)
   }
@@ -36,6 +40,7 @@ export default function Voting({ players, myId, myRole, votedPlayerIds, totalVot
                 disabled={disabled}
                 onClick={() => handleToggle(p.id)}
               >
+                <PlayerDot color={p.colorHex ?? p.color} className="player-cdot-inline" />
                 {p.name}
               </button>
             </li>

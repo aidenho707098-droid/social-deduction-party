@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { CATEGORY_NAMES, RANDOM_CATEGORY } from './words'
 import HowToPlay from '../HowToPlay'
 
-export default function ImposterSetup({ gameId, playerCount, saved, onStart, onCancel, error }) {
+export default function ImposterSetup({ gameId, playerCount, saved, onStart, onCancel, error, submitLabel }) {
   const canUseTwoImposters = playerCount >= 4
 
   // Pre-fill from the host's last settings for this game this room. Clamp
@@ -78,7 +78,7 @@ export default function ImposterSetup({ gameId, playerCount, saved, onStart, onC
       {error && <p className="error">{error}</p>}
 
       <button className="btn btn-start" onClick={() => onStart({ imposterCount, category })}>
-        Start Round
+        {submitLabel ?? 'Start Round'}
       </button>
       <button className="btn btn-text" onClick={onCancel}>
         ← Back

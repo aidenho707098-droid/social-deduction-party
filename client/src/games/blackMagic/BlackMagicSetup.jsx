@@ -8,7 +8,7 @@ const ASSIGN_OPTIONS = [
   { key: 'rotation', label: 'Rotate through players' },
 ]
 
-export default function BlackMagicSetup({ gameId, playerCount, saved, onStart, onCancel, error }) {
+export default function BlackMagicSetup({ gameId, playerCount, saved, onStart, onCancel, error, submitLabel }) {
   // Pre-fill from the host's last settings for this game this room.
   const [rounds, setRounds] = useState(() =>
     ROUND_OPTIONS.includes(saved?.rounds) ? saved.rounds : 5,
@@ -76,7 +76,7 @@ export default function BlackMagicSetup({ gameId, playerCount, saved, onStart, o
         onClick={() => onStart({ rounds, assignment })}
         disabled={notEnough}
       >
-        Start Game
+        {submitLabel ?? "Start Game"}
       </button>
       <button className="btn btn-text" onClick={onCancel}>
         ← Back

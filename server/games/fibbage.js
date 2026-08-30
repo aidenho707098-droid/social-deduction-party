@@ -1,14 +1,32 @@
-// "Fact or Fake" — a bluffing trivia game. Each round everyone sees an
-// obscure true fact with a blank. Players privately type a FAKE answer to fill the
-// blank; then all the fakes are shuffled together with the REAL answer and
-// shown anonymized. Everyone votes for which one they think is true.
+// "Fact or Fake" — a bluffing game. Two content modes, chosen by the host
+// on the setup screen:
 //
-//   * +2 for voting for (or having written) the true answer
+//   * BANK mode (default) — each round everyone sees an obscure true fact
+//     with a blank, privately types a FAKE answer to fill it; the fakes are
+//     shuffled with the REAL answer and shown anonymized; everyone votes
+//     for which one they think is true.
+//
+//   * PERSONAL mode — rounds are built from players' REAL answers about
+//     themselves, turning the game into "how well do you know each other".
+//     A "truth" phase runs first: each player picks between two prompts —
+//     one always a DIRECT prompt, the other NUANCED or FRIEND, no labels
+//     shown — and answers one truthfully, ~45s each. Then there's one
+//     round PER answer: the
+//     subject sits out while everyone else writes a fake answer they think
+//     sounds like that person; those plus the subject's real answer are
+//     shown anonymized; the others vote for the real one.
+//
+// Scoring is identical in both modes:
+//   * +2 for voting for (or having written) the true answer, plus an
+//     inverse "rare guess" bonus by how few players found it
 //   * +1 for every OTHER player fooled into voting for your fake
+// In personal mode the subject scores nothing on their own round.
 //
 // Attribution (who wrote which fake) lives ONLY in this module until the
 // reveal phase. getPublicState() during "vote" deliberately strips every
-// ownership / truth marker — see the whitelist there.
+// ownership / truth marker — see the whitelist there. Fuzzy answer-matching
+// (folding a near-duplicate fake into the truth) applies in bank mode and
+// to personal-mode rounds whose prompt is from the DIRECT category only.
 
 import { shuffle, drawWithoutRepeats } from "./deck.js"
 
@@ -191,15 +209,131 @@ const FACTS = [
   { prompt: "Ketchup was once sold in glass bottles designed so the '57' on the neck was where you ___ to make it pour.", answer: "tap" },
 ]
 
+// --- PERSONAL mode prompt bank -------------------------------------
+// Categories are for INTERNAL use only — never shown to players. Each entry
+// has a `self` form (shown to the subject: "What is your favorite movie?")
+// and an `about` form with a `{name}` placeholder (used to phrase the round
+// question: "What is Alex's favorite movie?"). Fuzzy matching is applied
+// only to `direct` rounds — the others don't have a single "right" answer.
+const PERSONAL_PROMPTS = {
+  // DIRECT / MAINSTREAM — clean, single-answer, favourite/least-favourite.
+  direct: [
+    { self: "What is your favorite movie?", about: "What is {name}'s favorite movie?" },
+    { self: "What's a food you refuse to eat?", about: "What's a food {name} refuses to eat?" },
+    { self: "What's your dream vacation destination?", about: "What's {name}'s dream vacation destination?" },
+    { self: "What's your favorite type of music?", about: "What's {name}'s favorite type of music?" },
+    { self: "What's the last show you binge-watched?", about: "What's the last show {name} binge-watched?" },
+    { self: "What's your dream job?", about: "What's {name}'s dream job?" },
+    { self: "What's your biggest fear?", about: "What's {name}'s biggest fear?" },
+    { self: "What's a hobby you'd love to try but haven't?", about: "What's a hobby {name} would love to try but hasn't?" },
+    { self: "Where would you want to retire?", about: "Where would {name} want to retire?" },
+    { self: "What's the last thing you searched on your phone?", about: "What's the last thing {name} searched on their phone?" },
+    { self: "What's a subject you wish you'd studied more?", about: "What's a subject {name} wishes they'd studied more?" },
+    { self: "What's something you'd never do, no matter the pay?", about: "What's something {name} would never do, no matter the pay?" },
+    { self: "What's the farthest place you've ever traveled to?", about: "What's the farthest place {name} has ever traveled to?" },
+    { self: "If you could instantly master one skill, what would it be?", about: "If {name} could instantly master one skill, what would it be?" },
+    { self: "What's your favorite video game of all time?", about: "What's {name}'s favorite video game of all time?" },
+    { self: "What's your favorite clothing brand?", about: "What's {name}'s favorite clothing brand?" },
+    { self: "What's your favorite musical instrument?", about: "What's {name}'s favorite musical instrument?" },
+    { self: "What's your favorite fast food restaurant?", about: "What's {name}'s favorite fast food restaurant?" },
+    { self: "What's your least favorite video game genre?", about: "What's {name}'s least favorite video game genre?" },
+    { self: "What's your favorite season?", about: "What's {name}'s favorite season?" },
+    { self: "What's your go-to karaoke song?", about: "What's {name}'s go-to karaoke song?" },
+    { self: "What's your favorite board game?", about: "What's {name}'s favorite board game?" },
+    { self: "What animal would you most want as a pet?", about: "What animal would {name} most want as a pet?" },
+    { self: "What's your dream car?", about: "What's {name}'s dream car?" },
+    { self: "What's your favorite holiday?", about: "What's {name}'s favorite holiday?" },
+    { self: "What's a book you'd recommend to almost anyone?", about: "What's a book {name} would recommend to almost anyone?" },
+    { self: "What's your favorite pizza topping?", about: "What's {name}'s favorite pizza topping?" },
+    { self: "What country would you love to live in for a year?", about: "What country would {name} love to live in for a year?" },
+    { self: "What's the app you open the most on your phone?", about: "What's the app {name} opens the most on their phone?" },
+    { self: "Which celebrity would you most want to have dinner with?", about: "Which celebrity would {name} most want to have dinner with?" },
+    { self: "What's your favorite ice cream flavor?", about: "What's {name}'s favorite ice cream flavor?" },
+    { self: "What sport would you love to be genuinely great at?", about: "What sport would {name} love to be genuinely great at?" },
+    { self: "What's your comfort meal?", about: "What's {name}'s comfort meal?" },
+    { self: "What's your least favorite chore?", about: "What's {name}'s least favorite chore?" },
+    { self: "What's your favorite TV show?", about: "What's {name}'s favorite TV show?" },
+    { self: "What's your favorite YouTuber or content creator?", about: "Who's {name}'s favorite YouTuber or content creator?" },
+    { self: "What's your favorite snack?", about: "What's {name}'s favorite snack?" },
+    { self: "What's your favorite dessert?", about: "What's {name}'s favorite dessert?" },
+    { self: "What's your favorite cuisine (Italian, Mexican, etc.)?", about: "What's {name}'s favorite cuisine (Italian, Mexican, etc.)?" },
+    { self: "What's your favorite band or artist?", about: "Who's {name}'s favorite band or artist?" },
+    { self: "What's your least favorite music genre?", about: "What's {name}'s least favorite music genre?" },
+    { self: "What's your favorite song right now?", about: "What's {name}'s favorite song right now?" },
+    { self: "What's your favorite car brand?", about: "What's {name}'s favorite car brand?" },
+    { self: "What's your favorite country you've visited (or want to visit)?", about: "What's {name}'s favorite country they've visited (or want to visit)?" },
+    { self: "What's your favorite sport to watch?", about: "What's {name}'s favorite sport to watch?" },
+    { self: "What's your favorite sports team?", about: "What's {name}'s favorite sports team?" },
+  ],
+  // NUANCED / PERSONAL — needs real insight, not a clean factual answer.
+  nuanced: [
+    { self: "What's a small thing that instantly puts you in a bad mood?", about: "What's a small thing that instantly puts {name} in a bad mood?" },
+    { self: "What's a phrase or saying you use way more than you think you do?", about: "What's a phrase {name} uses way more than they think they do?" },
+    { self: "What's a strange combination of foods you actually enjoy?", about: "What's a strange combination of foods {name} actually enjoys?" },
+    { self: "What's a topic you could talk about for way too long?", about: "What's a topic {name} could talk about for way too long?" },
+    { self: "What's a small thing that reliably makes your whole day better?", about: "What's a small thing that reliably makes {name}'s whole day better?" },
+    { self: "What's an irrational thing that scares you?", about: "What's an irrational thing that scares {name}?" },
+    { self: "What's a chore you secretly don't mind doing?", about: "What's a chore {name} secretly doesn't mind doing?" },
+    { self: "What do you always go back to when you're stressed?", about: "What does {name} always go back to when they're stressed?" },
+    { self: "What's a smell that brings back a specific memory for you?", about: "What's a smell that brings back a specific memory for {name}?" },
+    { self: "What's a compliment you never get tired of hearing?", about: "What's a compliment {name} never gets tired of hearing?" },
+    { self: "What's something you pretend to understand but really don't?", about: "What's something {name} pretends to understand but really doesn't?" },
+    { self: "What's a rule you have for yourself that other people find odd?", about: "What's a rule {name} has for themselves that other people find odd?" },
+    { self: "What's an unimportant opinion you'll still defend hard?", about: "What's an unimportant opinion {name} will still defend hard?" },
+    { self: "What's a habit you've been meaning to break for years?", about: "What's a habit {name} has been meaning to break for years?" },
+    { self: "What's something you loved as a kid and still secretly love?", about: "What's something {name} loved as a kid and still secretly loves?" },
+    { self: "In what situation do you always end up being the responsible one?", about: "In what situation does {name} always end up being the responsible one?" },
+    { self: "What kind of person can you not stand being around for long?", about: "What kind of person can {name} not stand being around for long?" },
+    { self: "What's something you always keep in your bag or pockets?", about: "What's something {name} always keeps in their bag or pockets?" },
+    { self: "What's a harmless little lie you tell often?", about: "What's a harmless little lie {name} tells often?" },
+    { self: "What's a small moment in a normal day that you look forward to?", about: "What's a small moment in a normal day that {name} looks forward to?" },
+    { self: "What are you much better at than people expect?", about: "What is {name} much better at than people expect?" },
+    { self: "What's a food you could genuinely eat every single day?", about: "What's a food {name} could genuinely eat every single day?" },
+  ],
+  // FRIEND-GROUP — taps shared social history and group dynamics.
+  friend: [
+    { self: "What's a nickname you've been called by friends?", about: "What's a nickname {name} has been called by friends?" },
+    { self: "What's a running joke you have with your friends?", about: "What's a running joke {name} has with their friends?" },
+    { self: "What's a habit of yours that your friends always point out?", about: "What's a habit of {name}'s that their friends always point out?" },
+    { self: "What's something you're weirdly competitive about?", about: "What's something {name} is weirdly competitive about?" },
+    { self: "What role do you usually play in your friend group?", about: "What role does {name} usually play in their friend group?" },
+    { self: "What's a story your friends won't let you live down?", about: "What's a story {name}'s friends won't let them live down?" },
+    { self: "What do your friends always ask you to bring or handle?", about: "What do {name}'s friends always ask them to bring or handle?" },
+    { self: "What do your friends tease you about the most?", about: "What do {name}'s friends tease them about the most?" },
+    { self: "What group activity are you always the one pushing for?", about: "What group activity is {name} always the one pushing for?" },
+    { self: "What do you always say you'll do but never actually do?", about: "What does {name} always say they'll do but never actually do?" },
+    { self: "What talent of yours do your friends love to show off to others?", about: "What talent of {name}'s do their friends love to show off to others?" },
+    { self: "What kind of plan are you most likely to cancel?", about: "What kind of plan is {name} most likely to cancel?" },
+    { self: "What food or drink order would your friends recognize as 'so you'?", about: "What food or drink order would {name}'s friends recognize as 'so them'?" },
+    { self: "What's an argument you and your friends have had more than once?", about: "What's an argument {name} and their friends have had more than once?" },
+    { self: "What do your friends come to you for advice about?", about: "What do {name}'s friends come to {name} for advice about?" },
+    { self: "What category would you win in your friend group (best or worst at something)?", about: "What category would {name} win in their friend group (best or worst at something)?" },
+    { self: "What word or emoji do you overuse in the group chat?", about: "What word or emoji does {name} overuse in the group chat?" },
+    { self: "Where does your friend group always seem to end up?", about: "Where does {name}'s friend group always seem to end up?" },
+    { self: "What's a dare you'd actually go through with?", about: "What's a dare {name} would actually go through with?" },
+    { self: "What did you get weirdly good at because of your friends?", about: "What did {name} get weirdly good at because of their friends?" },
+    { self: "What are you always running late for?", about: "What is {name} always running late for?" },
+  ],
+}
+
 export const id = "fibbage"
 export const name = "Fact or Fake"
 export const minPlayers = 3
+
+// Personal mode needs at least this many — the subject sits out, so we
+// still want two-plus players writing fakes and voting.
+const PERSONAL_MIN_PLAYERS = 3
 
 // Time to write a fake answer, and time to vote. The client shows a
 // countdown seeded from `msLeft`; when it hits zero the host's device asks
 // the server to advance. The host can also advance early.
 const WRITE_MS = 45_000
 const VOTE_MS = 30_000
+
+// Personal mode "truth" phase, per player, per prompt: time to pick which
+// of the two offered prompts to answer, then time to write the answer.
+const CHOOSE_MS = 25_000
+const TRUTH_MS = 45_000
 
 // Scoring.
 const TRUTH_POINTS = 2 // voted for (or wrote) the real answer
@@ -299,7 +433,28 @@ function makeOptionId() {
   return `opt_${optionSeq}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-export function createGame(playerIds, { rounds, memory }) {
+export function createGame(playerIds, options = {}) {
+  return options.mode === "personal"
+    ? createPersonalGame(playerIds, options)
+    : createBankGame(playerIds, options)
+}
+
+function baseGame(playerIds) {
+  const now = Date.now()
+  return {
+    id,
+    roundIndex: 0,
+    submissions: new Map(), // playerId -> fake answer text, current round only
+    answerOptions: null, // built by startVoting(); the ONLY place ownership lives
+    votes: new Map(), // playerId -> optionId, current round only
+    scores: new Map(playerIds.map((pid) => [pid, 0])),
+    phaseStartedAt: now,
+    deadline: now + WRITE_MS,
+    lastResult: null, // filled in by revealRound()
+  }
+}
+
+function createBankGame(playerIds, { rounds, memory }) {
   const requested = Number(rounds)
   if (!Number.isInteger(requested) || requested < 1) {
     throw new Error("Choose how many rounds to play.")
@@ -314,29 +469,238 @@ export function createGame(playerIds, { rounds, memory }) {
     memory?.seen ?? [],
     (f) => f.prompt
   )
-  const now = Date.now()
 
   return {
-    id,
+    ...baseGame(playerIds),
+    personal: false,
     phase: "write", // "write" -> "vote" -> "reveal" -> ("write" ...) -> "final"
     totalRounds,
-    roundIndex: 0,
     facts: items, // each { prompt, answer }
     deckMemory: { seen: seenKeys }, // server-only; harvested by index.js
-    submissions: new Map(), // playerId -> fake answer text, current round only
-    answerOptions: null, // built by startVoting(); the ONLY place ownership lives
-    votes: new Map(), // playerId -> optionId, current round only
-    scores: new Map(playerIds.map((pid) => [pid, 0])),
-    phaseStartedAt: now,
-    deadline: now + WRITE_MS,
-    lastResult: null, // filled in by revealRound()
   }
+}
+
+// Personal mode: set up the "truth" phase. Each player gets `k` prompt
+// slots; each slot offers exactly two prompts — one always from the DIRECT
+// category, the other from NUANCED or FRIEND. Rounds are generated once the
+// answers are in.
+function createPersonalGame(playerIds, { promptsPerPlayer, memory }) {
+  const k = Number(promptsPerPlayer)
+  if (!Number.isInteger(k) || k < 1 || k > 2) {
+    throw new Error("Choose 1 or 2 prompts per player.")
+  }
+  if (playerIds.length < PERSONAL_MIN_PLAYERS) {
+    throw new Error(`Personal Mode needs at least ${PERSONAL_MIN_PLAYERS} players.`)
+  }
+
+  const { slotsByPair, seenKeys } = buildTruthSlots(playerIds.length * k, memory?.seen ?? [])
+
+  const truthAssignments = new Map()
+  let cursor = 0
+  for (const pid of playerIds) {
+    const slots = []
+    for (let i = 0; i < k; i++) {
+      const [a, b] = slotsByPair[cursor++]
+      slots.push({ choices: [a, b], chosen: null, answer: null })
+    }
+    truthAssignments.set(pid, slots)
+  }
+
+  const now = Date.now()
+  return {
+    ...baseGame(playerIds),
+    personal: true,
+    phase: "truth", // "truth" -> "write" -> "vote" -> "reveal" -> ... -> "final"
+    promptsPerPlayer: k,
+    totalRounds: 0, // set by generateRounds()
+    rounds: [], // built by generateRounds()
+    deckMemory: { seen: seenKeys }, // server-only
+    truthAssignments, // playerId -> [{ choices:[promptA,promptB], chosen, answer }]
+    truthProgress: new Map(playerIds.map((pid) => [pid, 0])), // slots completed
+    truthDeadlineByPlayer: new Map(playerIds.map((pid) => [pid, now + CHOOSE_MS])),
+  }
+}
+
+// Draw `count` prompt PAIRS, no prompt repeated within the session. Every
+// pair is one DIRECT prompt plus one from NUANCED-or-FRIEND (which of those
+// two is random per prompt, via the merged pool). Order within the pair is
+// shuffled so DIRECT isn't always shown first.
+function buildTruthSlots(count, seenKeys) {
+  const direct = PERSONAL_PROMPTS.direct.map((p) => ({ ...p, category: "direct" }))
+  const other = [
+    ...PERSONAL_PROMPTS.nuanced.map((p) => ({ ...p, category: "nuanced" })),
+    ...PERSONAL_PROMPTS.friend.map((p) => ({ ...p, category: "friend" })),
+  ]
+
+  const dDraw = drawWithoutRepeats(direct, count, seenKeys, (p) => p.self)
+  const oDraw = drawWithoutRepeats(other, count, dDraw.seenKeys, (p) => p.self)
+
+  const slotsByPair = []
+  for (let i = 0; i < count; i++) {
+    const a = dDraw.items[i % dDraw.items.length]
+    const b = oDraw.items[i % oDraw.items.length]
+    slotsByPair.push(Math.random() < 0.5 ? [a, b] : [b, a])
+  }
+  return { slotsByPair, seenKeys: oDraw.seenKeys }
+}
+
+// The current round's truth text + question, for both modes.
+function roundContext(game) {
+  if (game.personal) {
+    const r = game.rounds[game.roundIndex]
+    return { personal: true, prompt: r.questionTemplate, answer: r.answer, subjectId: r.subjectId, category: r.category }
+  }
+  const f = game.facts[game.roundIndex]
+  return { personal: false, prompt: f.prompt, answer: f.answer, subjectId: null, category: null }
+}
+
+// The players who write a fake / cast a vote this round: everyone present
+// in bank mode; everyone present EXCEPT the subject in personal mode.
+function writerIds(game, presentPlayerIds) {
+  if (!game.personal) return presentPlayerIds
+  const subjectId = game.rounds[game.roundIndex]?.subjectId
+  return presentPlayerIds.filter((pid) => pid !== subjectId)
+}
+
+// --- Personal mode: "truth" phase -------------------------------
+
+// The subject picks which of their two offered prompts to answer.
+export function chooseTruthPrompt(game, playerId, slotIndex, choiceIndex) {
+  if (game.phase !== "truth") return { ok: false }
+  const slots = game.truthAssignments.get(playerId)
+  if (!slots) return { ok: false }
+  const idx = game.truthProgress.get(playerId) ?? 0
+  if (idx >= slots.length || idx !== Number(slotIndex)) return { ok: false, stale: true }
+  const slot = slots[idx]
+  if (slot.chosen != null) return { ok: false, already: true }
+  const c = Number(choiceIndex)
+  if (c !== 0 && c !== 1) return { ok: false }
+  slot.chosen = c
+  game.truthDeadlineByPlayer.set(playerId, Date.now() + TRUTH_MS) // now the 45s to answer
+  return { ok: true }
+}
+
+// The subject submits their truthful answer to the chosen prompt (empty =
+// skip). Advances them to their next slot, or starts the fib phase once
+// everyone present is done.
+export function submitTruthAnswer(game, playerId, rawText, presentPlayerIds) {
+  if (game.phase !== "truth") return { ok: false }
+  const slots = game.truthAssignments.get(playerId)
+  if (!slots) return { ok: false }
+  const idx = game.truthProgress.get(playerId) ?? 0
+  if (idx >= slots.length) return { ok: false, done: true }
+  const slot = slots[idx]
+  if (slot.chosen == null) return { ok: false, mustChoose: true }
+
+  const deadline = game.truthDeadlineByPlayer.get(playerId) ?? 0
+  const text = String(rawText ?? "").slice(0, 120).trim()
+  if (text && Date.now() <= deadline + 2000) slot.answer = text
+
+  game.truthProgress.set(playerId, idx + 1)
+  startTruthSlot(game, playerId)
+  maybeStartFibbing(game, presentPlayerIds)
+  return { ok: true, recorded: !!slot.answer }
+}
+
+// Arm the clock for a player's current slot (choose step), or leave it if
+// they've finished all their slots.
+function startTruthSlot(game, playerId) {
+  const slots = game.truthAssignments.get(playerId) ?? []
+  const idx = game.truthProgress.get(playerId) ?? 0
+  if (idx < slots.length) {
+    game.truthDeadlineByPlayer.set(playerId, Date.now() + CHOOSE_MS)
+  }
+}
+
+// Server-interval hook (see server/index.js): auto-pick / auto-skip any
+// player whose truth-phase clock has run out, and start the fib phase once
+// everyone present has worked through their slots. Returns true if anything
+// changed so the caller re-broadcasts.
+export function tickTruth(game, presentPlayerIds) {
+  if (game.phase !== "truth") return false
+  const now = Date.now()
+  let changed = false
+
+  for (const pid of presentPlayerIds) {
+    const slots = game.truthAssignments.get(pid) ?? []
+    const idx = game.truthProgress.get(pid) ?? 0
+    if (idx >= slots.length) continue
+    const deadline = game.truthDeadlineByPlayer.get(pid) ?? 0
+    if (now <= deadline + 2000) continue
+
+    const slot = slots[idx]
+    if (slot.chosen == null) {
+      slot.chosen = 0 // never picked -> default to the first prompt
+      game.truthDeadlineByPlayer.set(pid, now + TRUTH_MS)
+    } else {
+      game.truthProgress.set(pid, idx + 1) // never answered -> skip this slot
+      startTruthSlot(game, pid)
+    }
+    changed = true
+  }
+
+  if (maybeStartFibbing(game, presentPlayerIds)) changed = true
+  return changed
+}
+
+function truthDone(game, presentPlayerIds) {
+  if (presentPlayerIds.length === 0) return false
+  return presentPlayerIds.every((pid) => {
+    const slots = game.truthAssignments.get(pid) ?? []
+    return (game.truthProgress.get(pid) ?? 0) >= slots.length
+  })
+}
+
+function maybeStartFibbing(game, presentPlayerIds) {
+  if (game.phase !== "truth" || !truthDone(game, presentPlayerIds)) return false
+  generateRounds(game)
+  return true
+}
+
+// One round per truth answer that came back. Rounds are shuffled so a
+// subject's own rounds aren't necessarily consecutive.
+function generateRounds(game) {
+  const rounds = []
+  for (const [subjectId, slots] of game.truthAssignments) {
+    for (const slot of slots) {
+      if (slot.chosen == null) continue
+      const answer = String(slot.answer ?? "").trim()
+      if (!answer) continue // unanswered -> no round
+      const prompt = slot.choices[slot.chosen]
+      rounds.push({
+        subjectId,
+        category: prompt.category,
+        questionTemplate: prompt.about, // contains "{name}"
+        answer,
+      })
+    }
+  }
+
+  game.rounds = shuffle(rounds)
+  game.totalRounds = game.rounds.length
+  game.roundIndex = 0
+  game.submissions = new Map()
+  game.answerOptions = null
+  game.votes = new Map()
+
+  if (game.totalRounds === 0) {
+    game.phase = "final"
+    game.lastResult = null
+    return
+  }
+  game.phaseStartedAt = Date.now()
+  game.deadline = Date.now() + WRITE_MS
+  game.phase = "write"
 }
 
 // Record (or overwrite) a player's fake answer. Once every present player
 // has submitted, voting starts automatically.
 export function submitAnswer(game, playerId, rawText, presentPlayerIds) {
   if (game.phase !== "write") return { ok: false }
+  // Personal mode: the round's subject sits out — no fake from them.
+  if (game.personal && playerId === game.rounds[game.roundIndex].subjectId) {
+    return { ok: false, isSubject: true }
+  }
   if (Date.now() > game.deadline + 1500) return { ok: false, tooLate: true }
 
   const text = String(rawText ?? "").slice(0, 120).trim()
@@ -344,10 +708,8 @@ export function submitAnswer(game, playerId, rawText, presentPlayerIds) {
 
   game.submissions.set(playerId, text)
 
-  if (
-    presentPlayerIds.length > 0 &&
-    presentPlayerIds.every((pid) => game.submissions.has(pid))
-  ) {
+  const need = writerIds(game, presentPlayerIds)
+  if (need.length > 0 && need.every((pid) => game.submissions.has(pid))) {
     startVoting(game, presentPlayerIds)
   }
   return { ok: true, text }
@@ -363,11 +725,17 @@ export function submitAnswer(game, playerId, rawText, presentPlayerIds) {
 export function startVoting(game) {
   if (game.phase !== "write") return
 
-  const fact = game.facts[game.roundIndex]
+  const { answer: truthText, category } = roundContext(game)
+  // Fuzzy fold applies in bank mode, and only to `direct` personal rounds —
+  // nuanced / friend-group prompts have no single "right" wording, so a
+  // fake that merely resembles the answer stays its own option.
+  const useFuzzy = !game.personal || category === "direct"
+  const truthNorm = normalize(truthText)
+
   const truthOption = {
     id: makeOptionId(),
-    text: fact.answer,
-    normalized: normalize(fact.answer),
+    text: truthText,
+    normalized: truthNorm,
     ownerIds: [], // players who wrote the truth, exactly or near enough
     isTruth: true,
     voterIds: [],
@@ -375,7 +743,12 @@ export function startVoting(game) {
   const options = [truthOption]
 
   for (const [pid, text] of game.submissions) {
-    if (isNearTruth(text, fact.answer)) {
+    // Always fold an EXACT match into the truth (two identical-looking
+    // options would be nonsense); fold near-matches only when fuzzy is on.
+    const foldIntoTruth = useFuzzy
+      ? isNearTruth(text, truthText)
+      : truthNorm !== "" && normalize(text) === truthNorm
+    if (foldIntoTruth) {
       truthOption.ownerIds.push(pid) // effectively correct — never its own option
       continue
     }
@@ -409,6 +782,9 @@ export function startVoting(game) {
 // present player has voted, the round reveals.
 export function submitVote(game, playerId, optionId, presentPlayerIds) {
   if (game.phase !== "vote") return { ok: false }
+  if (game.personal && playerId === game.rounds[game.roundIndex].subjectId) {
+    return { ok: false, isSubject: true } // the subject doesn't vote on their own round
+  }
   if (Date.now() > game.deadline + 1500) return { ok: false, tooLate: true }
 
   const option = game.answerOptions?.find((o) => o.id === optionId)
@@ -419,10 +795,8 @@ export function submitVote(game, playerId, optionId, presentPlayerIds) {
 
   game.votes.set(playerId, optionId)
 
-  if (
-    presentPlayerIds.length > 0 &&
-    presentPlayerIds.every((pid) => game.votes.has(pid))
-  ) {
+  const need = writerIds(game, presentPlayerIds)
+  if (need.length > 0 && need.every((pid) => game.votes.has(pid))) {
     revealRound(game, presentPlayerIds)
   }
   return { ok: true }
@@ -434,7 +808,7 @@ export function submitVote(game, playerId, optionId, presentPlayerIds) {
 export function revealRound(game, presentPlayerIds) {
   if (game.phase !== "vote") return
 
-  const fact = game.facts[game.roundIndex]
+  const ctx = roundContext(game)
   const options = game.answerOptions ?? []
 
   // Recompute voterIds fresh from the vote map.
@@ -461,7 +835,12 @@ export function revealRound(game, presentPlayerIds) {
     }
     return roundScores[pid]
   }
-  for (const pid of presentPlayerIds) ensure(pid)
+  // The subject writes no fake and casts no vote, so they get no round
+  // score row (the reveal screen shows them as sitting out instead).
+  for (const pid of presentPlayerIds) {
+    if (ctx.personal && pid === ctx.subjectId) continue
+    ensure(pid)
+  }
 
   const truth = options.find((o) => o.isTruth)
 
@@ -500,8 +879,11 @@ export function revealRound(game, presentPlayerIds) {
 
   game.lastResult = {
     roundIndex: game.roundIndex,
-    prompt: fact.prompt,
-    answer: fact.answer,
+    prompt: ctx.prompt, // bank: "... ___ ..."  |  personal: "What is {name}'s ...?"
+    answer: ctx.answer,
+    personal: ctx.personal,
+    subjectId: ctx.subjectId,
+    category: ctx.category,
     options: options.map((o) => ({
       id: o.id,
       text: o.text,
@@ -537,19 +919,22 @@ export function nextRound(game) {
 // submitted / voted, move on.
 export function reconcilePresence(game, presentPlayerIds) {
   if (presentPlayerIds.length === 0) return
-  if (game.phase === "write" && presentPlayerIds.every((pid) => game.submissions.has(pid))) {
+  if (game.phase === "truth") {
+    maybeStartFibbing(game, presentPlayerIds)
+  } else if (game.phase === "write" && writerIds(game, presentPlayerIds).every((pid) => game.submissions.has(pid))) {
     startVoting(game, presentPlayerIds)
-  } else if (game.phase === "vote" && presentPlayerIds.every((pid) => game.votes.has(pid))) {
+  } else if (game.phase === "vote" && writerIds(game, presentPlayerIds).every((pid) => game.votes.has(pid))) {
     revealRound(game, presentPlayerIds)
   }
 }
 
-// Host "Force proceed": move the round on with only the input that's in.
-// During "write", pool whatever fakes were submitted and start voting;
-// during "vote", reveal and score the votes cast. A player who didn't act
-// simply has no fake / no vote this round.
+// Host "Force proceed": move the game on with only the input that's in.
+// During "truth", build the rounds from whatever answers came back; during
+// "write", pool whatever fakes were submitted and start voting; during
+// "vote", reveal and score the votes cast.
 export function forceAdvance(game, presentPlayerIds) {
-  if (game.phase === "write") startVoting(game, presentPlayerIds)
+  if (game.phase === "truth") generateRounds(game)
+  else if (game.phase === "write") startVoting(game, presentPlayerIds)
   else if (game.phase === "vote") revealRound(game, presentPlayerIds)
 }
 
@@ -563,14 +948,13 @@ export function getPublicState(game, presentPlayerIds) {
     .sort((a, b) => b.score - a.score)
 
   const now = Date.now()
-  const fact = game.facts[game.roundIndex]
 
   const state = {
     id: game.id,
     phase: game.phase,
+    personal: !!game.personal,
     roundIndex: game.roundIndex,
     totalRounds: game.totalRounds,
-    prompt: fact.prompt,
     totalPlayers: presentPlayerIds.length,
     writeMs: WRITE_MS,
     voteMs: VOTE_MS,
@@ -578,14 +962,44 @@ export function getPublicState(game, presentPlayerIds) {
     scores,
   }
 
+  // Personal mode "truth" phase — the per-player prompt + clock is private
+  // (getPrivateState); the public view is just progress.
+  if (game.phase === "truth") {
+    const doneCount = presentPlayerIds.filter((pid) => {
+      const slots = game.truthAssignments.get(pid) ?? []
+      return (game.truthProgress.get(pid) ?? 0) >= slots.length
+    }).length
+    state.truth = {
+      promptsPerPlayer: game.promptsPerPlayer,
+      doneCount,
+      totalPlayers: presentPlayerIds.length,
+      chooseMs: CHOOSE_MS,
+      truthMs: TRUTH_MS,
+    }
+    return state
+  }
+
+  // A round exists in every phase except a degenerate personal-mode "final"
+  // reached with zero usable rounds.
+  const hasRound = !game.personal || game.roundIndex < game.rounds.length
+  if (hasRound) {
+    const ctx = roundContext(game)
+    state.prompt = ctx.prompt // bank: "... ___ ..."  |  personal: "What is {name}'s ...?"
+    if (game.personal) {
+      state.subjectId = ctx.subjectId
+      // How many players write / vote this round (all present minus the subject).
+      state.expectedCount = writerIds(game, presentPlayerIds).length
+    }
+  }
+
   if (game.phase === "write") {
-    state.submittedPlayerIds = presentPlayerIds.filter((pid) => game.submissions.has(pid))
+    state.submittedPlayerIds = writerIds(game, presentPlayerIds).filter((pid) => game.submissions.has(pid))
   }
 
   if (game.phase === "vote") {
     // Anonymized: opaque id + text only, in the pre-shuffled order.
     state.options = (game.answerOptions ?? []).map((o) => ({ id: o.id, text: o.text }))
-    state.votedPlayerIds = presentPlayerIds.filter((pid) => game.votes.has(pid))
+    state.votedPlayerIds = writerIds(game, presentPlayerIds).filter((pid) => game.votes.has(pid))
   }
 
   if (game.phase === "reveal") {
@@ -606,6 +1020,42 @@ export function getPublicState(game, presentPlayerIds) {
 // the real answer it was folded into the truth option — that's not "their
 // fake" and stays selectable, so the truth option is never reported here.
 export function getPrivateState(game, playerId) {
+  if (game.phase === "truth") {
+    const slots = game.truthAssignments.get(playerId) ?? []
+    const idx = game.truthProgress.get(playerId) ?? 0
+    if (idx >= slots.length) {
+      return { truth: { done: true, slotNumber: slots.length, slotCount: slots.length } }
+    }
+    const slot = slots[idx]
+    const deadline = game.truthDeadlineByPlayer.get(playerId) ?? Date.now()
+    const msLeft = Math.max(0, deadline - Date.now())
+    if (slot.chosen == null) {
+      return {
+        truth: {
+          done: false,
+          choosing: true,
+          slotNumber: idx + 1,
+          slotCount: slots.length,
+          options: slot.choices.map((c) => c.self), // plain text, NO category shown
+          msLeft,
+          stepMs: CHOOSE_MS,
+        },
+      }
+    }
+    return {
+      truth: {
+        done: false,
+        choosing: false,
+        slotNumber: idx + 1,
+        slotCount: slots.length,
+        prompt: slot.choices[slot.chosen].self,
+        alreadyAnswered: slot.answer ?? null,
+        msLeft,
+        stepMs: TRUTH_MS,
+      },
+    }
+  }
+
   if (game.phase === "vote" && game.answerOptions) {
     const mine = game.answerOptions.find(
       (o) => !o.isTruth && o.ownerIds.includes(playerId)

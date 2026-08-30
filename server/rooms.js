@@ -1,6 +1,13 @@
 // In-memory room store. No database yet — this all lives in RAM and
 // resets whenever the server restarts. That's fine for Phase 1.
 //
+// Because there's no persistence, a room that everyone walks away from
+// would otherwise sit in `rooms` forever. Two things keep that in check:
+// the short empty-room timer below (fires once every player has been
+// formally removed), and a periodic "abandoned room" sweep in
+// server/index.js that uses the `lastActivityAt` / `lastConnectedAt`
+// stamps on each room as a longer-horizon backstop.
+//
 // --- Player identity & reconnects ------------------------------------
 // A player is NOT their socket. A refresh, a locked phone, or a blip of
 // flaky WiFi all kill the socket and hand the browser a brand-new one on
@@ -21,6 +28,7 @@
 // prove "I'm the same player" across reloads and reconnects.
 
 import { randomUUID } from "node:crypto";
+import { assignPlayerColor, isValidColorId, hexOf } from "./playerColors.js";
 
 const rooms = new Map(); // roomCode -> Room
 
@@ -55,15 +63,24 @@ function generateRoomCode() {
   return code;
 }
 
-function makePlayer(name, socketId) {
+function makePlayer(name, socketId, color) {
   return {
     id: randomUUID(), // stable playerId
     token: randomUUID(), // secret, never broadcast
     name,
+    color, // a player-colour id (see playerColors.js); unique within a room
     socketId, // current live socket, or null while disconnected
     connected: true,
     disconnectedAt: null,
   };
+}
+
+// The colour ids currently worn by players in this room — so a new joiner
+// (or a lobby colour change) can avoid collisions.
+function usedColors(room, exceptPlayerId) {
+  return [...room.players.values()]
+    .filter((p) => p.id !== exceptPlayerId)
+    .map((p) => p.color);
 }
 
 function bindSocket(socketId, code, playerId) {
@@ -72,12 +89,18 @@ function bindSocket(socketId, code, playerId) {
 
 export function createRoom(hostSocketId, hostName) {
   const code = generateRoomCode();
-  const host = makePlayer(hostName, hostSocketId);
+  const host = makePlayer(hostName, hostSocketId, assignPlayerColor([]));
+  const now = Date.now();
   const room = {
     code,
     hostId: host.id, // a playerId now, not a socket id
     players: new Map([[host.id, host]]), // playerId -> player
-    createdAt: Date.now(),
+    createdAt: now,
+    // Bumped by broadcastRoom() on every meaningful state change (join,
+    // game action, tournament step, …) and refreshed by the abandoned-room
+    // sweep while at least one player is connected. Both feed that sweep.
+    lastActivityAt: now,
+    lastConnectedAt: now,
     status: "lobby", // "lobby" | "in-game"
     game: null,
     tournament: null, // set by the tournament layer (see server/tournament.js)
@@ -101,6 +124,27 @@ export function endGame(room) {
 
 export function getRoom(code) {
   return rooms.get(code?.toUpperCase());
+}
+
+// A snapshot of every live room. Used by the abandoned-room sweep; it's a
+// copy, so the sweep can delete rooms while iterating.
+export function allRooms() {
+  return [...rooms.values()];
+}
+
+// Hard-delete a room and drop every reverse-index entry keyed to it. Used
+// only by the abandoned-room sweep (a normal emptied room goes away via
+// the empty-room timer armed in removePlayer). Returns the removed room,
+// or null if the code was already gone.
+export function deleteRoom(code) {
+  const room = rooms.get(code?.toUpperCase());
+  if (!room) return null;
+  if (room.emptyTimer) clearTimeout(room.emptyTimer);
+  for (const player of room.players.values()) {
+    if (player.socketId) socketIndex.delete(player.socketId);
+  }
+  rooms.delete(room.code);
+  return room;
 }
 
 export function getPlayerBySocket(socketId) {
@@ -135,7 +179,7 @@ export function joinRoom(code, socketId, name) {
     room.emptyTimer = null;
   }
 
-  const player = makePlayer(name, socketId);
+  const player = makePlayer(name, socketId, assignPlayerColor(usedColors(room)));
   room.players.set(player.id, player);
   if (room.players.size === 1) room.hostId = player.id;
   bindSocket(socketId, code, player.id);
@@ -219,6 +263,28 @@ export function removePlayer(code, playerId) {
   return room;
 }
 
+// Lobby-only: a player re-picks their colour identity. Rejected once a
+// game or tournament is under way — a colour is locked in for the duration
+// and only changeable back in a plain lobby. The target colour must be
+// free (not worn by anyone else in the room).
+export function setPlayerColor(code, playerId, colorId) {
+  const room = getRoom(code);
+  if (!room) return { error: "Room not found." };
+  if (room.status !== "lobby" || room.tournament?.active) {
+    return { error: "Colours are locked once a game starts." };
+  }
+  const player = room.players.get(playerId);
+  if (!player) return { error: "You're not in this room." };
+  if (!isValidColorId(colorId)) return { error: "Unknown colour." };
+  if (player.color === colorId) return { room }; // no-op
+
+  if (usedColors(room, playerId).includes(colorId)) {
+    return { error: "Someone already has that colour." };
+  }
+  player.color = colorId;
+  return { room };
+}
+
 export function toPublicRoom(room) {
   return {
     code: room.code,
@@ -227,6 +293,8 @@ export function toPublicRoom(room) {
       id: p.id,
       name: p.name,
       connected: p.connected,
+      color: p.color, // player-colour id
+      colorHex: hexOf(p.color), // resolved hex, so clients never need the map
     })),
   };
 }

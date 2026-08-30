@@ -12,7 +12,7 @@ const ICONS = {
       <circle cx="12" cy="12" r="2.6" />
     </>
   ),
-  // Would You Rather — a balance weighing two options.
+  // Majority Pick (id "would-you-rather") — a balance weighing two options.
   'would-you-rather': (
     <>
       <path d="M12 3.5v17" />
@@ -46,6 +46,15 @@ const ICONS = {
       <path d="M7 19.5h10" />
       <path d="M9 19.5c0-1.8 1.2-3 3-3s3 1.2 3 3" />
       <path d="m12 6.5.9 1.8 1.8.9-1.8.9-.9 1.8-.9-1.8-1.8-.9 1.8-.9Z" />
+    </>
+  ),
+  // Wavelength — a gauge dial with a needle.
+  wavelength: (
+    <>
+      <path d="M3 15a9 9 0 0 1 18 0" />
+      <path d="M12 15 16 8" />
+      <circle cx="12" cy="15" r="1.4" />
+      <path d="M5.5 15h.01M18.5 15h.01M8 9.5h.01M16 9.5h.01" />
     </>
   ),
 }

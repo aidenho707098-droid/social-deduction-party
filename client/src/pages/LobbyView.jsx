@@ -1,7 +1,23 @@
 import { QRCodeSVG } from 'qrcode.react'
+import { PlayerDot } from '../PlayerDot'
+import { PLAYER_COLORS } from '../playerColors'
 
-export default function LobbyView({ code, players, isHost, baseUrl, onStartGame, onTournament, onCatalogue }) {
+export default function LobbyView({
+  code,
+  players,
+  isHost,
+  myPlayerId,
+  baseUrl,
+  onStartGame,
+  onTournament,
+  onCatalogue,
+  onPickColor,
+}) {
   const joinUrl = `${baseUrl}/join/${code}`
+  const me = players.find((p) => p.id === myPlayerId)
+  const takenByOthers = new Set(
+    players.filter((p) => p.id !== myPlayerId).map((p) => p.color)
+  )
 
   return (
     <div className="screen">
@@ -23,14 +39,46 @@ export default function LobbyView({ code, players, isHost, baseUrl, onStartGame,
               key={p.id}
               className={`player-item ${p.connected === false ? 'player-item-away' : ''}`}
             >
-              <span className="player-dot" />
+              <PlayerDot color={p.colorHex ?? p.color} />
               {p.name}
+              {p.id === myPlayerId && ' (you)'}
               {p.connected === false && (
                 <span className="player-away-tag">disconnected</span>
               )}
             </li>
           ))}
         </ul>
+
+        {me && onPickColor && (
+          <div className="colour-picker">
+            <span className="colour-picker-label">
+              <PlayerDot color={me.colorHex ?? me.color} /> Your colour
+            </span>
+            <div className="colour-swatches">
+              {PLAYER_COLORS.map((c) => {
+                const mine = c.id === me.color
+                const taken = takenByOthers.has(c.id)
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`colour-swatch ${mine ? 'colour-swatch-mine' : ''} ${
+                      taken ? 'colour-swatch-taken' : ''
+                    }`}
+                    style={{ background: c.hex }}
+                    disabled={taken || mine}
+                    title={taken ? `${c.name} — taken` : c.name}
+                    aria-label={`${c.name}${mine ? ' (yours)' : taken ? ' (taken)' : ''}`}
+                    onClick={() => onPickColor(c.id)}
+                  />
+                )
+              })}
+            </div>
+            <p className="colour-picker-hint">
+              Pick any free colour — it locks in once a game starts.
+            </p>
+          </div>
+        )}
       </div>
 
       {isHost ? (

@@ -11,6 +11,9 @@ import {
   getRoom,
   getPlayerBySocket,
   toPublicRoom,
+  setPlayerColor,
+  allRooms,
+  deleteRoom,
   startGame as startGameOnRoom,
   endGame,
   REJOIN_GRACE_MS,
@@ -105,6 +108,9 @@ function buildPublicRoom(room) {
 function broadcastRoom(roomCode) {
   const room = getRoom(roomCode);
   if (!room) return;
+  // Every meaningful room mutation funnels through here, so this is the
+  // one place the abandoned-room sweep needs to read for "last activity".
+  room.lastActivityAt = Date.now();
   // Tournament layer intercept: the moment the running game reaches its
   // terminal state, fold its standings into the tournament and move to the
   // "between" screen — no game-specific code, no host click needed.
@@ -313,20 +319,34 @@ function recordDeckMemory(room, gameId, game) {
 // resolved wheel spin). Skips the game gracefully if it can no longer run.
 function startTournamentGameNow(room, gameId) {
   const mod = GAMES[gameId];
+  const t = room.tournament;
   const playerIds = [...room.players.keys()];
+
+  // Settings the host chose for THIS game in the tournament flow: manual mode
+  // set them per lineup slot at build time; random mode sets them on the
+  // "up next" screen right before starting. Either way they win over the
+  // room's last-used settings and the game's tournament defaults.
+  const hostOptions =
+    (t.mode === "manual" ? t.lineupSettings?.[t.currentIndex] : t.pendingGameOptions) ?? {};
+  const hasHostOptions = Object.keys(hostOptions).length > 0;
+
   let game;
   try {
     game = mod.createGame(playerIds, {
       ...tournamentOptionsFor(gameId, playerIds),
-      // Prefer whatever the host last configured for this game this
-      // session; fall back to the tournament defaults.
       ...(room.gameSettings?.[gameId] ?? {}),
+      ...hostOptions,
       memory: room.itemMemory?.[gameId],
     });
   } catch (err) {
     console.warn(`Tournament: skipping ${gameId} — ${err.message}`);
     skipGame(room.tournament, gameId);
     return runTournamentStep(room);
+  }
+  // Remember the host's choice as the room's new last-used for this game.
+  if (hasHostOptions) {
+    room.gameSettings = room.gameSettings ?? {};
+    room.gameSettings[gameId] = { ...hostOptions };
   }
   recordDeckMemory(room, gameId, game);
   beginGame(room.tournament, gameId, playerIds);
@@ -411,6 +431,18 @@ io.on("connection", (socket) => {
     syncBlackMagicTicker(room);
   });
 
+  // Lobby-only: a player changes their colour identity. The server checks
+  // the room is idle and the colour is free, then broadcasts so every
+  // device updates the dot everywhere that player is shown.
+  socket.on("set_player_color", ({ code, color }, callback) => {
+    const playerId = playerIdOf(socket);
+    if (!playerId) return callback?.({ error: "You're not in this room." });
+    const result = setPlayerColor(code, playerId, color);
+    if (result.error) return callback?.({ error: result.error });
+    callback?.({ ok: true });
+    broadcastRoom(code);
+  });
+
   socket.on("start_game", ({ code, gameId, options }, callback) => {
     const room = getRoom(code);
     if (!room) return callback?.({ error: "Room not found." });
@@ -456,14 +488,14 @@ io.on("connection", (socket) => {
   // A layer above the individual games — it decides which game runs next
   // and accumulates rank-based points across them. Games are untouched.
 
-  socket.on("tournament_configure", ({ code, mode, lineup, totalGames }, callback) => {
+  socket.on("tournament_configure", ({ code, mode, lineup, lineupSettings, totalGames }, callback) => {
     const room = getRoom(code);
     if (!room) return callback?.({ error: "Room not found." });
     if (!isRoomHost(room, socket)) return callback?.({ error: "Only the host can do that." });
     if (room.status !== "lobby") return callback?.({ error: "Finish the current game first." });
     let t;
     try {
-      t = createTournament({ mode, lineup, totalGames }, [...room.players.keys()]);
+      t = createTournament({ mode, lineup, lineupSettings, totalGames }, [...room.players.keys()]);
     } catch (err) {
       return callback?.({ error: err.message });
     }
@@ -498,11 +530,17 @@ io.on("connection", (socket) => {
   });
 
   // Host proceeds from the "up next" intro screen — now the game starts.
-  socket.on("tournament_intro_start", ({ code }) => {
+  // In random mode the host may pass `options` configured on that screen for
+  // the just-revealed game; manual mode's settings were fixed at lineup time.
+  socket.on("tournament_intro_start", ({ code, options }) => {
     const room = getRoom(code);
     if (!room || !isRoomHost(room, socket)) return;
-    if (room.tournament?.phase !== "intro" || !room.tournament.pendingGameId) return;
-    startTournamentGameNow(room, room.tournament.pendingGameId);
+    const t = room.tournament;
+    if (t?.phase !== "intro" || !t.pendingGameId) return;
+    if (t.mode === "random" && options && typeof options === "object") {
+      t.pendingGameOptions = options;
+    }
+    startTournamentGameNow(room, t.pendingGameId);
   });
 
   socket.on("tournament_end", ({ code }) => {
@@ -550,10 +588,32 @@ io.on("connection", (socket) => {
     broadcastRoom(room.code);
   });
 
-  // --- Would You Rather actions -------------------------------------
+  // --- Majority Pick actions (game id "would-you-rather") -----------
   // Same idea as the imposter events above: a small per-game set of
   // socket events, routed through the registry so index.js stays
-  // game-agnostic.
+  // game-agnostic. `wyr_submit_prompt` / `wyr_force_generate` only apply
+  // to Custom Mode's "collect" phase.
+
+  socket.on("wyr_submit_prompt", ({ code, slotId, text }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "would-you-rather") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES["would-you-rather"].submitPrompt(
+      room.game, playerId, text, connectedPlayerIds(room)
+    );
+    broadcastRoom(room.code);
+    sendPrivateRoles(room); // push each player their next prompt / "done"
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("wyr_force_generate", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "would-you-rather") return;
+    GAMES["would-you-rather"].forceAdvance(room.game, connectedPlayerIds(room));
+    broadcastRoom(room.code);
+    sendPrivateRoles(room);
+  });
 
   socket.on("wyr_answer", ({ code, choice }) => {
     const room = getRoom(code);
@@ -618,6 +678,41 @@ io.on("connection", (socket) => {
   // `fibbage_submit` / `fibbage_vote` ack with { ok } so the sender's own
   // device can confirm. Whose fake is whose never leaves the server until
   // `fibbage_reveal` — see fibbage.js getPublicState().
+  // `fibbage_truth_*` only apply to Personal Mode's "truth" phase.
+
+  socket.on("fibbage_truth_choose", ({ code, slotIndex, choiceIndex }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "fibbage") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES.fibbage.chooseTruthPrompt(room.game, playerId, slotIndex, choiceIndex);
+    broadcastRoom(room.code);
+    sendPrivateRoles(room); // push this player their now-chosen prompt + 45s clock
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("fibbage_truth_submit", ({ code, text }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "fibbage") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES.fibbage.submitTruthAnswer(
+      room.game, playerId, text, connectedPlayerIds(room)
+    );
+    broadcastRoom(room.code);
+    sendPrivateRoles(room); // next prompt / "done" for this player
+    refreshFibbageVoteRoles(room); // that submission may have started the fib phase
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("fibbage_truth_force", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "fibbage") return;
+    GAMES.fibbage.forceAdvance(room.game, connectedPlayerIds(room));
+    broadcastRoom(room.code);
+    sendPrivateRoles(room);
+    refreshFibbageVoteRoles(room);
+  });
 
   socket.on("fibbage_submit", ({ code, text }, cb) => {
     const room = getRoom(code);
@@ -719,6 +814,51 @@ io.on("connection", (socket) => {
     syncBlackMagicTicker(room);
   });
 
+  // --- Wavelength actions ---------------------------------------------
+  // `wavelength_submit_clue` acks with { ok } or a { reason, term } so the
+  // Clue-Giver's device can show why a phrase bounced and let them retry.
+  // The secret target never leaves the server except to the Clue-Giver via
+  // their private role (see wavelength.js getPrivateState).
+
+  socket.on("wavelength_submit_clue", ({ code, clue }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "wavelength") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES.wavelength.submitClue(room.game, playerId, clue);
+    if (res?.ok) {
+      broadcastRoom(room.code); // guessers now learn the category + clue
+    }
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("wavelength_guess", ({ code, guess }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "wavelength") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES.wavelength.submitGuess(
+      room.game, playerId, guess, connectedPlayerIds(room)
+    );
+    broadcastRoom(room.code);
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("wavelength_reveal", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "wavelength") return;
+    GAMES.wavelength.forceAdvance(room.game, connectedPlayerIds(room));
+    broadcastRoom(room.code);
+  });
+
+  socket.on("wavelength_next_round", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "wavelength") return;
+    GAMES.wavelength.nextRound(room.game, connectedPlayerIds(room));
+    broadcastRoom(room.code);
+    sendPrivateRoles(room); // the new Clue-Giver gets their scale + target
+  });
+
   socket.on("back_to_lobby", ({ code }) => {
     const room = getRoom(code);
     if (!room || !isRoomHost(room, socket)) return;
@@ -800,6 +940,139 @@ io.on("connection", (socket) => {
     armGraceTimer(info.code, info.playerId); // remove them if they don't return in time
   });
 });
+
+// --- Abandoned-room cleanup -----------------------------------------
+// Room + game state lives only in memory, so without this a room everyone
+// walked away from would sit in the `rooms` map until the process
+// restarts. A lightweight timer sweeps every few minutes and drops rooms
+// in one of two states:
+//
+//   * EMPTY — zero connected players for EMPTY_ROOM_TTL_MS (~25 min).
+//     That window is far longer than the per-player reconnect grace
+//     (REJOIN_GRACE_MS, 60s), so a refresh or a flaky-WiFi blip is never
+//     caught by this: a player who comes back within their grace is still
+//     in room.players and, once reconnected, keeps lastConnectedAt fresh.
+//   * INACTIVE — still has a connected socket, but nothing has changed in
+//     the room for INACTIVE_ROOM_TTL_MS (~5 h). Every join, game action
+//     and tournament step runs through broadcastRoom(), which stamps
+//     lastActivityAt, so this only trips for a genuinely idle tab left
+//     open (e.g. overnight).
+//
+// The sweep only READS timestamps and the per-player `connected` flags —
+// it never touches game state — so it can't race with or interrupt a
+// game in progress.
+const CLEANUP_SWEEP_MS = Number(process.env.CLEANUP_SWEEP_MS) || 3 * 60_000;
+const EMPTY_ROOM_TTL_MS =
+  Number(process.env.EMPTY_ROOM_TTL_MS) || 25 * 60_000;
+const INACTIVE_ROOM_TTL_MS =
+  Number(process.env.INACTIVE_ROOM_TTL_MS) || 5 * 60 * 60_000;
+
+function cleanupRoom(code, category, detail) {
+  const room = getRoom(code);
+  if (!room) return;
+
+  // A connected socket in an INACTIVE room gets a clean "it's gone" signal
+  // rather than a silently frozen screen. Nobody is in an EMPTY room to
+  // receive this, but emitting to an empty channel is harmless.
+  io.to(code).emit("room_closed", { reason: category });
+
+  clearWheelTimer(code);
+  for (const map of [emojiTickers, blackMagicTickers]) {
+    const timerId = map.get(code);
+    if (timerId) clearInterval(timerId);
+    map.delete(code);
+  }
+  for (const playerId of room.players.keys()) clearGraceTimer(code, playerId);
+
+  deleteRoom(code);
+  console.log(`[room-cleanup] removed ${code} — ${category} (${detail})`);
+}
+
+function sweepAbandonedRooms() {
+  const now = Date.now();
+  for (const room of allRooms()) {
+    try {
+      const occupied = [...room.players.values()].some((p) => p.connected);
+      // While anyone's connected, keep the "empty since" clock reset.
+      if (occupied) room.lastConnectedAt = now;
+
+      const emptyForMs = now - (room.lastConnectedAt ?? room.createdAt);
+      const idleForMs = now - (room.lastActivityAt ?? room.createdAt);
+
+      if (!occupied && emptyForMs >= EMPTY_ROOM_TTL_MS) {
+        cleanupRoom(room.code, "empty", `${Math.round(emptyForMs / 60_000)}m empty`);
+      } else if (idleForMs >= INACTIVE_ROOM_TTL_MS) {
+        cleanupRoom(
+          room.code,
+          "inactive",
+          `${Math.round(idleForMs / 60_000)}m idle, ${occupied ? "still connected" : "empty"}`
+        );
+      }
+    } catch (err) {
+      console.warn(`[room-cleanup] sweep error for ${room.code}:`, err);
+    }
+  }
+}
+
+const cleanupTimer = setInterval(sweepAbandonedRooms, CLEANUP_SWEEP_MS);
+cleanupTimer.unref?.(); // a maintenance timer shouldn't hold the process open
+
+// --- Majority Pick: Custom Mode collect-phase clock ----------------
+// Each player has their own ~45s countdown for the prompt they're
+// currently writing. A single self-managed sweep (like the room cleanup
+// above) auto-skips anyone whose clock has run out and starts the answer
+// phase once everyone's queue is done — no per-handler wiring, and it
+// can't touch a game that isn't in the "collect" phase.
+const mpCollectTimer = setInterval(() => {
+  for (const room of allRooms()) {
+    const game = room.game;
+    if (
+      room.status !== "in-game" ||
+      game?.id !== "would-you-rather" ||
+      game.phase !== "collect"
+    ) {
+      continue;
+    }
+    try {
+      const changed = GAMES["would-you-rather"].tickCollect(
+        game,
+        connectedPlayerIds(room)
+      );
+      if (changed) {
+        broadcastRoom(room.code);
+        sendPrivateRoles(room);
+      }
+    } catch (err) {
+      console.warn(`[majority-pick] collect tick error for ${room.code}:`, err);
+    }
+  }
+}, 1000);
+mpCollectTimer.unref?.();
+
+// --- Fact or Fake: Personal Mode "truth"-phase clock --------------
+// Each player has their own ~25s to pick a prompt then ~45s to answer it.
+// A self-managed sweep auto-picks / auto-skips anyone whose clock ran out
+// and starts the fib phase once everyone's answers are in. No-op for any
+// game not in the "truth" phase.
+const fibbageTruthTimer = setInterval(() => {
+  for (const room of allRooms()) {
+    const game = room.game;
+    if (room.status !== "in-game" || game?.id !== "fibbage" || game.phase !== "truth") {
+      continue;
+    }
+    try {
+      const changed = GAMES.fibbage.tickTruth(game, connectedPlayerIds(room));
+      if (changed) {
+        broadcastRoom(room.code);
+        sendPrivateRoles(room);
+        refreshFibbageVoteRoles(room);
+      }
+    } catch (err) {
+      console.warn(`[fibbage] truth tick error for ${room.code}:`, err);
+    }
+  }
+}, 1000);
+fibbageTruthTimer.unref?.();
 
 httpServer.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);

@@ -1,3 +1,5 @@
+import { PlayerDot } from '../../PlayerDot'
+
 export default function PickWitch({ game, players, isHost, onPick }) {
   return (
     <div className="screen">
@@ -21,6 +23,7 @@ export default function PickWitch({ game, players, isHost, onPick }) {
                   onClick={() => onPick(p.id)}
                   disabled={p.connected === false}
                 >
+                  <PlayerDot color={p.colorHex ?? p.color} className="player-cdot-inline" />
                   {p.name}
                   {p.connected === false && ' (disconnected)'}
                 </button>

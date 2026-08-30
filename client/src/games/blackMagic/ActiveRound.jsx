@@ -1,4 +1,6 @@
 import Stopwatch from './Stopwatch'
+import HintFeed from './HintFeed'
+import { PlayerDot } from '../../PlayerDot'
 
 export default function ActiveRound({ game, players, myId, myRole, isHost, onAward, onReveal }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
@@ -45,6 +47,7 @@ export default function ActiveRound({ game, players, myId, myRole, isHost, onAwa
                   onClick={() => onAward(p.id)}
                   disabled={p.connected === false}
                 >
+                  <PlayerDot color={p.colorHex ?? p.color} className="player-cdot-inline" />
                   {p.name}
                   {p.connected === false && ' (disconnected)'}
                 </button>
@@ -68,6 +71,8 @@ export default function ActiveRound({ game, players, myId, myRole, isHost, onAwa
             loud — {witchName} will award the point.
           </p>
           <p className="hint center-text">The round ends when someone lifts The Curse.</p>
+
+          <HintFeed hints={game.hints} />
 
           {isHost && (
             <button className="btn btn-text" onClick={onReveal}>

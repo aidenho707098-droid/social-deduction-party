@@ -91,7 +91,7 @@ export function toTournamentPoints(standings) {
 
 // --- Tournament lifecycle -------------------------------------------------
 
-export function createTournament({ mode, lineup, totalGames }, playerIds) {
+export function createTournament({ mode, lineup, lineupSettings, totalGames }, playerIds) {
   const method = mode === "random" ? "random" : "manual";
   const eligible = eligibleGameIds(playerIds.length);
   if (eligible.length === 0) {
@@ -99,9 +99,16 @@ export function createTournament({ mode, lineup, totalGames }, playerIds) {
   }
 
   let orderedLineup = [];
+  let orderedSettings = []; // parallel to orderedLineup: host-chosen createGame() options per slot
   let total;
   if (method === "manual") {
-    orderedLineup = (Array.isArray(lineup) ? lineup : []).filter((id) => eligible.includes(id));
+    // Keep each game's chosen settings aligned with its lineup slot as we
+    // drop any games the current player count can't support.
+    const kept = (Array.isArray(lineup) ? lineup : [])
+      .map((id, i) => ({ id, options: (Array.isArray(lineupSettings) && lineupSettings[i]) || {} }))
+      .filter((e) => eligible.includes(e.id));
+    orderedLineup = kept.map((e) => e.id);
+    orderedSettings = kept.map((e) => e.options);
     if (orderedLineup.length < 2) {
       throw new Error("Pick at least 2 games for the lineup.");
     }
@@ -116,6 +123,7 @@ export function createTournament({ mode, lineup, totalGames }, playerIds) {
     phase: "lineup",
     mode: method,
     lineup: orderedLineup,
+    lineupSettings: orderedSettings, // manual mode: options per lineup slot
     totalGames: total,
     currentIndex: 0,
     standings: new Map(), // playerId -> accumulated points
@@ -123,6 +131,7 @@ export function createTournament({ mode, lineup, totalGames }, playerIds) {
     currentGameId: null,
     currentParticipants: [],
     pendingGameId: null, // the game the "intro" screen is for
+    pendingGameOptions: null, // random mode: host-chosen options for the "up next" game
     usedThisCycle: [], // random mode: games drawn since the last pool reset
     wheel: null, // { pool: [gameId], landedOn, spinId }
   };
@@ -173,6 +182,7 @@ export function stepAt(tournament, currentPlayerCount) {
 // screen until the host proceeds.
 export function enterIntro(tournament, gameId) {
   tournament.pendingGameId = gameId;
+  tournament.pendingGameOptions = null; // host reconfigures per reveal (random mode)
   tournament.phase = "intro";
   tournament.wheel = null;
 }
@@ -181,6 +191,7 @@ export function beginGame(tournament, gameId, playerIds) {
   tournament.currentGameId = gameId;
   tournament.currentParticipants = [...playerIds];
   tournament.pendingGameId = null;
+  tournament.pendingGameOptions = null;
   tournament.phase = "playing";
   tournament.wheel = null;
 }

@@ -381,20 +381,34 @@ img.emoji {
   border-radius: var(--r-sm-alt);
 }
 
-.player-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--gold);
-  flex-shrink: 0;
-}
-
 .player-item-away {
   opacity: 0.5;
 }
 
-.player-item-away .player-dot {
-  background: var(--muted);
+/* ---- Shared player-identity dot -------------------------------------
+   A small colour chip shown next to a player's name everywhere they're
+   represented. Colour is set inline per player (see players.jsx). */
+.player-cdot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+  box-shadow: inset 0 0 0 1px rgba(36, 31, 51, 0.18);
+}
+
+/* Sits inline before a name inside a text run (rather than as a flex
+   sibling with its own gap). */
+.player-cdot-inline {
+  margin-right: 7px;
+  position: relative;
+  top: -1px;
+}
+
+/* On a coloured / dark background, swap the dark hairline for a light one. */
+.player-cdot-on {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
 }
 
 .player-away-tag {
@@ -404,6 +418,83 @@ img.emoji {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--coral-ink);
+}
+
+/* ---- Lobby: your-colour picker ------------------------------------- */
+.colour-picker {
+  margin-top: 14px;
+}
+
+.colour-picker-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.colour-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.colour-swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid var(--border-2);
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.08s ease, border-color 0.08s ease;
+}
+
+.colour-swatch:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.colour-swatch-mine {
+  border-color: var(--ink);
+  transform: scale(1.08);
+}
+
+.colour-swatch-mine::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  text-shadow: 0 1px 2px rgba(36, 31, 51, 0.5);
+}
+
+.colour-swatch-taken {
+  cursor: not-allowed;
+  opacity: 0.32;
+}
+
+.colour-swatch-taken::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 118%;
+  height: 2px;
+  background: var(--ink);
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.colour-picker-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .row {
@@ -620,6 +711,61 @@ img.emoji {
   z-index: 900;
 }
 
+/* ---- Sound control: small faded speaker icon, top-right corner ---- */
+.snd {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 930;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.snd-icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.4;
+  display: grid;
+  place-items: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.snd-icon:hover,
+.snd-icon:focus-visible {
+  opacity: 1;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.snd-off .snd-icon {
+  opacity: 0.72;
+}
+
+.snd-pop {
+  display: flex;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  box-shadow: var(--shadow-md);
+}
+
+.snd-range {
+  width: 96px;
+  accent-color: var(--violet);
+  cursor: pointer;
+}
+
 /* ---- Host controls panel (host-only, bottom-left, all screens) ---- */
 .host-panel {
   position: fixed;
@@ -683,18 +829,6 @@ img.emoji {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-}
-
-.host-panel-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--gold);
-  flex: none;
-}
-
-.host-panel-dot-off {
-  background: var(--border-2);
 }
 
 .host-panel-name {
@@ -1230,6 +1364,31 @@ img.emoji {
   color: var(--muted);
 }
 
+/* Custom Mode: answer authorship, revealed on the result screen only. */
+.wyr-author-line {
+  font-size: 13px;
+  color: var(--ink);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.wyr-author {
+  font-weight: 600;
+}
+
+.wyr-crowd-pleaser {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gold-ink);
+  background: var(--gold-tint);
+  border-radius: var(--r-sm);
+  padding: 10px 14px;
+  margin: 4px 0;
+}
+
 .wyr-board {
   display: flex;
   flex-direction: column;
@@ -1537,6 +1696,12 @@ img.emoji {
   font-weight: 600;
   color: var(--ink);
   margin: 4px 0;
+}
+
+/* Personal Mode: the subject's name inside the generated question, shown
+   bold in that player's identity colour (set inline). */
+.fof-subject-name {
+  font-weight: 800;
 }
 
 .fibbage-blank {
@@ -2034,6 +2199,104 @@ img.emoji {
   text-align: center;
 }
 
+/* --- Escalating Player hints (never shown to The Witch) --- */
+.bm-hint-feed {
+  margin-top: 18px;
+  padding: 14px;
+  border: 2px dashed var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--violet-tint);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bm-hint-feed-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--violet-ink);
+}
+
+.bm-hint-waiting {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.bm-hint-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bm-hint-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  animation: bm-hint-in 0.35s ease both;
+}
+
+.bm-hint-tier {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+.bm-hint-text {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.bm-hint-item-l3 .bm-hint-text {
+  color: var(--coral-ink);
+}
+
+.bm-hint-item-new {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 3px var(--violet-tint-2);
+  animation: bm-hint-in 0.35s ease both, bm-hint-pulse 1s ease-in-out 2;
+}
+
+.bm-hint-badge {
+  position: absolute;
+  top: -9px;
+  right: 10px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--coral);
+  color: #fff;
+}
+
+@keyframes bm-hint-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bm-hint-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--violet-tint-2); }
+  50% { box-shadow: 0 0 0 6px var(--violet-tint); }
+}
+
 /* ============================================================
    Tournament Mode
    ============================================================ */
@@ -2210,6 +2473,51 @@ img.emoji {
 
 .tour-lineup-remove {
   color: var(--coral-ink);
+}
+
+/* Manual lineup: name + per-game settings link stacked in one slot. */
+.tour-lineup-edit-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+}
+
+.tour-lineup-edit-main .tour-lineup-edit-name {
+  flex: 0 0 auto;
+}
+
+.tour-lineup-config {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--violet-ink);
+  cursor: pointer;
+  text-align: left;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tour-lineup-config:hover {
+  text-decoration: underline;
+}
+
+/* "Up next" screen (random mode): full-width configure button. */
+.tour-intro-config {
+  display: block;
+  width: 100%;
+  white-space: normal;
+  font-size: 14px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
 }
 
 /* --- Lineup / mystery pre-start screen --- */
@@ -2685,4 +2993,216 @@ img.emoji {
   font-weight: 700;
   font-size: 16px;
   color: var(--ink);
+}
+
+/* ============================================================
+   Wavelength — spectrum scale, number picker, animated reveal
+   ============================================================ */
+.wv-spectrum {
+  margin: 8px 0 4px;
+}
+
+.wv-poles {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.wv-pole {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+  max-width: 45%;
+}
+.wv-pole-b {
+  text-align: right;
+}
+
+.wv-track {
+  position: relative;
+  height: 30px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-2);
+  background: linear-gradient(
+    90deg,
+    var(--violet-tint-2),
+    var(--surface) 45%,
+    var(--surface) 55%,
+    var(--coral-tint-2)
+  );
+  box-shadow: var(--shadow-sm) inset;
+}
+
+.wv-track-blur {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--border),
+    var(--border) 8px,
+    var(--surface) 8px,
+    var(--surface) 16px
+  );
+}
+
+/* live "your current guess" marker */
+.wv-pick {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 4px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--violet);
+  box-shadow: 0 0 0 3px var(--violet-tint);
+  transition: left 0.12s ease-out;
+}
+
+/* the reveal needle: a rounded pin rising above the track */
+.wv-needle {
+  position: absolute;
+  top: -14px;
+  bottom: -6px;
+  width: 3px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  border-radius: 999px;
+  z-index: 3;
+}
+
+.wv-needle-value {
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 13px;
+  color: #fff;
+  background: var(--ink);
+  border-radius: 8px 3px 8px 3px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* each player's guess dot on the reveal */
+.wv-guess-marker {
+  position: absolute;
+  top: 50%;
+  margin-top: -9px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(36, 31, 51, 0.25);
+  display: grid;
+  place-items: center;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  z-index: 2;
+}
+
+.wv-guess-marker.wv-guess-exact {
+  box-shadow: 0 0 0 3px var(--gold-tint-2), 0 1px 4px rgba(36, 31, 51, 0.25);
+}
+
+.wv-guess-label {
+  font-size: 8px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(36, 31, 51, 0.5);
+}
+
+/* --- number slider (every range size) --- */
+.wv-slider-wrap {
+  margin: 14px 0;
+}
+
+.wv-slider {
+  width: 100%;
+  accent-color: var(--violet);
+  cursor: pointer;
+}
+
+.wv-slider-legend {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.wv-slider-value {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--violet-ink);
+}
+
+/* --- the clue card (guess + reveal screens) --- */
+.wv-clue-card,
+.wv-reveal-head {
+  text-align: center;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  margin: 6px 0;
+}
+
+.wv-clue-cat {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+.wv-clue-text {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 21px;
+  color: var(--ink);
+  margin: 6px 0;
+}
+
+.wv-clue-by {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* --- reveal breakdown rows --- */
+.wv-guess-chip {
+  min-width: 30px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+  padding: 2px 8px;
+  border-radius: 8px 3px 8px 3px;
+  background: var(--border);
+  color: var(--ink);
+}
+.wv-guess-chip.wv-guess-exact {
+  background: var(--gold-tint-2);
+  color: var(--gold-ink);
+}
+.wv-guess-chip.wv-guess-close {
+  background: var(--violet-tint-2);
+  color: var(--violet-ink);
+}
+
+.wv-cls-tag {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.wv-giver-row {
+  border-color: var(--violet);
+  background: var(--violet-tint);
 }

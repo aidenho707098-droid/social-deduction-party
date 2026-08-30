@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSound } from '../../sound/SoundContext'
 
 const OPTION_CLASSES = ['wyr-a', 'wyr-b', 'wyr-c', 'wyr-d']
 
@@ -6,6 +7,8 @@ export default function AnswerQuestion({ game, isHost, onAnswer, onReveal }) {
   const [choice, setChoice] = useState(null)
   const [seconds, setSeconds] = useState(() => Math.ceil(game.msLeft / 1000))
   const firedReveal = useRef(false)
+  const firedTimeout = useRef(false)
+  const { play } = useSound()
 
   // New round: clear the previous pick and restart the countdown from the
   // server's remaining time. Keyed on roundIndex so it does NOT restart
@@ -13,6 +16,7 @@ export default function AnswerQuestion({ game, isHost, onAnswer, onReveal }) {
   useEffect(() => {
     setChoice(null)
     firedReveal.current = false
+    firedTimeout.current = false
     setSeconds(Math.ceil(game.msLeft / 1000))
     const timer = setInterval(() => {
       setSeconds((s) => (s > 0 ? s - 1 : 0))
@@ -31,7 +35,16 @@ export default function AnswerQuestion({ game, isHost, onAnswer, onReveal }) {
     }
   }, [seconds, isHost, onReveal])
 
+  // Ran out of time without locking anything in — soft buzzer, this device only.
+  useEffect(() => {
+    if (seconds <= 0 && !choice && !firedTimeout.current) {
+      firedTimeout.current = true
+      play('wrong')
+    }
+  }, [seconds, choice, play])
+
   function pick(next) {
+    if (next !== choice) play('confirm')
     setChoice(next)
     onAnswer(next)
   }
@@ -62,7 +75,7 @@ export default function AnswerQuestion({ game, isHost, onAnswer, onReveal }) {
         {seconds > 0 ? `${seconds}s left` : "Time's up"} · {answered}/{game.totalPlayers} locked in
       </p>
 
-      <p className="wyr-prompt">Would you rather…</p>
+      <p className="wyr-prompt">{game.question.prompt}</p>
 
       <div className="wyr-choices">
         {options.map((o) => (

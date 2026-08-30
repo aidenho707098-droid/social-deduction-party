@@ -1,7 +1,10 @@
 import WordPeek from './WordPeek'
+import { PlayerDot } from '../../PlayerDot'
+import { playerColorMap } from '../../playerColors'
 
 export default function TurnOrder({ players, turnOrder, currentTurnPlayerId, imposterCount, myId, myRole, onNextTurn }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
+  const colorById = playerColorMap(players)
   const awayIds = new Set(players.filter((p) => p.connected === false).map((p) => p.id))
   const isMyTurn = myId === currentTurnPlayerId
   const currentIndex = turnOrder.indexOf(currentTurnPlayerId)
@@ -24,7 +27,7 @@ export default function TurnOrder({ players, turnOrder, currentTurnPlayerId, imp
               awayIds.has(id) ? 'player-item-away' : ''
             }`}
           >
-            <span className="player-dot" />
+            <PlayerDot color={colorById[id]} />
             {nameById[id] ?? 'Unknown'}
             {id === currentTurnPlayerId && <span className="turn-badge">Speaking</span>}
             {awayIds.has(id) && <span className="player-away-tag">disconnected</span>}

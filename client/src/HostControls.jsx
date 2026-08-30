@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { PlayerDot } from './PlayerDot'
 
 // Persistent host-only panel, rendered by Lobby across every screen (lobby,
 // tournament, and any running game). Non-hosts never get this component
@@ -49,7 +50,10 @@ export default function HostControls({ room, myPlayerId, onKick, onForceAdvance,
           const key = `kick:${p.id}`
           return (
             <div key={p.id} className="host-panel-player">
-              <span className={`host-panel-dot ${p.connected ? '' : 'host-panel-dot-off'}`} />
+              <PlayerDot
+                color={p.connected ? (p.colorHex ?? p.color) : 'var(--muted)'}
+                title={p.connected ? undefined : 'disconnected'}
+              />
               <span className="host-panel-name">
                 {p.name}
                 {p.id === myPlayerId && ' (you)'}

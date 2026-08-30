@@ -1,3 +1,6 @@
+import { PlayerDot } from '../../PlayerDot'
+import { playerColorMap } from '../../playerColors'
+
 function format(ms) {
   const total = Math.floor(ms / 1000)
   const m = Math.floor(total / 60)
@@ -7,6 +10,7 @@ function format(ms) {
 
 export default function RoundReveal({ game, players, myId, isHost, onNext }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
+  const colorById = playerColorMap(players)
   const { curse, witchId, outcome, guesserId, elapsedMs, witchPts, playerPts } = game.result
   const witchName = nameById[witchId] ?? 'The Witch'
   const guesserName = guesserId ? nameById[guesserId] ?? 'A Player' : null
@@ -92,7 +96,10 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
               className={`wyr-board-row ${s.playerId === myId ? 'wyr-me' : ''}`}
             >
               <span className="wyr-board-rank">{i + 1}</span>
-              <span>{nameById[s.playerId] ?? 'Unknown'}</span>
+              <span>
+                <PlayerDot color={colorById[s.playerId]} className="player-cdot-inline" />
+                {nameById[s.playerId] ?? 'Unknown'}
+              </span>
               <span className="wyr-board-score">{s.score}</span>
             </div>
           ))}

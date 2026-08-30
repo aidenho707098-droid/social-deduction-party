@@ -1,3 +1,6 @@
+import { PlayerDot } from '../../PlayerDot'
+import { playerColorMap } from '../../playerColors'
+
 export default function Results({
   players,
   myRole,
@@ -10,6 +13,7 @@ export default function Results({
   onBackToLobby,
 }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
+  const colorById = playerColorMap(players)
   const sortedPlayers = [...players].sort((a, b) => (tally[b.id] ?? 0) - (tally[a.id] ?? 0))
 
   const amImposter = myRole?.role === 'imposter'
@@ -34,7 +38,7 @@ export default function Results({
         <ul className="player-list">
           {imposterIds.map((id) => (
             <li key={id} className="player-item player-item-imposter">
-              <span className="player-dot" />
+              <PlayerDot color={colorById[id]} />
               {nameById[id] ?? 'Unknown'}
             </li>
           ))}
@@ -46,7 +50,7 @@ export default function Results({
         <ul className="player-list">
           {sortedPlayers.map((p) => (
             <li key={p.id} className="player-item">
-              <span className="player-dot" />
+              <PlayerDot color={p.colorHex ?? p.color} />
               {p.name}
               <span className="vote-count">
                 {tally[p.id] ?? 0} vote{(tally[p.id] ?? 0) === 1 ? '' : 's'}

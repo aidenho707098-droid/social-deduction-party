@@ -1,14 +1,50 @@
+import { useState } from 'react'
 import { getGame } from '../games/registry'
 import { GameIcon } from '../games/gameStyle'
 import { accentName } from '../games/gamePalette'
+import { describeGameOptions } from '../games/gameSettingsSummary'
 
 // "Up next" — shown to everyone before EVERY tournament game (the first
 // included). Names the game, shows progress, and reuses that game's How to
-// Play content as a quick refresher. Host proceeds when the room's ready.
-export default function TournamentIntro({ t, isHost, onStart }) {
-  const game = getGame(t.pendingGame?.id)
-  const accent = accentName(t.pendingGame?.id ?? '')
+// Play content as a quick refresher.
+//
+// Random mode: the game was only just revealed by the wheel, so the host
+// configures its settings here before starting (pre-filled from the room's
+// last-used settings). Manual mode settings were fixed at lineup time.
+export default function TournamentIntro({ t, isHost, playerCount, savedByGame = {}, onStart }) {
+  const gameId = t.pendingGame?.id
+  const game = getGame(gameId)
+  const accent = accentName(gameId ?? '')
   const rules = game?.rules
+  const canConfigure = t.mode === 'random' && !!game?.Setup
+
+  const [configuring, setConfiguring] = useState(false)
+  const [pendingOptions, setPendingOptions] = useState(null)
+
+  const effectiveOptions = pendingOptions ?? savedByGame[gameId] ?? null
+  const summary = describeGameOptions(effectiveOptions)
+
+  function startGame() {
+    onStart(t.mode === 'random' ? effectiveOptions ?? {} : undefined)
+  }
+
+  // --- Sub-screen: configure the just-revealed game (random mode) ---
+  if (configuring && canConfigure) {
+    const GameSetup = game.Setup
+    return (
+      <GameSetup
+        gameId={gameId}
+        playerCount={playerCount}
+        saved={effectiveOptions}
+        submitLabel="Save settings"
+        onStart={(opts) => {
+          setPendingOptions(opts)
+          setConfiguring(false)
+        }}
+        onCancel={() => setConfiguring(false)}
+      />
+    )
+  }
 
   return (
     <div className="screen">
@@ -19,10 +55,23 @@ export default function TournamentIntro({ t, isHost, onStart }) {
 
       <div className={`tour-intro-hero tour-intro-hero-${accent}`}>
         <span className={`tour-intro-badge tour-intro-badge-${accent}`}>
-          <GameIcon id={t.pendingGame?.id} />
+          <GameIcon id={gameId} />
         </span>
         <span className="tour-intro-name">{t.pendingGame?.name ?? 'Next game'}</span>
       </div>
+
+      {canConfigure && isHost && (
+        <div>
+          <span className="label">Settings</span>
+          <button
+            type="button"
+            className="tour-lineup-config tour-intro-config"
+            onClick={() => setConfiguring(true)}
+          >
+            ⚙ {summary || 'Configure this game'}
+          </button>
+        </div>
+      )}
 
       {rules && (
         <div>
@@ -39,7 +88,7 @@ export default function TournamentIntro({ t, isHost, onStart }) {
       )}
 
       {isHost ? (
-        <button className="btn btn-start" onClick={onStart}>
+        <button className="btn btn-start" onClick={startGame}>
           Start {t.pendingGame?.name ?? 'Game'} →
         </button>
       ) : (

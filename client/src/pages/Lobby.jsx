@@ -13,6 +13,7 @@ import TournamentWheel from '../tournament/TournamentWheel'
 import TournamentIntro from '../tournament/TournamentIntro'
 import TournamentBetween from '../tournament/TournamentBetween'
 import TournamentComplete from '../tournament/TournamentComplete'
+import { useSoundDirector } from '../sound/useSoundDirector'
 
 export default function Lobby() {
   const { code } = useParams()
@@ -23,6 +24,7 @@ export default function Lobby() {
   const [myRole, setMyRole] = useState(null)
   const [error, setError] = useState('')
   const [kicked, setKicked] = useState(false)
+  const [roomClosed, setRoomClosed] = useState(false)
   const [baseUrl, setBaseUrl] = useState(window.location.origin)
   const [connected, setConnected] = useState(socket.connected)
 
@@ -50,6 +52,10 @@ export default function Lobby() {
   const [showCatalogue, setShowCatalogue] = useState(false)
 
   const isHost = room?.hostId === myPlayerId
+
+  // Watches room / game / tournament state and fires the shared sound
+  // effects on the moments that matter (start, reveals, wins, …).
+  useSoundDirector(room, myRole, myPlayerId)
 
   useEffect(() => {
     // Deployed build: the server is on another domain and its LAN IP is
@@ -131,6 +137,15 @@ export default function Lobby() {
       setKicked(true)
     }
 
+    function handleRoomClosed() {
+      // The server swept this room as abandoned (empty too long, or idle
+      // for hours). The room and its state are gone — clear our seat and
+      // show a dead-end screen rather than a frozen lobby.
+      clearSession()
+      redirectedRef.current = true
+      setRoomClosed(true)
+    }
+
     function handleConnect() {
       setConnected(true)
       attemptResume()
@@ -145,6 +160,7 @@ export default function Lobby() {
     socket.on('room_update', handleRoomUpdate)
     socket.on('your_role', handleYourRole)
     socket.on('kicked', handleKicked)
+    socket.on('room_closed', handleRoomClosed)
 
     // If the socket is already up (we just came from Host/Join), the
     // 'connect' event won't fire again — kick off the resume now.
@@ -159,6 +175,7 @@ export default function Lobby() {
       socket.off('room_update', handleRoomUpdate)
       socket.off('your_role', handleYourRole)
       socket.off('kicked', handleKicked)
+      socket.off('room_closed', handleRoomClosed)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code])
@@ -177,9 +194,16 @@ export default function Lobby() {
     wyrAnswer: (choice) => socket.emit('wyr_answer', { code, choice }),
     wyrReveal: () => socket.emit('wyr_reveal', { code }),
     wyrNextRound: () => socket.emit('wyr_next_round', { code }),
+    wyrSubmitPrompt: (slotId, text, cb) =>
+      socket.emit('wyr_submit_prompt', { code, slotId, text }, cb),
+    wyrForceGenerate: () => socket.emit('wyr_force_generate', { code }),
     emojiAnswer: (guess, cb) => socket.emit('emoji_answer', { code, guess }, cb),
     emojiReveal: () => socket.emit('emoji_reveal', { code }),
     emojiNextRound: () => socket.emit('emoji_next_round', { code }),
+    fibbageTruthChoose: (slotIndex, choiceIndex, cb) =>
+      socket.emit('fibbage_truth_choose', { code, slotIndex, choiceIndex }, cb),
+    fibbageTruthSubmit: (text, cb) => socket.emit('fibbage_truth_submit', { code, text }, cb),
+    fibbageTruthForce: () => socket.emit('fibbage_truth_force', { code }),
     fibbageSubmit: (text, cb) => socket.emit('fibbage_submit', { code, text }, cb),
     fibbageStartVote: () => socket.emit('fibbage_start_vote', { code }),
     fibbageVote: (optionId, cb) => socket.emit('fibbage_vote', { code, optionId }, cb),
@@ -190,13 +214,18 @@ export default function Lobby() {
     bmAward: (guesserId) => socket.emit('black_magic_award', { code, guesserId }),
     bmReveal: () => socket.emit('black_magic_reveal', { code }),
     bmNextRound: () => socket.emit('black_magic_next_round', { code }),
+    wavelengthSubmitClue: (clue, cb) => socket.emit('wavelength_submit_clue', { code, clue }, cb),
+    wavelengthGuess: (guess, cb) => socket.emit('wavelength_guess', { code, guess }, cb),
+    wavelengthReveal: () => socket.emit('wavelength_reveal', { code }),
+    wavelengthNextRound: () => socket.emit('wavelength_next_round', { code }),
     backToLobby: () => socket.emit('back_to_lobby', { code }),
+    setPlayerColor: (color) => socket.emit('set_player_color', { code, color }),
     kickPlayer: (playerId) => socket.emit('kick_player', { code, playerId }),
     hostForceAdvance: () => socket.emit('host_force_advance', { code }),
     tournamentStart: () => socket.emit('tournament_start', { code }),
     tournamentNext: () => socket.emit('tournament_next', { code }),
     tournamentWheelReady: () => socket.emit('tournament_wheel_ready', { code }),
-    tournamentIntroStart: () => socket.emit('tournament_intro_start', { code }),
+    tournamentIntroStart: (options) => socket.emit('tournament_intro_start', { code, options }),
     tournamentEnd: () => socket.emit('tournament_end', { code }),
   }
 
@@ -217,6 +246,18 @@ export default function Lobby() {
       <div className="screen center">
         <p className="hint center-text">You've been removed from the room by the host.</p>
         <p className="hint center-text">You can rejoin any time with the room code.</p>
+        <button className="btn btn-primary" onClick={() => navigate('/')}>
+          Back to Home
+        </button>
+      </div>
+    )
+  }
+
+  if (roomClosed) {
+    return (
+      <div className="screen center">
+        <p className="hint center-text">This room was closed after a long time with no activity.</p>
+        <p className="hint center-text">Start a fresh room to play again.</p>
         <button className="btn btn-primary" onClick={() => navigate('/')}>
           Back to Home
         </button>
@@ -272,6 +313,8 @@ export default function Lobby() {
         <TournamentIntro
           t={tour}
           isHost={isHost}
+          playerCount={room.players.length}
+          savedByGame={room.gameSettings ?? {}}
           onStart={gameActions.tournamentIntroStart}
         />
       )
@@ -333,6 +376,7 @@ export default function Lobby() {
     return (
       <TournamentSetup
         playerCount={room.players.length}
+        savedByGame={room.gameSettings ?? {}}
         onConfigure={handleTournamentConfigure}
         onCancel={() => setHostFlow('idle')}
       />
@@ -378,10 +422,12 @@ export default function Lobby() {
         code={code}
         players={room.players}
         isHost={isHost}
+        myPlayerId={myPlayerId}
         baseUrl={baseUrl}
         onStartGame={() => setHostFlow('menu')}
         onTournament={() => setHostFlow('tournament')}
         onCatalogue={() => setShowCatalogue(true)}
+        onPickColor={gameActions.setPlayerColor}
       />
     </>
   )
@@ -390,7 +436,7 @@ export default function Lobby() {
   return (
     <>
       {screen}
-      {isHost && room && !kicked && (
+      {isHost && room && !kicked && !roomClosed && (
         <HostControls
           room={room}
           myPlayerId={myPlayerId}

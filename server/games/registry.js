@@ -3,6 +3,7 @@ import * as wouldYouRather from "./would-you-rather.js";
 import * as emojiMovie from "./emoji-movie.js";
 import * as fibbage from "./fibbage.js";
 import * as blackMagic from "./black-magic.js";
+import * as wavelength from "./wavelength.js";
 
 // Every game module exports the same shape: id, name, minPlayers,
 // createGame(), getPublicState(), getPrivateState(). index.js and rooms.js
@@ -14,4 +15,5 @@ export const GAMES = {
   [emojiMovie.id]: emojiMovie,
   [fibbage.id]: fibbage,
   [blackMagic.id]: blackMagic,
+  [wavelength.id]: wavelength,
 };

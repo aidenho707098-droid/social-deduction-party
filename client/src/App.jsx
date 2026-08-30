@@ -4,6 +4,7 @@ import Host from './pages/Host'
 import Join from './pages/Join'
 import Lobby from './pages/Lobby'
 import Twemojify from './Twemojify'
+import SoundToggle from './sound/SoundToggle'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/join/:code?" element={<Join />} />
         <Route path="/lobby/:code" element={<Lobby />} />
       </Routes>
+      <SoundToggle />
     </>
   )
 }

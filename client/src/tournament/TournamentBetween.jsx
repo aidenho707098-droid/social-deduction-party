@@ -1,9 +1,13 @@
+import { PlayerDot } from '../PlayerDot'
+import { playerColorMap } from '../playerColors'
+
 const MEDALS = ['🥇', '🥈', '🥉']
 
 // Shown after each game: that game's final standings converted to
 // tournament points, plus the running overall leaderboard.
 export default function TournamentBetween({ t, players, myId, isHost, onNext }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
+  const colorById = playerColorMap(players)
   const nameOf = (id) => nameById[id] ?? 'Unknown'
   const last = t.history[t.history.length - 1]
   const isFinalGame = t.currentIndex + 1 >= t.totalGames
@@ -31,7 +35,10 @@ export default function TournamentBetween({ t, players, myId, isHost, onNext }) 
                 className={`wyr-board-row ${r.playerId === myId ? 'wyr-me' : ''}`}
               >
                 <span className="wyr-board-rank">{r.rank}</span>
-                <span>{nameOf(r.playerId)}</span>
+                <span>
+                  <PlayerDot color={colorById[r.playerId]} className="player-cdot-inline" />
+                  {nameOf(r.playerId)}
+                </span>
                 <span className="tour-game-score">{r.gameScore} in game</span>
                 <span className={`wyr-plus ${r.points === 0 ? 'tour-zero' : ''}`}>
                   +{r.points}
@@ -51,7 +58,10 @@ export default function TournamentBetween({ t, players, myId, isHost, onNext }) 
               className={`wyr-board-row ${p.playerId === myId ? 'wyr-me' : ''}`}
             >
               <span className="wyr-board-rank">{MEDALS[i] ?? i + 1}</span>
-              <span>{nameOf(p.playerId)}</span>
+              <span>
+                <PlayerDot color={colorById[p.playerId]} className="player-cdot-inline" />
+                {nameOf(p.playerId)}
+              </span>
               <span className="wyr-board-score">
                 {p.points} {p.points === 1 ? 'pt' : 'pts'}
               </span>

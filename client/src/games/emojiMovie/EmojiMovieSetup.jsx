@@ -19,7 +19,7 @@ const CATEGORY_OPTIONS = [
   { key: 'mashup', label: 'Mashup' },
 ]
 
-export default function EmojiMovieSetup({ gameId, saved, onStart, onCancel, error }) {
+export default function EmojiMovieSetup({ gameId, saved, onStart, onCancel, error, submitLabel }) {
   // Pre-fill from the last settings the host used for this game THIS room
   // (`saved`), falling back to defaults the first time / in a fresh room.
   const [rounds, setRounds] = useState(() =>
@@ -120,7 +120,7 @@ export default function EmojiMovieSetup({ gameId, saved, onStart, onCancel, erro
         className="btn btn-start"
         onClick={() => onStart({ rounds, difficulty, categories })}
       >
-        Start Game
+        {submitLabel ?? "Start Game"}
       </button>
       <button className="btn btn-text" onClick={onCancel}>
         ← Back

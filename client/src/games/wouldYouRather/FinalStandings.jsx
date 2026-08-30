@@ -1,7 +1,11 @@
+import { PlayerDot } from '../../PlayerDot'
+import { playerColorMap } from '../../playerColors'
+
 const MEDALS = ['🥇', '🥈', '🥉']
 
 export default function FinalStandings({ game, players, myId, isHost, onBackToLobby }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
+  const colorById = playerColorMap(players)
   const winnerIds = game.winnerIds ?? []
   const awards = game.awards ?? []
   const iWon = winnerIds.includes(myId)
@@ -29,7 +33,10 @@ export default function FinalStandings({ game, players, myId, isHost, onBackToLo
               className={`wyr-board-row ${s.playerId === myId ? 'wyr-me' : ''}`}
             >
               <span className="wyr-board-rank">{MEDALS[i] ?? i + 1}</span>
-              <span>{nameById[s.playerId] ?? 'Unknown'}</span>
+              <span>
+                <PlayerDot color={colorById[s.playerId]} className="player-cdot-inline" />
+                {nameById[s.playerId] ?? 'Unknown'}
+              </span>
               <span className="wyr-board-score">
                 {s.score} {s.score === 1 ? 'pt' : 'pts'}
               </span>
@@ -50,7 +57,10 @@ export default function FinalStandings({ game, players, myId, isHost, onBackToLo
                 <span className="wyr-award-emoji">{a.emoji}</span>
                 <div className="wyr-award-body">
                   <div className="wyr-award-title">{a.title}</div>
-                  <div className="wyr-award-winner">{nameById[a.playerId] ?? 'Unknown'}</div>
+                  <div className="wyr-award-winner">
+                    <PlayerDot color={colorById[a.playerId]} className="player-cdot-inline" />
+                    {nameById[a.playerId] ?? 'Unknown'}
+                  </div>
                   <div className="wyr-award-detail">{a.detail}</div>
                 </div>
               </div>
