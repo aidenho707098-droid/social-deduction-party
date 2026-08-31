@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Spectrum from './Spectrum'
 import NumberInput from './NumberInput'
 import { useSound } from '../../sound/SoundContext'
+import { HOST_GRACE_SECONDS } from '../timing'
 
 export default function GuessPhase({ game, players = [], myRole, myId, isHost, onGuess, onReveal }) {
   const scale = game.scale
@@ -24,23 +25,41 @@ export default function GuessPhase({ game, players = [], myRole, myId, isHost, o
     firedForce.current = false
     firedBuzz.current = false
     setSeconds(Math.ceil(game.msLeft / 1000))
-    const timer = setInterval(() => setSeconds((s) => (s > 0 ? s - 1 : 0)), 1000)
+    const timer = setInterval(() => setSeconds((s) => s - 1), 1000)
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.roundIndex])
 
+  // Host advances the round after a short grace past zero, so any
+  // auto-locked guesses land first.
   useEffect(() => {
-    if (seconds <= 0 && isHost && !firedForce.current) {
+    if (seconds <= -HOST_GRACE_SECONDS && isHost && !firedForce.current) {
       firedForce.current = true
       onReveal()
     }
   }, [seconds, isHost, onReveal])
 
+  // Time's up without locking in — auto-lock whatever's on the slider (or
+  // just buzz if nothing was picked).
   useEffect(() => {
     if (seconds <= 0 && !locked && !iAmGiver && !firedBuzz.current) {
       firedBuzz.current = true
-      play('wrong')
+      if (pick != null && !pending) {
+        setPending(true)
+        onGuess(pick, (res) => {
+          setPending(false)
+          if (res?.ok) {
+            setLocked(true)
+            play('confirm')
+          } else {
+            play('wrong')
+          }
+        })
+      } else {
+        play('wrong')
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seconds, locked, iAmGiver, play])
 
   const timeUp = seconds <= 0

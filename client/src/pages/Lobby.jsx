@@ -14,6 +14,9 @@ import TournamentIntro from '../tournament/TournamentIntro'
 import TournamentBetween from '../tournament/TournamentBetween'
 import TournamentComplete from '../tournament/TournamentComplete'
 import { useSoundDirector } from '../sound/useSoundDirector'
+import ChaosOverlay from '../chaos/ChaosOverlay'
+import ChaosStatusBar from '../chaos/ChaosStatusBar'
+import ChaosVignette from '../chaos/ChaosVignette'
 
 export default function Lobby() {
   const { code } = useParams()
@@ -218,6 +221,17 @@ export default function Lobby() {
     wavelengthGuess: (guess, cb) => socket.emit('wavelength_guess', { code, guess }, cb),
     wavelengthReveal: () => socket.emit('wavelength_reveal', { code }),
     wavelengthNextRound: () => socket.emit('wavelength_next_round', { code }),
+    tabooStartRound: () => socket.emit('taboo_start_round', { code }),
+    tabooGuess: (guess, cb) => socket.emit('taboo_guess', { code, guess }, cb),
+    tabooReveal: () => socket.emit('taboo_reveal', { code }),
+    tabooNextRound: () => socket.emit('taboo_next_round', { code }),
+    fakeArtistStart: () => socket.emit('fake_artist_start', { code }),
+    fakeArtistSubmit: (image, cb) => socket.emit('fake_artist_submit', { code, image }, cb),
+    fakeArtistStartVote: () => socket.emit('fake_artist_start_vote', { code }),
+    fakeArtistVote: (targetId, cb) => socket.emit('fake_artist_vote', { code, targetId }, cb),
+    fakeArtistGuess: (text, cb) => socket.emit('fake_artist_guess', { code, text }, cb),
+    fakeArtistSkipGuess: () => socket.emit('fake_artist_skip_guess', { code }),
+    fakeArtistNextRound: () => socket.emit('fake_artist_next_round', { code }),
     backToLobby: () => socket.emit('back_to_lobby', { code }),
     setPlayerColor: (color) => socket.emit('set_player_color', { code, color }),
     kickPlayer: (playerId) => socket.emit('kick_player', { code, playerId }),
@@ -227,6 +241,10 @@ export default function Lobby() {
     tournamentWheelReady: () => socket.emit('tournament_wheel_ready', { code }),
     tournamentIntroStart: (options) => socket.emit('tournament_intro_start', { code, options }),
     tournamentEnd: () => socket.emit('tournament_end', { code }),
+    setChaosFrequency: (frequency) => socket.emit('chaos_set_frequency', { code, frequency }),
+    chaosWager: (cb) => socket.emit('chaos_wager', { code }, cb),
+    chaosDisableTarget: (targetId, cb) =>
+      socket.emit('chaos_disable_target', { code, targetId }, cb),
   }
 
   function handleTournamentConfigure(cfg) {
@@ -424,6 +442,8 @@ export default function Lobby() {
         isHost={isHost}
         myPlayerId={myPlayerId}
         baseUrl={baseUrl}
+        chaosFrequency={room.chaos?.frequency ?? 'off'}
+        onSetChaosFrequency={gameActions.setChaosFrequency}
         onStartGame={() => setHostFlow('menu')}
         onTournament={() => setHostFlow('tournament')}
         onCatalogue={() => setShowCatalogue(true)}
@@ -435,7 +455,32 @@ export default function Lobby() {
 
   return (
     <>
+      {room?.status === 'in-game' && room?.chaos?.event && (
+        <ChaosStatusBar
+          event={room.chaos.event}
+          players={room.players}
+          myId={myPlayerId}
+          actions={gameActions}
+        />
+      )}
       {screen}
+      {room?.chaos?.event && (
+        <ChaosOverlay
+          key={room.chaos.event.roundKey}
+          event={room.chaos.event}
+          players={room.players ?? []}
+          myScore={
+            (room.game?.scores ?? []).find((s) => s.playerId === myPlayerId)?.score ?? 0
+          }
+          actions={gameActions}
+        />
+      )}
+      {room?.status === 'in-game' &&
+        room?.chaos?.event?.modifier?.id === 'countdown-chaos' &&
+        room.chaos.event.roundKey ===
+          `${room.game?.id}:${room.game?.roundIndex}` && (
+          <ChaosVignette game={room.game} />
+        )}
       {isHost && room && !kicked && !roomClosed && (
         <HostControls
           room={room}

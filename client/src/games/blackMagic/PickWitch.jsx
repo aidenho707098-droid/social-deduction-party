@@ -32,7 +32,7 @@ export default function PickWitch({ game, players, isHost, onPick }) {
           </ul>
         </>
       ) : (
-        <p className="hint center-text">Waiting for the host to choose The Witch…</p>
+        <p className="hint center-text waiting">Waiting for the host to choose The Witch…</p>
       )}
     </div>
   )

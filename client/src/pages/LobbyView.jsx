@@ -1,6 +1,7 @@
 import { QRCodeSVG } from 'qrcode.react'
 import { PlayerDot } from '../PlayerDot'
 import { PLAYER_COLORS } from '../playerColors'
+import { FREQUENCY_LABELS, FREQUENCY_HINT } from '../chaos/chaosCopy'
 
 export default function LobbyView({
   code,
@@ -8,6 +9,8 @@ export default function LobbyView({
   isHost,
   myPlayerId,
   baseUrl,
+  chaosFrequency = 'off',
+  onSetChaosFrequency,
   onStartGame,
   onTournament,
   onCatalogue,
@@ -82,16 +85,60 @@ export default function LobbyView({
       </div>
 
       {isHost ? (
-        <div className="stack">
-          <button className="btn btn-start" onClick={onStartGame}>
-            ▶ Start Game
-          </button>
-          <button className="btn btn-secondary" onClick={onTournament}>
-            🏆 Tournament Mode
-          </button>
-        </div>
+        <>
+          <div className="chaos-setting">
+            <span className="label">
+              ⚡ Chaos Events —{' '}
+              <span className="chaos-slider-value">
+                {FREQUENCY_LABELS.find((f) => f.key === chaosFrequency)?.label ?? 'Off'}
+              </span>
+            </span>
+            <div className={`chaos-slider chaos-slider-${chaosFrequency}`}>
+              <input
+                type="range"
+                min="0"
+                max={FREQUENCY_LABELS.length - 1}
+                step="1"
+                value={Math.max(
+                  0,
+                  FREQUENCY_LABELS.findIndex((f) => f.key === chaosFrequency),
+                )}
+                onChange={(e) => {
+                  const next = FREQUENCY_LABELS[Number(e.target.value)]
+                  if (next) onSetChaosFrequency?.(next.key)
+                }}
+                aria-label="Chaos Event frequency"
+              />
+              <div className="chaos-slider-ticks" aria-hidden="true">
+                {FREQUENCY_LABELS.map((f) => (
+                  <span
+                    key={f.key}
+                    className={`chaos-slider-tick ${
+                      f.key === chaosFrequency ? 'chaos-slider-tick-on' : ''
+                    }`}
+                  >
+                    {f.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <p className="hint hint-block">
+              {FREQUENCY_HINT[chaosFrequency] ?? FREQUENCY_HINT.off} A random modifier can warp
+              any round of any game.
+            </p>
+          </div>
+
+          <div className="stack">
+            <button className="btn btn-start" onClick={onStartGame}>
+              ▶ Start Game
+            </button>
+            <button className="btn btn-secondary" onClick={onTournament}>
+              🏆 Tournament Mode
+            </button>
+          </div>
+        </>
       ) : (
-        <p className="hint center-text">Waiting for the host to start the game…</p>
+        <p className="hint center-text waiting">Waiting for the host to start the game…</p>
       )}
 
       <button className="btn btn-text" onClick={onCatalogue}>

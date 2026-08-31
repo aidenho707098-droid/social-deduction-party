@@ -3,6 +3,7 @@ import FactPrompt from './FactPrompt'
 import PersonalQuestion from './PersonalQuestion'
 import { playerColorMap } from '../../playerColors'
 import { useSound } from '../../sound/SoundContext'
+import { HOST_GRACE_SECONDS } from '../timing'
 
 // Free-text entry, same input treatment as Emoji Movie Guess's guess box.
 // In Personal Mode the prompt is a question about a specific player (the
@@ -46,25 +47,43 @@ export default function WriteAnswer({ game, players = [], myId, isHost, onSubmit
     firedTimeout.current = false
     setSeconds(Math.ceil(game.msLeft / 1000))
     inputRef.current?.focus()
-    const timer = setInterval(() => setSeconds((s) => (s > 0 ? s - 1 : 0)), 1000)
+    const timer = setInterval(() => setSeconds((s) => s - 1), 1000)
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.roundIndex])
 
-  // Time's up: the host's device asks the server to move everyone to voting.
+  // Time's up: the host's device asks the server to move everyone to
+  // voting — after a short grace so any auto-submitted answers land first.
   useEffect(() => {
-    if (seconds <= 0 && isHost && !firedForce.current) {
+    if (seconds <= -HOST_GRACE_SECONDS && isHost && !firedForce.current) {
       firedForce.current = true
       onForceVote()
     }
   }, [seconds, isHost, onForceVote])
 
-  // Clock ran out with no answer submitted — soft buzzer, this device only.
+  // Clock ran out and this player never hit submit — auto-submit whatever
+  // they've typed (a blank counts as no answer, with a soft buzzer).
   useEffect(() => {
     if (seconds <= 0 && !submittedText && !firedTimeout.current && !iAmSubject) {
       firedTimeout.current = true
-      play('wrong')
+      const value = text.trim()
+      if (value && !pending) {
+        setPending(true)
+        onSubmit(value, (res) => {
+          setPending(false)
+          if (res?.ok) {
+            setSubmittedText(res.text ?? value)
+            setEditing(false)
+            play('confirm')
+          } else {
+            play('wrong')
+          }
+        })
+      } else {
+        play('wrong')
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seconds, submittedText, iAmSubject, play])
 
   const timeUp = seconds <= 0
@@ -193,7 +212,7 @@ export default function WriteAnswer({ game, players = [], myId, isHost, onSubmit
       )}
 
       {!editing && (
-        <p className="hint center-text">Waiting for the other players…</p>
+        <p className="hint center-text waiting">Waiting for the other players…</p>
       )}
 
       {isHost && (

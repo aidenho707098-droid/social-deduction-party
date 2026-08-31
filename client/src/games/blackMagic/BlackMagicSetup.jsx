@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
-
-const ROUND_OPTIONS = [3, 5, 7, 10]
+import NumberStepper from '../NumberStepper'
+import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
 
 const ASSIGN_OPTIONS = [
   { key: 'host', label: 'Host picks each round' },
@@ -10,9 +10,7 @@ const ASSIGN_OPTIONS = [
 
 export default function BlackMagicSetup({ gameId, playerCount, saved, onStart, onCancel, error, submitLabel }) {
   // Pre-fill from the host's last settings for this game this room.
-  const [rounds, setRounds] = useState(() =>
-    ROUND_OPTIONS.includes(saved?.rounds) ? saved.rounds : 5,
-  )
+  const [rounds, setRounds] = useState(() => clampRounds(saved?.rounds ?? ROUND_DEFAULT))
   const [assignment, setAssignment] = useState(() =>
     ASSIGN_OPTIONS.some((o) => o.key === saved?.assignment) ? saved.assignment : 'host',
   )
@@ -20,7 +18,7 @@ export default function BlackMagicSetup({ gameId, playerCount, saved, onStart, o
   const notEnough = playerCount < 3
 
   return (
-    <div className="screen">
+    <div className="screen setup-screen">
       <h1 className="title">Black Magic</h1>
       <HowToPlay gameId={gameId} />
       <p className="hint hint-block">
@@ -29,21 +27,13 @@ export default function BlackMagicSetup({ gameId, playerCount, saved, onStart, o
         pattern. First to say it out loud lifts The Curse.
       </p>
 
-      <div>
-        <span className="label">How many rounds?</span>
-        <div className="pill-group">
-          {ROUND_OPTIONS.map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={`pill ${rounds === n ? 'pill-active' : ''}`}
-              onClick={() => setRounds(n)}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-      </div>
+      <NumberStepper
+        label="How many rounds?"
+        value={rounds}
+        min={ROUND_MIN}
+        max={ROUND_MAX}
+        onChange={setRounds}
+      />
 
       <div>
         <span className="label">Who becomes The Witch?</span>

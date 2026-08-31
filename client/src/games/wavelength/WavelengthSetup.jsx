@@ -1,44 +1,31 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
-
-const ROUND_OPTIONS = [3, 5, 7, 10]
+import NumberStepper from '../NumberStepper'
+import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
 
 export default function WavelengthSetup({ gameId, playerCount, saved, onStart, onCancel, error, submitLabel }) {
-  const [rounds, setRounds] = useState(() =>
-    ROUND_OPTIONS.includes(saved?.rounds) ? saved.rounds : 5,
-  )
+  const [rounds, setRounds] = useState(() => clampRounds(saved?.rounds ?? ROUND_DEFAULT))
 
   const notEnough = playerCount < 3
 
   return (
-    <div className="screen">
+    <div className="screen setup-screen">
       <h1 className="title">Wavelength</h1>
       <HowToPlay gameId={gameId} />
       <p className="hint hint-block">
-        Each round one player secretly gets a number on a scale and writes a
-        clue for it. Everyone else guesses the number — the closer, the more
-        points, for guessers and the Clue-Giver alike.
+        Every Clue-Giver writes their clues up front, all at once. Then each
+        round the rest guess the secret number from the clue — the closer,
+        the more points, for guessers and the Clue-Giver alike.
       </p>
 
-      <div>
-        <span className="label">How many rounds?</span>
-        <div className="pill-group">
-          {ROUND_OPTIONS.map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={`pill ${rounds === n ? 'pill-active' : ''}`}
-              onClick={() => setRounds(n)}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-        <p className="hint hint-block">
-          A different player gives the clue each round, rotating through the
-          group. Scales don't repeat within a game.
-        </p>
-      </div>
+      <NumberStepper
+        label="How many rounds?"
+        value={rounds}
+        min={ROUND_MIN}
+        max={ROUND_MAX}
+        onChange={setRounds}
+        hint="Clue-Givers rotate through the group (some write more than one if rounds outnumber players). Scales don't repeat within a game."
+      />
 
       {notEnough && (
         <p className="hint">Wavelength needs at least 3 players.</p>

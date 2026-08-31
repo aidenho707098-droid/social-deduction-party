@@ -65,7 +65,7 @@ export default function Results({
           Back to Lobby
         </button>
       ) : (
-        <p className="hint center-text">Waiting for the host to return to the lobby…</p>
+        <p className="hint center-text waiting">Waiting for the host to return to the lobby…</p>
       )}
     </div>
   )

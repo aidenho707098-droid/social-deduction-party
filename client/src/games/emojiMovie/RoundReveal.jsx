@@ -83,7 +83,7 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
           {isLastRound ? 'See Final Results' : 'Next Round'}
         </button>
       ) : (
-        <p className="hint center-text">Waiting for the host to continue…</p>
+        <p className="hint center-text waiting">Waiting for the host to continue…</p>
       )}
     </div>
   )

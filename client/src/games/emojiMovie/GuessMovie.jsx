@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSound } from '../../sound/SoundContext'
+import { HOST_GRACE_SECONDS } from '../timing'
 
 const DIFFICULTY_LABEL = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 
@@ -61,24 +62,44 @@ export default function GuessMovie({ game, isHost, onGuess, onReveal }) {
     setElapsed((e) => (Math.abs(e - serverElapsed) > 900 ? serverElapsed : e))
   }, [game.msLeft, game.answerMs])
 
-  const msLeft = Math.max(0, game.answerMs - elapsed)
+  const rawMsLeft = game.answerMs - elapsed
+  const msLeft = Math.max(0, rawMsLeft)
   const secondsLeft = Math.ceil(msLeft / 1000)
   const timeUp = msLeft <= 0
 
-  // When time runs out, the host's device tells the server to reveal.
+  // When time runs out, the host's device tells the server to reveal —
+  // after a short grace so any auto-submitted guesses land first.
   useEffect(() => {
-    if (timeUp && isHost && !firedReveal.current) {
+    if (rawMsLeft <= -HOST_GRACE_SECONDS * 1000 && isHost && !firedReveal.current) {
       firedReveal.current = true
       onReveal()
     }
-  }, [timeUp, isHost, onReveal])
+  }, [rawMsLeft, isHost, onReveal])
 
-  // Time's up and this player never locked in a correct guess — soft buzzer.
+  // Time's up and this player never locked in — fire off whatever's typed
+  // as one last guess (empty just means no guess, with a soft buzzer).
   useEffect(() => {
     if (timeUp && !lockedIn && !firedTimeout.current) {
       firedTimeout.current = true
-      play('wrong')
+      const value = guess.trim()
+      if (value && !pending) {
+        setPending(true)
+        onGuess(value, (res) => {
+          setPending(false)
+          if (res?.correct) {
+            setLockedIn(true)
+            setLockedPoints(res.points ?? 0)
+            setLockedAt(res.revealedAtGuess ?? revealedEmojis.length)
+            play('correct')
+          } else {
+            play('wrong')
+          }
+        })
+      } else {
+        play('wrong')
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeUp, lockedIn, play])
 
   // Seconds until the next emoji pops (based on the local clock). The Nth

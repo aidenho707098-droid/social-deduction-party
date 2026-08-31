@@ -224,6 +224,28 @@ const TV_SHOWS = [
   { emojis: ["🧑‍💼", "🛗", "🧠"], title: "Severance", alts: [], difficulty: "hard" },
   { emojis: ["🤠", "🚀", "🐍"], title: "Firefly", alts: [], difficulty: "hard" },
   { emojis: ["🧑‍🎨", "🏙️", "🎷"], title: "The Wire", alts: [], difficulty: "hard" },
+
+  // --- Reality & competition ---
+  { emojis: ["🏝️", "🔥", "🗳️"], title: "Survivor", alts: [], difficulty: "easy" },
+  { emojis: ["🌹", "💍", "🥂"], title: "The Bachelor", alts: ["bachelor"], difficulty: "easy" },
+  { emojis: ["👁️", "🏠", "📹"], title: "Big Brother", alts: [], difficulty: "easy" },
+  { emojis: ["👨‍🍳", "🍳", "🏆"], title: "MasterChef", alts: ["master chef"], difficulty: "easy" },
+  { emojis: ["🎤", "🔴", "🪑"], title: "The Voice", alts: [], difficulty: "easy" },
+  { emojis: ["🦈", "💰", "🤝"], title: "Shark Tank", alts: [], difficulty: "easy" },
+  { emojis: ["💃", "⭐", "🕺"], title: "Dancing with the Stars", alts: ["dwts"], difficulty: "easy" },
+  { emojis: ["👑", "💄", "👠"], title: "RuPaul's Drag Race", alts: ["drag race", "rupauls drag race"], difficulty: "medium" },
+  { emojis: ["👨‍🍳", "🔥", "😡"], title: "Hell's Kitchen", alts: ["hells kitchen"], difficulty: "medium" },
+  { emojis: ["🌍", "🏃", "✈️"], title: "The Amazing Race", alts: [], difficulty: "medium" },
+  { emojis: ["🏝️", "💑", "🌴"], title: "Love Island", alts: [], difficulty: "medium" },
+  { emojis: ["🏳️‍🌈", "👀", "✨"], title: "Queer Eye", alts: [], difficulty: "medium" },
+  { emojis: ["🎪", "🧁", "🇬🇧"], title: "The Great British Bake Off", alts: ["gbbo", "bake off", "the great british baking show"], difficulty: "medium" },
+  { emojis: ["💋", "📸", "💰"], title: "Keeping Up with the Kardashians", alts: ["kuwtk", "the kardashians"], difficulty: "medium" },
+  { emojis: ["🛋️", "💍", "🙈"], title: "Love Is Blind", alts: [], difficulty: "medium" },
+  { emojis: ["🏰", "🗡️", "🎭"], title: "The Traitors", alts: [], difficulty: "hard" },
+  { emojis: ["💍", "🛂", "📅"], title: "90 Day Fiancé", alts: ["90 day fiance"], difficulty: "hard" },
+  { emojis: ["🛥️", "🍸", "🧹"], title: "Below Deck", alts: [], difficulty: "hard" },
+  { emojis: ["🦀", "🌊", "🚢"], title: "Deadliest Catch", alts: [], difficulty: "hard" },
+  { emojis: ["🏡", "💎", "🌇"], title: "Selling Sunset", alts: [], difficulty: "hard" },
 ];
 
 // --- Countries: 3 emojis, and the LAST emoji is ALWAYS that country's flag

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
-
-const ROUND_OPTIONS = [3, 5, 7, 10]
+import NumberStepper from '../NumberStepper'
+import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
 
 const DIFFICULTY_OPTIONS = [
   { key: 'easy', label: 'Easy only' },
@@ -22,9 +22,7 @@ const CATEGORY_OPTIONS = [
 export default function EmojiMovieSetup({ gameId, saved, onStart, onCancel, error, submitLabel }) {
   // Pre-fill from the last settings the host used for this game THIS room
   // (`saved`), falling back to defaults the first time / in a fresh room.
-  const [rounds, setRounds] = useState(() =>
-    ROUND_OPTIONS.includes(saved?.rounds) ? saved.rounds : 5,
-  )
+  const [rounds, setRounds] = useState(() => clampRounds(saved?.rounds ?? ROUND_DEFAULT))
   const [difficulty, setDifficulty] = useState(() =>
     DIFFICULTY_OPTIONS.some((o) => o.key === saved?.difficulty) ? saved.difficulty : 'mixed',
   )
@@ -47,7 +45,7 @@ export default function EmojiMovieSetup({ gameId, saved, onStart, onCancel, erro
   }
 
   return (
-    <div className="screen">
+    <div className="screen setup-screen">
       <h1 className="title">Crack the Code</h1>
       <HowToPlay gameId={gameId} />
       <p className="hint hint-block">
@@ -77,21 +75,13 @@ export default function EmojiMovieSetup({ gameId, saved, onStart, onCancel, erro
         </p>
       </div>
 
-      <div>
-        <span className="label">How many rounds?</span>
-        <div className="pill-group">
-          {ROUND_OPTIONS.map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={`pill ${rounds === n ? 'pill-active' : ''}`}
-              onClick={() => setRounds(n)}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-      </div>
+      <NumberStepper
+        label="How many rounds?"
+        value={rounds}
+        min={ROUND_MIN}
+        max={ROUND_MAX}
+        onChange={setRounds}
+      />
 
       <div>
         <span className="label">Difficulty</span>

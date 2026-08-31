@@ -57,6 +57,22 @@ const ICONS = {
       <path d="M5.5 15h.01M18.5 15h.01M8 9.5h.01M16 9.5h.01" />
     </>
   ),
+  // Taboo — a speech bubble with a "no" slash through it.
+  taboo: (
+    <>
+      <path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 3.5V16H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
+      <path d="M18 4.5 6.5 16.5" />
+    </>
+  ),
+  // Fake Artist — a paintbrush over a canvas corner.
+  'fake-artist': (
+    <>
+      <path d="M4 4h10v7" />
+      <path d="M4 4v13a1 1 0 0 0 1 1h6" />
+      <path d="m14.5 14.5 4-4a1.8 1.8 0 0 1 2.5 2.5l-4 4-3 1Z" />
+      <path d="m14.5 17.5-2.5 3.5" />
+    </>
+  ),
 }
 
 export function GameIcon({ id }) {

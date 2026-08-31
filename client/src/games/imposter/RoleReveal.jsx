@@ -40,7 +40,7 @@ export default function RoleReveal({ myRole, isHost, onStartTurns }) {
           Start Discussion
         </button>
       ) : (
-        <p className="hint center-text">Waiting for the host to start discussion…</p>
+        <p className="hint center-text waiting">Waiting for the host to start discussion…</p>
       )}
     </div>
   )

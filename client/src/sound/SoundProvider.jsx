@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { soundEngine } from './soundEngine'
 import { SoundContext } from './SoundContext'
+import { unlockChaosAudio } from '../chaos/chaosSting'
 
 // Thin React binding over the singleton sound engine. Provides the current
 // { muted, volume } (re-rendering subscribers when they change) plus stable
@@ -18,7 +19,10 @@ export function SoundProvider({ children }) {
     soundEngine.preloadAll()
     const unsub = soundEngine.subscribe(setState)
 
-    const unlock = () => soundEngine.unlock()
+    const unlock = () => {
+      soundEngine.unlock()
+      unlockChaosAudio() // warm the Web Audio context for the Chaos sting (iOS)
+    }
     const opts = { once: true, passive: true }
     window.addEventListener('pointerdown', unlock, opts)
     window.addEventListener('keydown', unlock, opts)

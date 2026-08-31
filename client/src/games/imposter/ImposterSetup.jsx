@@ -18,7 +18,7 @@ export default function ImposterSetup({ gameId, playerCount, saved, onStart, onC
   )
 
   return (
-    <div className="screen">
+    <div className="screen setup-screen">
       <h1 className="title">Imposter Setup</h1>
       <HowToPlay gameId={gameId} />
 

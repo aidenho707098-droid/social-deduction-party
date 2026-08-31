@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { PlayerDot } from '../../PlayerDot'
 import { playerColorMap } from '../../playerColors'
+import CountUp from '../CountUp'
 
 const OPTION_CLASSES = ['wyr-a', 'wyr-b', 'wyr-c', 'wyr-d']
 
@@ -215,7 +216,9 @@ export default function RoundResult({ game, players, myId, isHost, onNext }) {
                 {nameById[s.playerId] ?? 'Unknown'}
               </span>
               {s.streak >= 2 && <span className="wyr-streak">🔥{s.streak}</span>}
-              <span className="wyr-board-score">{s.score}</span>
+              <span className="wyr-board-score">
+                <CountUp value={s.score} />
+              </span>
             </div>
           ))}
         </div>
@@ -226,7 +229,7 @@ export default function RoundResult({ game, players, myId, isHost, onNext }) {
           {isLastRound ? 'See Final Results' : 'Next Round'}
         </button>
       ) : (
-        <p className="hint center-text">Waiting for the host to continue…</p>
+        <p className="hint center-text waiting">Waiting for the host to continue…</p>
       )}
     </div>
   )

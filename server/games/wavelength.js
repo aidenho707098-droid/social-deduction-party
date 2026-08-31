@@ -1,13 +1,18 @@
-// "Wavelength" — a spectrum-guessing game. Each round one player (the
-// Clue-Giver, rotating) privately gets a scale (e.g. Quiet ↔ Loud), a
-// secret target NUMBER on it, and writes a short clue that points at that
-// number without naming a pole word or any number. Everyone else then
-// privately guesses the number; scoring is by closeness as a fraction of
-// the scale's span, so every range size feels fair.
+// "Wavelength" — a spectrum-guessing game. Each round has a Clue-Giver who
+// privately gets a scale (e.g. Quiet ↔ Loud) and a secret target NUMBER on
+// it, and writes a short clue pointing at that number without naming a pole
+// word or any digit. Everyone else then privately guesses; scoring is by
+// closeness as a fraction of the scale's span, so every range size is fair.
 //
-//   phase:  clue -> guess -> reveal -> ( clue ... ) -> final
+// To cut mid-game waiting, ALL clue-writing happens up front, in parallel:
+// at game start the full Clue-Giver-per-round sequence is fixed (players
+// repeat if rounds > player count), and every Clue-Giver writes their
+// clue(s) simultaneously, each with a private 60s-per-clue timer. Once
+// every clue is in, the guess rounds run back-to-back with no more writing.
 //
-// The rule check (wavelengthRules.js) and the closeness scoring
+//   phase:  write -> guess -> reveal -> ( guess -> reveal ... ) -> final
+//
+// The rule check (wavelengthRules.js) and closeness scoring
 // (wavelengthScoring.js) are separate, unit-tested modules. The scale bank
 // lives in wavelengthScales.js.
 
@@ -20,35 +25,14 @@ export const id = "wavelength";
 export const name = "Wavelength";
 export const minPlayers = 3;
 
-// The Clue-Giver gets a longer window than guessers because a rule
-// violation bounces them back to try again.
-const CLUE_MS = 60_000;
+// Each Clue-Giver's own per-clue writing window (all run in parallel), and
+// the shared guessing window for each round.
+const WRITE_MS = 60_000;
 const GUESS_MS = 30_000;
+const LATE_GRACE_MS = 2_000;
 
 function randInt(min, max) {
   return min + Math.floor(Math.random() * (max - min + 1));
-}
-
-// Which present player gives the clue for `roundIndex`: walk the shuffled
-// rotation from that index, skipping anyone who's currently away.
-function resolveClueGiver(game, roundIndex, presentPlayerIds) {
-  const order = game.clueGiverOrder;
-  const present = new Set(presentPlayerIds);
-  for (let step = 0; step < order.length; step++) {
-    const pid = order[(roundIndex + step) % order.length];
-    if (present.has(pid)) return pid;
-  }
-  return order[roundIndex % order.length];
-}
-
-function startRound(game, presentPlayerIds) {
-  const scale = game.scales[game.roundIndex];
-  game.clueGiverId = resolveClueGiver(game, game.roundIndex, presentPlayerIds);
-  game.target = randInt(scale.min, scale.max);
-  game.clue = null;
-  game.guesses = new Map();
-  game.deadline = Date.now() + CLUE_MS;
-  game.phase = "clue";
 }
 
 export function createGame(playerIds, { rounds, memory }) {
@@ -68,45 +52,156 @@ export function createGame(playerIds, { rounds, memory }) {
     scaleKey
   );
 
+  // Fix the whole Clue-Giver sequence now. Cycling a shuffled roster spreads
+  // rounds evenly and only repeats a player once every seat is used.
+  const order = shuffle(playerIds);
+  const clueGiverByRound = Array.from(
+    { length: totalRounds },
+    (_, i) => order[i % order.length]
+  );
+  const targetByRound = items.map((s) => randInt(s.min, s.max));
+
+  // Per-writer queue of round indices, in the order they'll write them.
+  const writeQueueByPlayer = new Map(playerIds.map((pid) => [pid, []]));
+  clueGiverByRound.forEach((pid, roundIdx) =>
+    writeQueueByPlayer.get(pid).push(roundIdx)
+  );
+
+  const now = Date.now();
   const game = {
     id,
-    phase: "clue",
+    phase: "write", // write -> guess -> reveal -> ... -> final
     totalRounds,
     roundIndex: 0,
     scales: items, // each { category, poleA, poleB, min, max, banned }
     deckMemory: { seen: seenKeys }, // server-only; harvested by index.js
-    clueGiverOrder: shuffle(playerIds), // rotation
+
+    // --- writing phase (all Clue-Givers at once) ---
+    clueGiverByRound, // [playerId] length totalRounds
+    targetByRound, // [number] length totalRounds
+    clueByRound: new Array(totalRounds).fill(null), // filled as clues land
+    writeQueueByPlayer, // playerId -> [roundIdx, ...]
+    writeProgress: new Map(playerIds.map((pid) => [pid, 0])), // clues done
+    writeDeadlineByPlayer: new Map(
+      playerIds.map((pid) => [pid, now + WRITE_MS])
+    ),
+
+    // --- the current guess round ---
     clueGiverId: null,
-    target: 0, // secret
+    target: 0,
     clue: null,
-    guesses: new Map(), // playerId -> number, current round
+    guesses: new Map(), // playerId -> number
+
     scores: new Map(playerIds.map((pid) => [pid, 0])),
     deadline: 0,
-    lastResult: null, // filled by revealRound()
+    lastResult: null, // filled by finishRound()
   };
-  startRound(game, playerIds);
   return game;
 }
 
-// The Clue-Giver submits a phrase. Rejected (with a reason the client can
-// show) if it names a pole word or any number — the round stays in "clue"
-// so they can try again.
-export function submitClue(game, playerId, rawClue) {
-  if (game.phase !== "clue") return { ok: false };
-  if (playerId !== game.clueGiverId) return { ok: false, notYou: true };
+// ---------- writing phase ----------
 
+function advanceWriter(game, playerId) {
+  const done = game.writeProgress.get(playerId) ?? 0;
+  game.writeProgress.set(playerId, done + 1);
+  game.writeDeadlineByPlayer.set(playerId, Date.now() + WRITE_MS);
+}
+
+function writingDone(game, presentPlayerIds) {
+  if (presentPlayerIds.length === 0) return false;
+  return presentPlayerIds.every((pid) => {
+    const queue = game.writeQueueByPlayer.get(pid) ?? [];
+    return (game.writeProgress.get(pid) ?? 0) >= queue.length;
+  });
+}
+
+function maybeStartGuessing(game, presentPlayerIds) {
+  if (game.phase !== "write") return false;
+  if (!writingDone(game, presentPlayerIds)) return false;
+  advanceToRound(game, 0, presentPlayerIds);
+  return true;
+}
+
+// A Clue-Giver submits one clue (their current queue slot). A pole/number
+// violation, or an explicitly-empty clue while time remains, is REJECTED
+// with a reason and they stay on the same clue to retry — exactly as
+// before. A valid clue, or any submission once their clock has run out,
+// advances them to their next clue (an unwritten round is skipped later).
+export function submitClue(game, playerId, rawClue, presentPlayerIds) {
+  if (game.phase !== "write") return { ok: false };
+
+  const queue = game.writeQueueByPlayer.get(playerId);
+  if (!queue) return { ok: false };
+  const done = game.writeProgress.get(playerId) ?? 0;
+  if (done >= queue.length) return { ok: false, alreadyDone: true };
+
+  const roundIdx = queue[done];
+  const scale = game.scales[roundIdx];
   const clue = String(rawClue ?? "").slice(0, 120).trim();
-  if (!clue) return { ok: false, reason: "empty" };
+  const deadline = game.writeDeadlineByPlayer.get(playerId) ?? 0;
+  const late = Date.now() > deadline + LATE_GRACE_MS;
 
-  const scale = game.scales[game.roundIndex];
-  const verdict = checkClue(clue, scale.banned);
-  if (!verdict.ok) return { ok: false, reason: verdict.reason, term: verdict.term };
+  if (clue) {
+    const verdict = checkClue(clue, scale.banned);
+    if (verdict.ok) {
+      game.clueByRound[roundIdx] = clue;
+      advanceWriter(game, playerId);
+      maybeStartGuessing(game, presentPlayerIds);
+      return { ok: true };
+    }
+    if (!late) return { ok: false, reason: verdict.reason, term: verdict.term };
+  } else if (!late) {
+    return { ok: false, reason: "empty" };
+  }
 
-  game.clue = clue;
+  // Clock ran out — drop whatever's here and move on.
+  advanceWriter(game, playerId);
+  maybeStartGuessing(game, presentPlayerIds);
+  return { ok: true, skipped: true };
+}
+
+// Server-interval hook (see server/index.js): auto-skip the current clue of
+// any present writer whose clock has run out, and start guessing if that
+// clears the last thing everyone was waiting on. Returns true if anything
+// changed so the caller re-broadcasts.
+export function tickWrite(game, presentPlayerIds) {
+  if (game.phase !== "write") return false;
+  const now = Date.now();
+  let changed = false;
+
+  for (const pid of presentPlayerIds) {
+    const queue = game.writeQueueByPlayer.get(pid) ?? [];
+    const done = game.writeProgress.get(pid) ?? 0;
+    if (done >= queue.length) continue;
+    const deadline = game.writeDeadlineByPlayer.get(pid) ?? 0;
+    if (now > deadline + LATE_GRACE_MS) {
+      game.writeProgress.set(pid, done + 1); // time's up -> this round gets no clue
+      game.writeDeadlineByPlayer.set(pid, now + WRITE_MS);
+      changed = true;
+    }
+  }
+
+  if (maybeStartGuessing(game, presentPlayerIds)) changed = true;
+  return changed;
+}
+
+// ---------- guess rounds ----------
+
+// Move to `roundIndex` and open its guess phase — or, if that round's clue
+// was never written, go straight to a skipped reveal for it.
+function advanceToRound(game, roundIndex, presentPlayerIds) {
+  game.roundIndex = roundIndex;
+  game.clueGiverId = game.clueGiverByRound[roundIndex];
+  game.target = game.targetByRound[roundIndex];
+  game.clue = game.clueByRound[roundIndex] ?? null;
   game.guesses = new Map();
+
+  if (!game.clue) {
+    finishRound(game, presentPlayerIds ?? [], true);
+    return;
+  }
   game.deadline = Date.now() + GUESS_MS;
   game.phase = "guess";
-  return { ok: true };
 }
 
 // A guesser locks in a number. Once every present guesser has, the round
@@ -123,20 +218,16 @@ export function submitGuess(game, playerId, rawGuess, presentPlayerIds) {
 
   const guessers = presentPlayerIds.filter((pid) => pid !== game.clueGiverId);
   if (guessers.length > 0 && guessers.every((pid) => game.guesses.has(pid))) {
-    revealRound(game, presentPlayerIds);
+    finishRound(game, presentPlayerIds);
   }
   return { ok: true, guess: n };
 }
 
-// Score the round and freeze a full breakdown for the reveal screen. If
-// reached from "clue" (host forced past it, or the Clue-Giver left) the
-// round is SKIPPED: no clue, no points.
-export function revealRound(game, presentPlayerIds) {
-  if (game.phase !== "guess" && game.phase !== "clue") return;
-
+// Score the current round and freeze a full breakdown for the reveal
+// screen. `skipped` (no clue was written for it) means nobody scores.
+function finishRound(game, presentPlayerIds, skipped = !game.clue) {
   const scale = game.scales[game.roundIndex];
   const giverId = game.clueGiverId;
-  const skipped = game.phase === "clue";
   const guessers = presentPlayerIds.filter((pid) => pid !== giverId);
 
   const rows = [];
@@ -180,45 +271,52 @@ export function revealRound(game, presentPlayerIds) {
   game.phase = "reveal";
 }
 
+// Host "Reveal now" during a guess round.
+export function revealRound(game, presentPlayerIds) {
+  if (game.phase !== "guess") return;
+  finishRound(game, presentPlayerIds);
+}
+
 export function nextRound(game, presentPlayerIds) {
   if (game.phase !== "reveal") return;
   if (game.roundIndex + 1 >= game.totalRounds) {
     game.phase = "final";
     return;
   }
-  game.roundIndex += 1;
-  startRound(game, presentPlayerIds ?? []);
+  advanceToRound(game, game.roundIndex + 1, presentPlayerIds ?? []);
 }
 
-// Optional framework hook: called when the connected-player set changes.
+// Framework hook: the connected-player set changed.
 export function reconcilePresence(game, presentPlayerIds) {
   if (presentPlayerIds.length === 0) return;
-  if (game.phase === "clue") {
-    // Clue-Giver left mid-write — skip the round rather than hang on them.
-    if (!presentPlayerIds.includes(game.clueGiverId)) {
-      revealRound(game, presentPlayerIds);
-    }
+  if (game.phase === "write") {
+    // A writer may have dropped — see if everyone still here has finished.
+    maybeStartGuessing(game, presentPlayerIds);
   } else if (game.phase === "guess") {
     const guessers = presentPlayerIds.filter((pid) => pid !== game.clueGiverId);
     if (guessers.length > 0 && guessers.every((pid) => game.guesses.has(pid))) {
-      revealRound(game, presentPlayerIds);
+      finishRound(game, presentPlayerIds);
     }
   }
 }
 
-// Host "Force proceed": from "clue" skips the round; from "guess" reveals
-// and scores whatever guesses are in.
+// Host "Force proceed": from "write", stop waiting on stragglers and start
+// guessing with whatever clues are in; from "guess", reveal now.
 export function forceAdvance(game, presentPlayerIds) {
-  if (game.phase === "clue" || game.phase === "guess") {
-    revealRound(game, presentPlayerIds);
+  if (game.phase === "write") {
+    for (const [pid, queue] of game.writeQueueByPlayer) {
+      game.writeProgress.set(pid, queue.length);
+    }
+    advanceToRound(game, 0, presentPlayerIds ?? []);
+  } else if (game.phase === "guess") {
+    finishRound(game, presentPlayerIds ?? []);
   }
 }
 
-// The PUBLIC view. During "clue" the scale itself is withheld from
-// non-givers (they only learn the category + pole labels once a valid clue
-// is in); the target number is never public until the reveal.
+// The PUBLIC view. During "write" the scales/clues are withheld (each
+// Clue-Giver only sees their own, via getPrivateState); the target number
+// is never public until the reveal.
 export function getPublicState(game, presentPlayerIds) {
-  const scale = game.scales[game.roundIndex];
   const scores = presentPlayerIds
     .map((pid) => ({ playerId: pid, score: game.scores.get(pid) ?? 0 }))
     .sort((a, b) => b.score - a.score);
@@ -231,13 +329,32 @@ export function getPublicState(game, presentPlayerIds) {
     totalRounds: game.totalRounds,
     clueGiverId: game.clueGiverId,
     totalPlayers: presentPlayerIds.length,
-    clueMs: CLUE_MS,
     guessMs: GUESS_MS,
     msLeft: Math.max(0, game.deadline - now),
     scores,
   };
 
-  if (game.phase !== "clue") {
+  if (game.phase === "write") {
+    const presentWriters = presentPlayerIds.filter(
+      (pid) => (game.writeQueueByPlayer.get(pid) ?? []).length > 0
+    );
+    state.write = {
+      totalRounds: game.totalRounds,
+      cluesIn: game.clueByRound.filter((c) => c != null).length,
+      writers: presentWriters.length,
+      writersDone: presentWriters.filter(
+        (pid) =>
+          (game.writeProgress.get(pid) ?? 0) >=
+          (game.writeQueueByPlayer.get(pid) ?? []).length
+      ).length,
+      writeMs: WRITE_MS,
+    };
+    return state;
+  }
+
+  const scale = game.scales[game.roundIndex];
+
+  if (game.phase === "guess" || game.phase === "reveal") {
     state.scale = {
       category: scale.category,
       poleA: scale.poleA,
@@ -265,26 +382,45 @@ export function getPublicState(game, presentPlayerIds) {
   return state;
 }
 
-// Per-player secret: the Clue-Giver's full scale + target during "clue",
-// and just the target afterwards so their spectator view can show it.
+// Per-player secret. During "write" a Clue-Giver gets the scale + target
+// for the clue they're currently on (plus their queue position / clock);
+// during guess & reveal the round's Clue-Giver still gets the target so
+// their spectator view can show the needle.
 export function getPrivateState(game, playerId) {
-  if (playerId !== game.clueGiverId) return null;
-  const scale = game.scales[game.roundIndex];
+  if (game.phase === "write") {
+    const queue = game.writeQueueByPlayer.get(playerId) ?? [];
+    if (queue.length === 0) return null; // not a Clue-Giver this game
 
-  if (game.phase === "clue") {
+    const done = game.writeProgress.get(playerId) ?? 0;
+    if (done >= queue.length) {
+      return {
+        wavelength: { role: "writer", done: true, clueCount: queue.length },
+      };
+    }
+
+    const roundIdx = queue[done];
+    const scale = game.scales[roundIdx];
+    const deadline = game.writeDeadlineByPlayer.get(playerId) ?? Date.now();
     return {
       wavelength: {
-        role: "clue-giver",
+        role: "writer",
+        done: false,
+        clueNumber: done + 1,
+        clueCount: queue.length,
         category: scale.category,
         poleA: scale.poleA,
         poleB: scale.poleB,
         min: scale.min,
         max: scale.max,
-        target: game.target,
+        target: game.targetByRound[roundIdx],
+        writeMs: WRITE_MS,
+        msLeft: Math.max(0, deadline - Date.now()),
       },
     };
   }
+
   if (game.phase === "guess" || game.phase === "reveal") {
+    if (playerId !== game.clueGiverId) return null;
     return { wavelength: { role: "clue-giver", target: game.target } };
   }
   return null;

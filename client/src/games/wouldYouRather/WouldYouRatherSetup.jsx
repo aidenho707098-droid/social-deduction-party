@@ -1,16 +1,15 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
+import NumberStepper from '../NumberStepper'
+import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
 
-const ROUND_OPTIONS = [3, 5, 7, 10]
 const PROMPTS_PER_PLAYER_OPTIONS = [2, 3, 4]
 const CUSTOM_MIN_PLAYERS = 3
 
 export default function WouldYouRatherSetup({ gameId, playerCount, saved, onStart, onCancel, error, submitLabel }) {
   // Pre-fill from the host's last settings for this game this room.
   const [mode, setMode] = useState(() => (saved?.mode === 'custom' ? 'custom' : 'bank'))
-  const [rounds, setRounds] = useState(() =>
-    ROUND_OPTIONS.includes(saved?.rounds) ? saved.rounds : 5,
-  )
+  const [rounds, setRounds] = useState(() => clampRounds(saved?.rounds ?? ROUND_DEFAULT))
   const [promptsPerPlayer, setPromptsPerPlayer] = useState(() =>
     PROMPTS_PER_PLAYER_OPTIONS.includes(saved?.promptsPerPlayer) ? saved.promptsPerPlayer : 3,
   )
@@ -27,7 +26,7 @@ export default function WouldYouRatherSetup({ gameId, playerCount, saved, onStar
   }
 
   return (
-    <div className="screen">
+    <div className="screen setup-screen">
       <h1 className="title">Majority Pick</h1>
       <HowToPlay gameId={gameId} />
       <p className="hint hint-block">
@@ -75,21 +74,13 @@ export default function WouldYouRatherSetup({ gameId, playerCount, saved, onStar
       </div>
 
       {activeMode === 'bank' ? (
-        <div>
-          <span className="label">How many rounds?</span>
-          <div className="pill-group">
-            {ROUND_OPTIONS.map((n) => (
-              <button
-                key={n}
-                type="button"
-                className={`pill ${rounds === n ? 'pill-active' : ''}`}
-                onClick={() => setRounds(n)}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-        </div>
+        <NumberStepper
+          label="How many rounds?"
+          value={rounds}
+          min={ROUND_MIN}
+          max={ROUND_MAX}
+          onChange={setRounds}
+        />
       ) : (
         <div>
           <span className="label">Prompts per player</span>

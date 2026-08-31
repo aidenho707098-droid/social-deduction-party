@@ -1,5 +1,6 @@
 import { PlayerDot } from '../../PlayerDot'
 import { playerColorMap } from '../../playerColors'
+import CountUp from '../CountUp'
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
@@ -37,7 +38,7 @@ export default function FinalStandings({ game, players = [], myId, isHost, onBac
                 {nameById[s.playerId] ?? 'Unknown'}
               </span>
               <span className="wyr-board-score">
-                {s.score} {s.score === 1 ? 'pt' : 'pts'}
+                <CountUp value={s.score} /> {s.score === 1 ? 'pt' : 'pts'}
               </span>
             </div>
           ))}
@@ -49,7 +50,7 @@ export default function FinalStandings({ game, players = [], myId, isHost, onBac
           Back to Lobby
         </button>
       ) : (
-        <p className="hint center-text">Waiting for the host to return to the lobby…</p>
+        <p className="hint center-text waiting">Waiting for the host to return to the lobby…</p>
       )}
     </div>
   )

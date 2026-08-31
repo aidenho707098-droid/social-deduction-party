@@ -75,7 +75,7 @@ export default function TournamentBetween({ t, players, myId, isHost, onNext }) 
           {isFinalGame ? 'See Tournament Winner →' : 'Next Game →'}
         </button>
       ) : (
-        <p className="hint center-text">Waiting for the host to continue…</p>
+        <p className="hint center-text waiting">Waiting for the host to continue…</p>
       )}
     </div>
   )

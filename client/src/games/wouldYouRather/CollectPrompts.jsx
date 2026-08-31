@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSound } from '../../sound/SoundContext'
+import LoadingDots from '../LoadingDots'
 
 // Custom-mode "collect" phase: each player privately answers their assigned
 // open-ended prompts one at a time, ~45s each. The server paces this — it
@@ -71,7 +72,8 @@ export default function CollectPrompts({ game, myRole, isHost, onSubmitPrompt, o
     return (
       <div className="screen">
         <p className="wyr-round">Custom Mode</p>
-        <h1 className="title">Getting your prompts ready…</h1>
+        <h1 className="title waiting">Getting your prompts ready…</h1>
+        <LoadingDots />
         <p className="hint center-text">Hang tight.</p>
       </div>
     )
@@ -83,7 +85,7 @@ export default function CollectPrompts({ game, myRole, isHost, onSubmitPrompt, o
       <div className="screen">
         <p className="wyr-round">Custom Mode</p>
         <h1 className="title">Answers in ✓</h1>
-        <p className="hint center-text">
+        <p className="hint center-text waiting">
           {game.collect?.doneCount ?? 0} / {game.collect?.totalPlayers ?? game.totalPlayers} players
           finished — waiting for the rest…
         </p>

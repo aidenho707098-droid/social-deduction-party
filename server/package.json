@@ -6,7 +6,9 @@
   "main": "index.js",
   "scripts": {
     "dev": "node --watch index.js",
-    "start": "node index.js"
+    "start": "node index.js",
+    "test:chaos": "node chaos.selftest.mjs && node chaosRuntime.selftest.mjs && node chaos-integration.selftest.mjs",
+    "test:fake-artist": "node fake-artist.selftest.mjs && node ../client/src/games/fakeArtist/inkModel.selftest.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

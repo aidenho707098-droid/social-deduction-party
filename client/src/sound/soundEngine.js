@@ -41,6 +41,9 @@ export const SOUND_MANIFEST = {
   'wheel-land': { src: 'wheel-land.mp3', gain: 0.75 },
   'game-win': { src: 'game-win.mp3', gain: 0.85 },
   'game-over': { src: 'game-over.mp3', gain: 0.6 },
+  // Taboo: the round timer just lost 30s because a guesser buzzed in. A
+  // short, sharp alert — reuses the buzzer bed until a bespoke asset lands.
+  'time-drop': { src: 'wrong.mp3', gain: 0.8 },
   // Tournament grand finale — a short, crisp rising achievement chime.
   // Triumphant and clean, not a long sting or a crowd.
   'grand-finale': { src: 'grand-finale.mp3', gain: 0.7 },

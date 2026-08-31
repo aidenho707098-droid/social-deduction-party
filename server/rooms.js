@@ -106,6 +106,9 @@ export function createRoom(hostSocketId, hostName) {
     tournament: null, // set by the tournament layer (see server/tournament.js)
     itemMemory: {}, // gameId -> { seen: string[] }; session no-repeat memory
     gameSettings: {}, // gameId -> last host-configured options this session
+    chaosFrequency: "off", // app-wide Chaos Events dial; persists for the room
+    chaos: null, // current round's chaos record (see chaosRuntime.js)
+    chaosCarry: null, // Player Disable effect owed to a future round
   };
   rooms.set(code, room);
   bindSocket(hostSocketId, code, host.id);

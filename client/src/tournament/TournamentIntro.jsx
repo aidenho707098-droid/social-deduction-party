@@ -92,7 +92,7 @@ export default function TournamentIntro({ t, isHost, playerCount, savedByGame = 
           Start {t.pendingGame?.name ?? 'Game'} →
         </button>
       ) : (
-        <p className="hint center-text">Waiting for the host to start…</p>
+        <p className="hint center-text waiting">Waiting for the host to start…</p>
       )}
     </div>
   )

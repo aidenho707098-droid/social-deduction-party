@@ -40,6 +40,16 @@ const PHASE_CUES = {
     guess: 'round-start', // a valid clue is in — guessing opens
     // 'reveal' has its own needle-landing sound inside RoundReveal
   },
+  taboo: {
+    guess: 'round-start', // the Describer hit "start" — the clock is live
+    reveal: REVEAL,
+    // the '-30s' timer-drop alert fires inside GuessRound (play('time-drop'))
+  },
+  'fake-artist': {
+    draw: 'round-start', // the pens are down — the round is live
+    vote: 'round-start',
+    reveal: REVEAL,
+  },
 }
 
 function buildCtx(game, myRole, myId) {

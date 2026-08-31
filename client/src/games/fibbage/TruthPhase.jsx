@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSound } from '../../sound/SoundContext'
+import LoadingDots from '../LoadingDots'
 
 // Personal-mode "truth" phase: each player, one prompt-slot at a time,
 // first PICKS one of two offered prompts (no category shown), then answers
@@ -55,11 +56,16 @@ export default function TruthPhase({ game, myRole, isHost, onChoose, onSubmit, o
     sendAnswer(value)
   }
 
-  // Clock ran out on the ANSWER step — submit whatever's typed (may be
-  // empty; the server treats that as a skip) so we advance.
+  // Clock ran out — don't leave this player stuck. On the CHOOSE step,
+  // auto-pick the first prompt; on the ANSWER step, submit whatever's typed
+  // (an empty string is treated as a skip). Either way we advance.
   useEffect(() => {
-    if (timeUp && truth && !truth.choosing && !truth.done && !pending && !firedTimeout.current) {
-      firedTimeout.current = true
+    if (!timeUp || !truth || truth.done || pending || firedTimeout.current) return
+    firedTimeout.current = true
+    if (truth.choosing) {
+      play('wrong')
+      choose(0)
+    } else {
       if (!text.trim()) play('wrong')
       sendAnswer(text.trim())
     }
@@ -70,7 +76,8 @@ export default function TruthPhase({ game, myRole, isHost, onChoose, onSubmit, o
     return (
       <div className="screen">
         <p className="wyr-round">Personal Mode</p>
-        <h1 className="title">Getting your prompts ready…</h1>
+        <h1 className="title waiting">Getting your prompts ready…</h1>
+        <LoadingDots />
         <p className="hint center-text">Hang tight.</p>
       </div>
     )
@@ -81,7 +88,7 @@ export default function TruthPhase({ game, myRole, isHost, onChoose, onSubmit, o
       <div className="screen">
         <p className="wyr-round">Personal Mode</p>
         <h1 className="title">Answers in ✓</h1>
-        <p className="hint center-text">
+        <p className="hint center-text waiting">
           {game.truth?.doneCount ?? 0} / {game.truth?.totalPlayers ?? game.totalPlayers} players
           finished — waiting for the rest…
         </p>

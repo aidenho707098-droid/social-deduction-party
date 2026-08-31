@@ -12,13 +12,15 @@ import { getGame } from './registry'
 //
 // variant:
 //   'link' (default) — a small underlined text button, for setup screens
-//   'menu'           — same look, tuned for sitting under a menu option
+//   'menu'           — a compact "?" badge that sits in the corner of a
+//                      game card on the "Choose a Game" screen
 //   'fab'            — a floating "?" button, for use during a live game
 export default function HowToPlay({ gameId, variant = 'link', label = 'How to Play' }) {
   const [open, setOpen] = useState(false)
   const game = getGame(gameId)
   if (!game?.rules) return null
 
+  const iconOnly = variant === 'fab' || variant === 'menu'
   const triggerClass =
     variant === 'fab' ? 'htp-fab' : variant === 'menu' ? 'htp-trigger htp-trigger-menu' : 'htp-trigger'
 
@@ -31,7 +33,7 @@ export default function HowToPlay({ gameId, variant = 'link', label = 'How to Pl
         aria-label={`How to play ${game.name}`}
         title={`How to play ${game.name}`}
       >
-        {variant === 'fab' ? '?' : label}
+        {iconOnly ? '?' : label}
       </button>
       {open && createPortal(
         <RulesModal game={game} onClose={() => setOpen(false)} />,

@@ -21,6 +21,15 @@ import {
 import { getLanIp } from "./network.js";
 import { GAMES } from "./games/registry.js";
 import {
+  chaosTick,
+  chaosPublicSlice,
+  chaosPatchGameState,
+  setChaosFrequency,
+  recordWager,
+  recordDisableTarget,
+  clearChaos,
+} from "./chaosRuntime.js";
+import {
   createTournament,
   stepAt,
   enterIntro,
@@ -54,6 +63,9 @@ app.get("/lan-url", (req, res) => {
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: "*" }, // fine for a LAN party app with no real auth yet
+  // Fake Artist relays a composited canvas PNG per turn — a hand drawing is
+  // small, but give it plenty of headroom over the 1MB default.
+  maxHttpBufferSize: 4e6,
 });
 
 // The socket that fired an event belongs to some player in some room —
@@ -94,10 +106,13 @@ function buildPublicRoom(room) {
     // Last host-configured options per game this session, so the setup
     // screen can pre-fill instead of resetting to defaults on replay.
     gameSettings: room.gameSettings ?? {},
+    // Chaos Events layer: the host's frequency dial + any live event.
+    chaos: chaosPublicSlice(room),
   };
   if (room.status === "in-game" && room.game) {
     const gameModule = GAMES[room.game.id];
     base.game = gameModule.getPublicState(room.game, connectedPlayerIds(room));
+    chaosPatchGameState(room, base.game);
   }
   if (room.tournament?.active) {
     base.tournament = getTournamentPublicState(room.tournament, [...room.players.keys()]);
@@ -111,6 +126,11 @@ function broadcastRoom(roomCode) {
   // Every meaningful room mutation funnels through here, so this is the
   // one place the abandoned-room sweep needs to read for "last activity".
   room.lastActivityAt = Date.now();
+  // Chaos Events layer intercept: roll at each new scoring round, resolve
+  // round-end modifiers once the game has scored, keep Speed Round's clock
+  // pinned. Runs before the tournament check so a chaos-rewritten score is
+  // what gets folded into tournament standings.
+  chaosTick(room, { connectedPlayerIds });
   // Tournament layer intercept: the moment the running game reaches its
   // terminal state, fold its standings into the tournament and move to the
   // "between" screen — no game-specific code, no host click needed.
@@ -182,6 +202,8 @@ function finalizePlayerRemoval(code, playerId) {
   broadcastRoom(code);
   syncEmojiTicker(getRoom(code));
   syncBlackMagicTicker(getRoom(code));
+  syncTabooTicker(getRoom(code));
+  syncFakeArtistTicker(getRoom(code));
 }
 
 // Emoji Movie Guess reveals emojis one at a time on a server clock, but
@@ -254,6 +276,89 @@ function syncBlackMagicTicker(room) {
   } else if (!active && existing) {
     clearInterval(existing);
     blackMagicTickers.delete(room.code);
+  }
+}
+
+// Taboo's round clock is server-owned and DYNAMIC — every guesser's first
+// answer shaves 30s off the deadline (done inside submitGuess). This 1s
+// ticker keeps every device's countdown honest during a guess phase and
+// auto-reveals once the (shrinking) deadline passes. Idempotent, like the
+// others.
+const tabooTickers = new Map(); // roomCode -> intervalId
+
+function syncTabooTicker(room) {
+  if (!room) return;
+  const active =
+    room.status === "in-game" &&
+    room.game?.id === "taboo" &&
+    room.game.phase === "guess";
+  const existing = tabooTickers.get(room.code);
+
+  if (active && !existing) {
+    const timerId = setInterval(() => {
+      const current = getRoom(room.code);
+      const game = current?.game;
+      if (!current || game?.id !== "taboo" || game.phase !== "guess") {
+        clearInterval(tabooTickers.get(room.code));
+        tabooTickers.delete(room.code);
+        return;
+      }
+      if (game.deadline && Date.now() > game.deadline + 1500) {
+        GAMES.taboo.revealRound(game, connectedPlayerIds(current));
+        clearInterval(tabooTickers.get(room.code));
+        tabooTickers.delete(room.code);
+      }
+      broadcastRoom(room.code);
+    }, 1000);
+    tabooTickers.set(room.code, timerId);
+  } else if (!active && existing) {
+    clearInterval(existing);
+    tabooTickers.delete(room.code);
+  }
+}
+
+// Fake Artist owns three server clocks: the per-turn drawing timer, the
+// voting timer, and the Fake Artist's word-guess window. This 1s ticker
+// keeps every device's countdown honest and auto-advances when a clock
+// runs out (a turn ends, voting closes, the guess is skipped).
+const fakeArtistTickers = new Map(); // roomCode -> intervalId
+const FAKE_ARTIST_TICK_PHASES = new Set(["draw", "vote", "reveal"]);
+
+function syncFakeArtistTicker(room) {
+  if (!room) return;
+  const active =
+    room.status === "in-game" &&
+    room.game?.id === "fake-artist" &&
+    FAKE_ARTIST_TICK_PHASES.has(room.game.phase);
+  const existing = fakeArtistTickers.get(room.code);
+
+  if (active && !existing) {
+    const timerId = setInterval(() => {
+      const current = getRoom(room.code);
+      const game = current?.game;
+      if (
+        !current ||
+        game?.id !== "fake-artist" ||
+        !FAKE_ARTIST_TICK_PHASES.has(game.phase)
+      ) {
+        clearInterval(fakeArtistTickers.get(room.code));
+        fakeArtistTickers.delete(room.code);
+        return;
+      }
+      const present = connectedPlayerIds(current);
+      const mod = GAMES["fake-artist"];
+      const changed =
+        mod.tickTurn(game, present) ||
+        mod.tickVote(game, present) ||
+        mod.tickGuess(game);
+      if (changed) sendPrivateRoles(current);
+      broadcastRoom(room.code);
+      syncFakeArtistTicker(current);
+    }, 1000);
+    fakeArtistTickers.set(room.code, timerId);
+  } else if (!active && existing) {
+    clearInterval(existing);
+    fakeArtistTickers.delete(room.code);
   }
 }
 
@@ -350,11 +455,14 @@ function startTournamentGameNow(room, gameId) {
   }
   recordDeckMemory(room, gameId, game);
   beginGame(room.tournament, gameId, playerIds);
+  clearChaos(room); // each game starts with a clean chaos slate
   startGameOnRoom(room, game);
   broadcastRoom(room.code);
   sendPrivateRoles(room);
   syncEmojiTicker(room);
   syncBlackMagicTicker(room);
+  syncTabooTicker(room);
+  syncFakeArtistTicker(room);
 }
 
 // Advance the tournament to whatever comes next for tournament.currentIndex:
@@ -429,6 +537,8 @@ io.on("connection", (socket) => {
     sendPrivateRoleTo(room, player);
     syncEmojiTicker(room);
     syncBlackMagicTicker(room);
+    syncTabooTicker(room);
+    syncFakeArtistTicker(room);
   });
 
   // Lobby-only: a player changes their colour identity. The server checks
@@ -475,6 +585,7 @@ io.on("connection", (socket) => {
     room.gameSettings = room.gameSettings ?? {};
     room.gameSettings[gameId] = options ?? {};
 
+    clearChaos(room); // fresh chaos slate for the new game
     startGameOnRoom(room, game);
     callback?.({ ok: true });
 
@@ -482,6 +593,43 @@ io.on("connection", (socket) => {
     sendPrivateRoles(room);
     syncEmojiTicker(room);
     syncBlackMagicTicker(room);
+    syncTabooTicker(room);
+    syncFakeArtistTicker(room);
+  });
+
+  // --- Chaos Events layer ----------------------------------------------
+  // Host dial (OFF / LOW / MEDIUM / HIGH), persisted on the room; plus the
+  // two interactive modifiers' player inputs (Risk It opt-in, Player
+  // Disable target pick).
+
+  socket.on("chaos_set_frequency", ({ code, frequency }, cb) => {
+    const room = getRoom(code);
+    if (!room) return cb?.({ error: "Room not found." });
+    if (!isRoomHost(room, socket)) return cb?.({ error: "Only the host can do that." });
+    const res = setChaosFrequency(room, frequency);
+    if (res.error) return cb?.(res);
+    broadcastRoom(room.code);
+    cb?.(res);
+  });
+
+  socket.on("chaos_wager", ({ code }, cb) => {
+    const room = getRoom(code);
+    if (!room) return cb?.({ error: "Room not found." });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ error: "Not in this room." });
+    const res = recordWager(room, playerId);
+    if (res.ok) broadcastRoom(room.code);
+    cb?.(res);
+  });
+
+  socket.on("chaos_disable_target", ({ code, targetId }, cb) => {
+    const room = getRoom(code);
+    if (!room) return cb?.({ error: "Room not found." });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ error: "Not in this room." });
+    const res = recordDisableTarget(room, playerId, targetId);
+    if (res.ok) broadcastRoom(room.code);
+    cb?.(res);
   });
 
   // --- Tournament Mode actions -------------------------------------------
@@ -552,6 +700,8 @@ io.on("connection", (socket) => {
     broadcastRoom(room.code);
     syncEmojiTicker(room);
     syncBlackMagicTicker(room);
+    syncTabooTicker(room);
+    syncFakeArtistTicker(room);
   });
 
   // --- Imposter-specific actions -------------------------------------
@@ -815,20 +965,23 @@ io.on("connection", (socket) => {
   });
 
   // --- Wavelength actions ---------------------------------------------
-  // `wavelength_submit_clue` acks with { ok } or a { reason, term } so the
-  // Clue-Giver's device can show why a phrase bounced and let them retry.
-  // The secret target never leaves the server except to the Clue-Giver via
-  // their private role (see wavelength.js getPrivateState).
+  // All clue-writing happens up front, in parallel (the "write" phase):
+  // `wavelength_submit_clue` is one Clue-Giver submitting their current
+  // queued clue. It acks with { ok } or a { reason, term } so their device
+  // can show why a phrase bounced and let them retry. The secret target
+  // never leaves the server except to that writer via their private role
+  // (see wavelength.js getPrivateState).
 
   socket.on("wavelength_submit_clue", ({ code, clue }, cb) => {
     const room = getRoom(code);
     if (!room || room.game?.id !== "wavelength") return cb?.({ ok: false });
     const playerId = playerIdOf(socket);
     if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
-    const res = GAMES.wavelength.submitClue(room.game, playerId, clue);
-    if (res?.ok) {
-      broadcastRoom(room.code); // guessers now learn the category + clue
-    }
+    const res = GAMES.wavelength.submitClue(
+      room.game, playerId, clue, connectedPlayerIds(room)
+    );
+    broadcastRoom(room.code); // progress ticks up; guessing may now open
+    sendPrivateRoles(room); // push each writer their next clue / "done"
     cb?.(res ?? { ok: false });
   });
 
@@ -844,11 +997,14 @@ io.on("connection", (socket) => {
     cb?.(res ?? { ok: false });
   });
 
+  // Host "Skip to guessing now" (during write) / "Reveal now" (during a
+  // guess round) — both routed through forceAdvance.
   socket.on("wavelength_reveal", ({ code }) => {
     const room = getRoom(code);
     if (!room || !isRoomHost(room, socket) || room.game?.id !== "wavelength") return;
     GAMES.wavelength.forceAdvance(room.game, connectedPlayerIds(room));
     broadcastRoom(room.code);
+    sendPrivateRoles(room); // the round's Clue-Giver gets their target
   });
 
   socket.on("wavelength_next_round", ({ code }) => {
@@ -859,15 +1015,151 @@ io.on("connection", (socket) => {
     sendPrivateRoles(room); // the new Clue-Giver gets their scale + target
   });
 
+  // --- Taboo actions -------------------------------------------------
+  // The round clock is server-owned and DYNAMIC (syncTabooTicker). Only
+  // the round's Describer ever holds the secret word (see taboo.js
+  // getPrivateState). `taboo_guess` acks with the verdict + placing so the
+  // guesser's device can show "locked in — 2nd!" or "try again".
+
+  socket.on("taboo_start_round", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "taboo") return;
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return;
+    const res = GAMES.taboo.startRound(room.game, playerId, {
+      asHost: isRoomHost(room, socket),
+    });
+    if (!res?.ok) return;
+    broadcastRoom(room.code);
+    sendPrivateRoles(room);
+    syncTabooTicker(room);
+  });
+
+  socket.on("taboo_guess", ({ code, guess }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "taboo") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES.taboo.submitGuess(
+      room.game, playerId, guess, connectedPlayerIds(room)
+    );
+    broadcastRoom(room.code);
+    syncTabooTicker(room); // everyone solving early can end the phase
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("taboo_reveal", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "taboo") return;
+    GAMES.taboo.revealRound(room.game, connectedPlayerIds(room));
+    broadcastRoom(room.code);
+    sendPrivateRoles(room);
+    syncTabooTicker(room);
+  });
+
+  socket.on("taboo_next_round", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "taboo") return;
+    GAMES.taboo.nextRound(room.game);
+    broadcastRoom(room.code);
+    sendPrivateRoles(room); // the next Describer gets their word
+    syncTabooTicker(room);
+  });
+
+  // --- Fake Artist actions -------------------------------------------
+  // Turn-based canvas snapshots: `fake_artist_submit` carries the whole
+  // composited PNG data URL for the current drawer's finished turn; the
+  // server just stores + relays it (no server-side image work). Only the
+  // round's Fake Artist ever holds a role that isn't the secret word.
+
+  socket.on("fake_artist_start", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "fake-artist") return;
+    GAMES["fake-artist"].startDrawing(room.game);
+    broadcastRoom(room.code);
+    sendPrivateRoles(room);
+    syncFakeArtistTicker(room);
+  });
+
+  socket.on("fake_artist_submit", ({ code, image }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "fake-artist") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES["fake-artist"].submitDrawing(
+      room.game, playerId, image, connectedPlayerIds(room)
+    );
+    broadcastRoom(room.code);
+    sendPrivateRoles(room); // phase may have flipped to gallery
+    syncFakeArtistTicker(room);
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("fake_artist_start_vote", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "fake-artist") return;
+    GAMES["fake-artist"].startVoting(room.game);
+    broadcastRoom(room.code);
+    sendPrivateRoles(room);
+    syncFakeArtistTicker(room);
+  });
+
+  socket.on("fake_artist_vote", ({ code, targetId }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "fake-artist") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES["fake-artist"].submitVote(
+      room.game, playerId, targetId, connectedPlayerIds(room)
+    );
+    broadcastRoom(room.code);
+    sendPrivateRoles(room); // everyone voting can flip to reveal
+    syncFakeArtistTicker(room);
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("fake_artist_guess", ({ code, text }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "fake-artist") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES["fake-artist"].submitImposterGuess(room.game, playerId, text);
+    broadcastRoom(room.code);
+    sendPrivateRoles(room);
+    syncFakeArtistTicker(room);
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("fake_artist_skip_guess", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "fake-artist") return;
+    GAMES["fake-artist"].skipImposterGuess(room.game);
+    broadcastRoom(room.code);
+    sendPrivateRoles(room);
+    syncFakeArtistTicker(room);
+  });
+
+  socket.on("fake_artist_next_round", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "fake-artist") return;
+    GAMES["fake-artist"].nextRound(room.game, connectedPlayerIds(room));
+    broadcastRoom(room.code);
+    sendPrivateRoles(room); // the next round's Fake Artist gets their category
+    syncFakeArtistTicker(room);
+  });
+
   socket.on("back_to_lobby", ({ code }) => {
     const room = getRoom(code);
     if (!room || !isRoomHost(room, socket)) return;
     clearWheelTimer(room.code);
     room.tournament = null; // "Back to Lobby" also ends any tournament
     endGame(room);
+    clearChaos(room); // drop any live chaos event / carried Player Disable
     broadcastRoom(room.code);
     syncEmojiTicker(room);
     syncBlackMagicTicker(room);
+    syncTabooTicker(room);
+    syncFakeArtistTicker(room);
   });
 
   // --- Host session-management controls ---------------------------------
@@ -920,6 +1212,8 @@ io.on("connection", (socket) => {
     refreshFibbageVoteRoles(room);
     syncEmojiTicker(room);
     syncBlackMagicTicker(room);
+    syncTabooTicker(room);
+    syncFakeArtistTicker(room);
     callback?.({ ok: true });
   });
 
@@ -937,6 +1231,8 @@ io.on("connection", (socket) => {
     broadcastRoom(info.code); // others immediately see them as "disconnected"
     syncEmojiTicker(getRoom(info.code));
     syncBlackMagicTicker(getRoom(info.code)); // The Witch leaving abandons the round
+    syncTabooTicker(getRoom(info.code));
+    syncFakeArtistTicker(getRoom(info.code));
     armGraceTimer(info.code, info.playerId); // remove them if they don't return in time
   });
 });
@@ -977,7 +1273,7 @@ function cleanupRoom(code, category, detail) {
   io.to(code).emit("room_closed", { reason: category });
 
   clearWheelTimer(code);
-  for (const map of [emojiTickers, blackMagicTickers]) {
+  for (const map of [emojiTickers, blackMagicTickers, tabooTickers, fakeArtistTickers]) {
     const timerId = map.get(code);
     if (timerId) clearInterval(timerId);
     map.delete(code);
@@ -1073,6 +1369,34 @@ const fibbageTruthTimer = setInterval(() => {
   }
 }, 1000);
 fibbageTruthTimer.unref?.();
+
+// --- Wavelength: parallel clue-writing phase clock ---------------
+// Every Clue-Giver writes all their clues up front, each with a private
+// 60s-per-clue countdown. A self-managed sweep auto-skips anyone whose
+// clock ran out and starts the guess rounds once every clue is in. No-op
+// for any game not in the "write" phase.
+const wavelengthWriteTimer = setInterval(() => {
+  for (const room of allRooms()) {
+    const game = room.game;
+    if (
+      room.status !== "in-game" ||
+      game?.id !== "wavelength" ||
+      game.phase !== "write"
+    ) {
+      continue;
+    }
+    try {
+      const changed = GAMES.wavelength.tickWrite(game, connectedPlayerIds(room));
+      if (changed) {
+        broadcastRoom(room.code);
+        sendPrivateRoles(room);
+      }
+    } catch (err) {
+      console.warn(`[wavelength] write tick error for ${room.code}:`, err);
+    }
+  }
+}, 1000);
+wavelengthWriteTimer.unref?.();
 
 httpServer.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);

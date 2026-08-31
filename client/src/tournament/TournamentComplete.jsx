@@ -243,7 +243,7 @@ export default function TournamentComplete({ t, players, myId, isHost, onDone })
           Back to Lobby
         </button>
       ) : (
-        <p className="hint center-text">Waiting for the host to return to the lobby…</p>
+        <p className="hint center-text waiting">Waiting for the host to return to the lobby…</p>
       )}
     </div>
   )

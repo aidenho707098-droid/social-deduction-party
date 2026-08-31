@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import Spectrum from './Spectrum'
+import CountUp from '../CountUp'
 import { PlayerDot } from '../../PlayerDot'
 import { playerColorMap } from '../../playerColors'
 import { useSound } from '../../sound/SoundContext'
@@ -44,7 +45,7 @@ export default function RoundReveal({ game, players = [], myId, isHost, onNext }
             {isLastRound ? 'See Final Results' : 'Next Round'}
           </button>
         ) : (
-          <p className="hint center-text">Waiting for the host to continue…</p>
+          <p className="hint center-text waiting">Waiting for the host to continue…</p>
         )}
       </div>
     )
@@ -124,7 +125,7 @@ export default function RoundReveal({ game, players = [], myId, isHost, onNext }
           {isLastRound ? 'See Final Results' : 'Next Round'}
         </button>
       ) : (
-        <p className="hint center-text">Waiting for the host to continue…</p>
+        <p className="hint center-text waiting">Waiting for the host to continue…</p>
       )}
     </div>
   )
@@ -145,7 +146,9 @@ function Leaderboard({ game, nameOf, colorById, myId }) {
               <PlayerDot color={colorById[s.playerId]} className="player-cdot-inline" />
               {nameOf(s.playerId)}
             </span>
-            <span className="wyr-board-score">{s.score}</span>
+            <span className="wyr-board-score">
+              <CountUp value={s.score} />
+            </span>
           </div>
         ))}
       </div>

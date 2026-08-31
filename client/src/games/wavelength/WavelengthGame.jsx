@@ -1,23 +1,26 @@
-import CluePhase from './CluePhase'
+import WritePhase from './WritePhase'
 import GuessPhase from './GuessPhase'
 import RoundReveal from './RoundReveal'
 import FinalStandings from './FinalStandings'
 
 // Same contract as every game component: public game state, the player
 // list, this client's id, whether it's the host, this client's private
-// data (`myRole` — carries the scale + secret target when this client is
-// the round's Clue-Giver), and the action bundle.
+// data (`myRole` — carries the scale + secret target for the clue this
+// client is currently writing, or the target when they're the round's
+// Clue-Giver), and the action bundle.
+//
+// Flow: one upfront `write` phase where every Clue-Giver writes all their
+// clues in parallel, then the `guess`/`reveal` rounds run back-to-back.
 export default function WavelengthGame({ game, players, myRole, isHost, myId, actions }) {
   switch (game.phase) {
-    case 'clue':
+    case 'write':
       return (
-        <CluePhase
+        <WritePhase
           game={game}
           myRole={myRole}
-          myId={myId}
           isHost={isHost}
           onSubmitClue={actions.wavelengthSubmitClue}
-          onReveal={actions.wavelengthReveal}
+          onForceAdvance={actions.wavelengthReveal}
         />
       )
 
