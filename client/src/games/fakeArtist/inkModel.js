@@ -5,11 +5,11 @@
 // (see inkModel.selftest.mjs); the drawing component just wires pointer
 // events into it and renders the meter from `inkFraction`.
 
-// Logical canvas is DRAW_W x DRAW_H; the ink budget is a bit more than one
-// full diagonal (~770px) — room for two or three short, deliberate marks.
+// Logical canvas is DRAW_W x DRAW_H; the ink budget is about one full
+// diagonal (~770px) — room for two or three short, deliberate marks.
 export const DRAW_W = 640
 export const DRAW_H = 420
-export const INK_LIMIT = 1000
+export const INK_LIMIT = 800
 
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y)
 
