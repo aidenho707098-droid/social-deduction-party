@@ -32,6 +32,12 @@ export const id = "taboo";
 export const name = "Taboo";
 export const minPlayers = 3;
 
+// Built-in category keys + display names an AI "Custom Category" can't shadow.
+export const AI_CONTENT_RESERVED = [
+  ...CATEGORIES.map((c) => c.name),
+  ...CATEGORIES.map((c) => c.key),
+];
+
 const START_MS = 180_000; // 3:00 on the clock at the top of every round
 const TIME_DROP_MS = 30_000; // shaved off per guesser's first answer
 const MIN_ROUND_MS = 15_000; // the clock can never be cut below this
@@ -111,15 +117,15 @@ const entryKey = (e) => `${e.category}|${e.word}`;
 // a plain no-repeat draw from the pooled enabled banks (like Crack the
 // Code). In "random category" mode each round first picks a random category
 // that still has unseen words, then a random word from it.
-function buildEntries(catKeys, totalRounds, seen, randomMode) {
+function buildEntries(catKeys, totalRounds, seen, randomMode, banks = BANKS) {
   if (!randomMode) {
-    const pool = catKeys.flatMap((k) => BANKS[k]);
+    const pool = catKeys.flatMap((k) => banks[k]);
     return drawWithoutRepeats(pool, totalRounds, seen, entryKey);
   }
 
   const seenSet = new Set(seen);
   const remaining = Object.fromEntries(
-    catKeys.map((k) => [k, BANKS[k].filter((e) => !seenSet.has(entryKey(e)))])
+    catKeys.map((k) => [k, banks[k].filter((e) => !seenSet.has(entryKey(e)))])
   );
   const items = [];
   for (let i = 0; i < totalRounds; i++) {
@@ -127,7 +133,7 @@ function buildEntries(catKeys, totalRounds, seen, randomMode) {
     if (live.length === 0) {
       // Room memory has drained every bank — forget it and start over.
       seenSet.clear();
-      for (const k of catKeys) remaining[k] = [...BANKS[k]];
+      for (const k of catKeys) remaining[k] = [...banks[k]];
       live = [...catKeys];
     }
     const cat = live[Math.floor(Math.random() * live.length)];
@@ -159,7 +165,7 @@ function resetRound(game) {
   game.lastDropAt = 0;
 }
 
-export function createGame(playerIds, { rounds, categories, memory } = {}) {
+export function createGame(playerIds, { rounds, categories, memory, customCategories = [] } = {}) {
   const requested = Number(rounds);
   if (!Number.isInteger(requested) || requested < 1) {
     throw new Error("Choose how many rounds to play.");
@@ -168,21 +174,33 @@ export function createGame(playerIds, { rounds, categories, memory } = {}) {
     throw new Error(`Taboo needs at least ${minPlayers} players.`);
   }
 
+  // Built-in banks + this room's AI custom categories. A custom category's
+  // name IS its key; each of its entries is tagged with that key so the
+  // reveal / round display can name it like any built-in.
+  const banks = { ...BANKS };
+  for (const cc of customCategories) {
+    if (cc?.name && Array.isArray(cc.entries) && cc.entries.length) {
+      banks[cc.name] = cc.entries.map((e) => ({ ...e, category: cc.name }));
+    }
+  }
+  const builtInKeys = CATEGORIES.map((c) => c.key);
+  const customKeys = customCategories.map((c) => c.name).filter((n) => n in banks);
+  const allKeys = [...builtInKeys, ...customKeys];
+
   const asked = Array.isArray(categories) ? categories : [];
   const randomMode = asked.includes(RANDOM_CATEGORY);
-  let catKeys = randomMode
-    ? CATEGORIES.map((c) => c.key)
-    : asked.filter((c) => c in BANKS);
-  if (catKeys.length === 0) catKeys = CATEGORIES.map((c) => c.key);
+  let catKeys = randomMode ? allKeys : asked.filter((c) => c in banks);
+  if (catKeys.length === 0) catKeys = allKeys;
 
-  const available = catKeys.reduce((n, k) => n + BANKS[k].length, 0);
+  const available = catKeys.reduce((n, k) => n + banks[k].length, 0);
   const totalRounds = Math.min(requested, available);
 
   const { items, seenKeys } = buildEntries(
     catKeys,
     totalRounds,
     memory?.seen ?? [],
-    randomMode
+    randomMode,
+    banks
   );
 
   // Fixed Describer-per-round order: cycle a shuffled roster so it's an
@@ -343,7 +361,7 @@ export function revealRound(game, presentPlayerIds) {
     word: entry.word,
     taboo: entry.taboo,
     category: entry.category,
-    categoryName: CATEGORY_NAME[entry.category] ?? "",
+    categoryName: CATEGORY_NAME[entry.category] ?? entry.category,
     describerId,
     describerPoints,
     anyCorrect,
@@ -406,7 +424,7 @@ export function getPublicState(game, presentPlayerIds) {
     roundIndex: game.roundIndex,
     totalRounds: game.totalRounds,
     describerId,
-    categoryName: entry ? CATEGORY_NAME[entry.category] ?? "" : "",
+    categoryName: entry ? CATEGORY_NAME[entry.category] ?? entry.category : "",
     randomMode: game.randomMode,
     totalPlayers: presentPlayerIds.length,
     guesserCount: guesserIds.length,
@@ -458,7 +476,7 @@ export function getPrivateState(game, playerId) {
       word: entry.word,
       forbidden: entry.taboo,
       category: entry.category,
-      categoryName: CATEGORY_NAME[entry.category] ?? "",
+      categoryName: CATEGORY_NAME[entry.category] ?? entry.category,
     },
   };
 }

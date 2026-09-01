@@ -194,6 +194,9 @@ export default function Lobby() {
     startTurns: () => socket.emit('imposter_start_turns', { code }),
     nextTurn: () => socket.emit('imposter_next_turn', { code }),
     toggleVote: (votedForId) => socket.emit('imposter_toggle_vote', { code, votedForId }),
+    // Shared by every game's "Custom Category / Theme / Topic" setup option.
+    aiGenerateContent: (gameId, name, cb) =>
+      socket.emit('ai_generate_content', { code, gameId, name }, cb),
     wyrAnswer: (choice) => socket.emit('wyr_answer', { code, choice }),
     wyrReveal: () => socket.emit('wyr_reveal', { code }),
     wyrNextRound: () => socket.emit('wyr_next_round', { code }),
@@ -245,6 +248,16 @@ export default function Lobby() {
     chaosWager: (cb) => socket.emit('chaos_wager', { code }, cb),
     chaosDisableTarget: (targetId, cb) =>
       socket.emit('chaos_disable_target', { code, targetId }, cb),
+  }
+
+  // Passed to every game's <Setup> (standalone and inside Tournament Mode)
+  // so its "Custom Category / Theme / Topic" option can list this room's
+  // already-generated batches and request new ones. The Setup keys into
+  // `aiContent` by its own `gameId`.
+  const aiProps = {
+    aiContent: room?.aiContent ?? {},
+    aiEnabled: room?.aiContentEnabled ?? false,
+    onGenerateContent: gameActions.aiGenerateContent,
   }
 
   function handleTournamentConfigure(cfg) {
@@ -334,6 +347,7 @@ export default function Lobby() {
           playerCount={room.players.length}
           savedByGame={room.gameSettings ?? {}}
           onStart={gameActions.tournamentIntroStart}
+          {...aiProps}
         />
       )
     if (tour.phase === 'between')
@@ -397,6 +411,7 @@ export default function Lobby() {
         savedByGame={room.gameSettings ?? {}}
         onConfigure={handleTournamentConfigure}
         onCancel={() => setHostFlow('idle')}
+        {...aiProps}
       />
     )
   }
@@ -426,6 +441,7 @@ export default function Lobby() {
         onStart={handleStartGame}
         onCancel={() => setHostFlow('menu')}
         error={startError}
+        {...aiProps}
       />
     )
   }

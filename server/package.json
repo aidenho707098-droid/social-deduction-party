@@ -4,15 +4,19 @@
   "version": "0.1.0",
   "type": "module",
   "main": "index.js",
+  "engines": {
+    "node": ">=22.9"
+  },
   "scripts": {
-    "dev": "node --watch index.js",
-    "start": "node index.js",
+    "dev": "node --watch --env-file-if-exists=.env index.js",
+    "start": "node --env-file-if-exists=.env index.js",
     "test:chaos": "node chaos.selftest.mjs && node chaosRuntime.selftest.mjs && node chaos-integration.selftest.mjs",
     "test:fake-artist": "node fake-artist.selftest.mjs && node ../client/src/games/fakeArtist/inkModel.selftest.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "openai": "^7.8.0",
     "socket.io": "^4.8.1"
   }
 }

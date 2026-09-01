@@ -50,6 +50,9 @@ export const name = "Imposter";
 export const minPlayers = 3;
 export const CATEGORY_NAMES = Object.keys(CATEGORIES);
 
+// Built-in names a host's AI "Custom Category" isn't allowed to shadow.
+export const AI_CONTENT_RESERVED = CATEGORY_NAMES;
+
 // Sentinel the host's picker can send instead of a real category name — the
 // server then rolls a category itself, so the host doesn't see it coming.
 export const RANDOM_CATEGORY = "__random__";
@@ -60,20 +63,36 @@ export const RANDOM_CATEGORY = "__random__";
 // the host is assigned a role (crew or imposter) exactly like anyone else;
 // if they'd hand-picked the word themselves, they'd already know it even
 // on rounds where they end up being the imposter.
-export function createGame(playerIds, { imposterCount, category, memory }) {
+//
+// `customCategories` is the room's list of AI-generated categories (see
+// server/aiContent.js), each { name, words: string[] }. They're
+// resolved and drawn from exactly like the built-in ones — no gameplay
+// difference once they exist.
+export function createGame(playerIds, { imposterCount, category, memory, customCategories = [] }) {
   if (![1, 2].includes(imposterCount)) {
     throw new Error("Imposter count must be 1 or 2.");
   }
   if (imposterCount >= playerIds.length) {
     throw new Error("Not enough players for that many imposters.");
   }
+  // Built-in + this room's custom categories, keyed by name. Custom names
+  // win a collision (the host explicitly made one by that name).
+  const wordsByCategory = { ...CATEGORIES };
+  for (const custom of customCategories) {
+    if (custom?.name && Array.isArray(custom.words) && custom.words.length) {
+      wordsByCategory[custom.name] = custom.words;
+    }
+  }
+  const allCategoryNames = Object.keys(wordsByCategory);
+
   // "Random Category" — the server rolls one now so nobody (host included)
-  // knew it going in. From here on the round has a concrete category.
+  // knew it going in. Custom categories are in the pool too. From here on
+  // the round has a concrete category.
   const resolvedCategory =
     category === RANDOM_CATEGORY
-      ? CATEGORY_NAMES[Math.floor(Math.random() * CATEGORY_NAMES.length)]
+      ? allCategoryNames[Math.floor(Math.random() * allCategoryNames.length)]
       : category;
-  const words = CATEGORIES[resolvedCategory];
+  const words = wordsByCategory[resolvedCategory];
   if (!words) {
     throw new Error("Unknown category.");
   }

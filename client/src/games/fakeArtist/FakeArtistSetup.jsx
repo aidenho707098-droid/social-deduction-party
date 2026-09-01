@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
 import NumberStepper from '../NumberStepper'
+import AiCustomOption from '../AiCustomOption'
 import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
 
 // Keep in sync with CATEGORY_NAMES in server/fakeArtistWords.js.
@@ -14,11 +15,24 @@ const CATEGORY_OPTIONS = [
 ]
 const RANDOM = '__random__'
 
-export default function FakeArtistSetup({ gameId, playerCount, saved, onStart, onCancel, error, submitLabel }) {
+export default function FakeArtistSetup({
+  gameId,
+  playerCount,
+  saved,
+  onStart,
+  onCancel,
+  error,
+  submitLabel,
+  aiContent = {},
+  aiEnabled = false,
+  onGenerateContent,
+}) {
+  const customThemes = aiContent[gameId] ?? [] // AI theme names this session
   const savedCats = Array.isArray(saved?.categories) ? saved.categories : []
   const [randomEach, setRandomEach] = useState(() => savedCats.includes(RANDOM))
   const [categories, setCategories] = useState(() => {
-    const fromSaved = savedCats.filter((k) => CATEGORY_OPTIONS.includes(k))
+    const valid = new Set([...CATEGORY_OPTIONS, ...customThemes])
+    const fromSaved = savedCats.filter((k) => valid.has(k))
     return fromSaved.length ? fromSaved : [...CATEGORY_OPTIONS]
   })
   const [rounds, setRounds] = useState(() => clampRounds(saved?.rounds ?? ROUND_DEFAULT))
@@ -77,12 +91,38 @@ export default function FakeArtistSetup({ gameId, playerCount, saved, onStart, o
               {name}
             </button>
           ))}
+          {customThemes.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className={`pill ${
+                !randomEach && categories.includes(name) ? 'pill-active' : ''
+              }`}
+              onClick={() => !randomEach && toggleCategory(name)}
+              disabled={randomEach}
+            >
+              {name}
+            </button>
+          ))}
         </div>
         <p className="hint hint-block">
           {randomEach
             ? 'Every round pulls a fresh random category.'
             : 'Words are drawn from the categories you turn on, no repeats. The category is shown to everyone.'}
         </p>
+        {aiEnabled && (
+          <AiCustomOption
+            label="Custom Theme"
+            placeholder="Christmas"
+            noun="word set"
+            hint="Name a theme. The app builds a batch of drawable secret words, each with a general category hint for the Fake Artist, and keeps it in this room for the session."
+            onGenerate={(name, cb) => onGenerateContent(gameId, name, cb)}
+            onGenerated={(name) => {
+              setRandomEach(false)
+              setCategories((prev) => (prev.includes(name) ? prev : [...prev, name]))
+            }}
+          />
+        )}
       </div>
 
       <NumberStepper

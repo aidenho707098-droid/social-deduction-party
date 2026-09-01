@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
 import NumberStepper from '../NumberStepper'
+import AiCustomOption from '../AiCustomOption'
 import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
 
 const DIFFICULTY_OPTIONS = [
@@ -19,7 +20,19 @@ const CATEGORY_OPTIONS = [
   { key: 'mashup', label: 'Mashup' },
 ]
 
-export default function EmojiMovieSetup({ gameId, saved, onStart, onCancel, error, submitLabel }) {
+export default function EmojiMovieSetup({
+  gameId,
+  saved,
+  onStart,
+  onCancel,
+  error,
+  submitLabel,
+  aiContent = {},
+  aiEnabled = false,
+  onGenerateContent,
+}) {
+  const customThemes = aiContent[gameId] ?? [] // AI theme names this session
+
   // Pre-fill from the last settings the host used for this game THIS room
   // (`saved`), falling back to defaults the first time / in a fresh room.
   const [rounds, setRounds] = useState(() => clampRounds(saved?.rounds ?? ROUND_DEFAULT))
@@ -27,11 +40,12 @@ export default function EmojiMovieSetup({ gameId, saved, onStart, onCancel, erro
     DIFFICULTY_OPTIONS.some((o) => o.key === saved?.difficulty) ? saved.difficulty : 'mixed',
   )
   const [categories, setCategories] = useState(() => {
-    const valid = CATEGORY_OPTIONS.map((c) => c.key)
+    const builtIn = CATEGORY_OPTIONS.map((c) => c.key)
+    const valid = new Set([...builtIn, ...customThemes])
     const fromSaved = Array.isArray(saved?.categories)
-      ? saved.categories.filter((k) => valid.includes(k))
+      ? saved.categories.filter((k) => valid.has(k))
       : []
-    return fromSaved.length ? fromSaved : valid
+    return fromSaved.length ? fromSaved : builtIn
   })
 
   function toggleCategory(key) {
@@ -67,12 +81,34 @@ export default function EmojiMovieSetup({ gameId, saved, onStart, onCancel, erro
               {opt.label}
             </button>
           ))}
+          {customThemes.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className={`pill ${categories.includes(name) ? 'pill-active' : ''}`}
+              onClick={() => toggleCategory(name)}
+            >
+              {name}
+            </button>
+          ))}
         </div>
         <p className="hint hint-block">
           Rounds are drawn from the categories you turn on. Countries always end
           on the flag; Mashup combines two emojis into one word (⭐ + 🚢 =
           starship).
         </p>
+        {aiEnabled && (
+          <AiCustomOption
+            label="Custom Theme"
+            placeholder="90s Movies"
+            noun="puzzle set"
+            hint="Name a theme (e.g. “Christmas Movies”, “Pixar Films”). The app builds a batch of emoji puzzles for it and keeps it in this room for the session."
+            onGenerate={(name, cb) => onGenerateContent(gameId, name, cb)}
+            onGenerated={(name) =>
+              setCategories((prev) => (prev.includes(name) ? prev : [...prev, name]))
+            }
+          />
+        )}
       </div>
 
       <NumberStepper

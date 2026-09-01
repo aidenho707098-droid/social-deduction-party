@@ -433,10 +433,23 @@ function makeOptionId() {
   return `opt_${optionSeq}_${Math.random().toString(36).slice(2, 8)}`
 }
 
+// Names a host's AI "Custom Topic" can't reuse (they'd be confusing next
+// to the mode toggles).
+export const AI_CONTENT_RESERVED = ["Trivia Bank", "Personal Mode", "Trivia", "Bank"]
+
 export function createGame(playerIds, options = {}) {
-  return options.mode === "personal"
-    ? createPersonalGame(playerIds, options)
-    : createBankGame(playerIds, options)
+  if (options.mode === "personal") return createPersonalGame(playerIds, options)
+  if (options.mode === "custom") {
+    // An AI-generated topic (see server/aiContent.js). `customTopics` is
+    // the room's full list of { name, items:[{prompt,answer}] }; `topic`
+    // is the one the host picked on the setup screen.
+    const batch = (options.customTopics ?? []).find((t) => t.name === options.topic)
+    if (!batch || !Array.isArray(batch.items) || batch.items.length === 0) {
+      throw new Error("That custom topic isn't available in this room.")
+    }
+    return createBankGame(playerIds, options, batch.items)
+  }
+  return createBankGame(playerIds, options)
 }
 
 function baseGame(playerIds) {
@@ -454,17 +467,19 @@ function baseGame(playerIds) {
   }
 }
 
-function createBankGame(playerIds, { rounds, memory }) {
+function createBankGame(playerIds, { rounds, memory }, factPool = FACTS) {
   const requested = Number(rounds)
   if (!Number.isInteger(requested) || requested < 1) {
     throw new Error("Choose how many rounds to play.")
   }
 
-  const totalRounds = Math.min(requested, FACTS.length)
+  const totalRounds = Math.min(requested, factPool.length)
   // Skip facts already used earlier this session. Prompts are unique;
   // answers are not (e.g. "Sun" appears on several), so key on the prompt.
+  // A custom topic's prompts share this one seen-list; they won't collide
+  // with the built-in bank's prompts.
   const { items, seenKeys } = drawWithoutRepeats(
-    FACTS,
+    factPool,
     totalRounds,
     memory?.seen ?? [],
     (f) => f.prompt

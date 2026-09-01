@@ -10,7 +10,18 @@ const RANDOM_COUNTS = [3, 4, 5, 6]
 // the host locks it in with `onConfigure({ mode, lineup?, lineupSettings?,
 // totalGames? })`. In Manual mode each lineup slot can be configured with
 // that game's own setup UI (pre-filled from the room's last-used settings).
-export default function TournamentSetup({ playerCount, savedByGame = {}, onConfigure, onCancel }) {
+export default function TournamentSetup({
+  playerCount,
+  savedByGame = {},
+  onConfigure,
+  onCancel,
+  // Forwarded to a lineup game's own Setup UI so its AI "Custom Category /
+  // Theme / Topic" option (and this room's already-generated batches) are
+  // available here too.
+  aiContent = {},
+  aiEnabled = false,
+  onGenerateContent,
+}) {
   const [mode, setMode] = useState(null) // null | 'manual' | 'random'
   const [lineup, setLineup] = useState([]) // ordered gameIds
   const [lineupSettings, setLineupSettings] = useState([]) // parallel: createGame options per slot
@@ -69,6 +80,9 @@ export default function TournamentSetup({ playerCount, savedByGame = {}, onConfi
           submitLabel="Save settings"
           onStart={(opts) => saveSlotSettings(configIndex, opts)}
           onCancel={() => setConfigIndex(null)}
+          aiContent={aiContent}
+          aiEnabled={aiEnabled}
+          onGenerateContent={onGenerateContent}
         />
       )
     }

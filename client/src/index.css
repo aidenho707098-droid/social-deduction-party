@@ -4395,3 +4395,71 @@ img.emoji {
   color: var(--ink);
   text-align: center;
 }
+
+/* ============================================================
+   AI "Custom Category / Theme / Topic" — shared setup-screen widget
+   (Imposter, Crack the Code, Fact or Fake, Taboo, Fake Artist)
+   ============================================================ */
+
+/* The headline custom option: full-width row of its own, filled with the
+   brand violet so it reads as the standout choice against the outlined
+   built-in pills. The doubled selector keeps it full-width both inside a
+   .pill-group-wrap (Imposter's radio row) and standalone (the multi-select
+   games render it below their toggle grid); the higher-specificity form
+   also beats the .pill:nth-child(even) radius flip. */
+.pill.pill-custom-feature,
+.pill-group-wrap .pill.pill-custom-feature {
+  display: block;
+  flex: 1 1 100%;
+  width: 100%;
+  margin-top: 4px;
+  padding: 18px 16px;
+  font-size: 18px;
+  font-weight: 700;
+  border-radius: var(--r-md-alt);
+  border: 2px solid var(--violet);
+  background: var(--violet);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.pill.pill-custom-feature.pill-active,
+.pill-group-wrap .pill.pill-custom-feature.pill-active {
+  border-color: var(--violet-ink);
+  background: var(--violet-ink);
+  color: #fff;
+}
+
+.pill.pill-custom-feature:disabled {
+  opacity: 0.55;
+}
+
+.ai-custom {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The "Generate" button sits inline next to the text box, so it opts out
+   of the full-width .btn display. */
+.ai-custom .btn.ai-custom-go {
+  display: inline-block;
+  width: auto;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding-inline: 18px;
+}
+
+.ai-custom .btn.ai-custom-go:disabled {
+  opacity: 0.5;
+}
+
+/* Small inline "Retry" after an error message. */
+.ai-custom .btn.ai-custom-retry {
+  display: inline;
+  width: auto;
+  padding: 0 0 0 6px;
+  font-weight: 700;
+  text-decoration: underline;
+}

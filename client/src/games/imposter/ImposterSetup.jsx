@@ -1,9 +1,23 @@
 import { useState } from 'react'
 import { CATEGORY_NAMES, RANDOM_CATEGORY } from './words'
 import HowToPlay from '../HowToPlay'
+import AiCustomOption from '../AiCustomOption'
 
-export default function ImposterSetup({ gameId, playerCount, saved, onStart, onCancel, error, submitLabel }) {
+export default function ImposterSetup({
+  gameId,
+  playerCount,
+  saved,
+  onStart,
+  onCancel,
+  error,
+  submitLabel,
+  // Shared AI custom-content wiring (see Lobby `aiProps`).
+  aiContent = {},
+  aiEnabled = false,
+  onGenerateContent,
+}) {
   const canUseTwoImposters = playerCount >= 4
+  const customCategories = aiContent[gameId] ?? [] // names generated this session
 
   // Pre-fill from the host's last settings for this game this room. Clamp
   // "2 imposters" back to 1 if there aren't enough players for it now.
@@ -11,10 +25,12 @@ export default function ImposterSetup({ gameId, playerCount, saved, onStart, onC
     const wanted = [1, 2].includes(saved?.imposterCount) ? saved.imposterCount : 1
     return wanted === 2 && !canUseTwoImposters ? 1 : wanted
   })
+
+  const validCategory = (name) =>
+    [...CATEGORY_NAMES, ...customCategories, RANDOM_CATEGORY].includes(name)
+
   const [category, setCategory] = useState(() =>
-    [...CATEGORY_NAMES, RANDOM_CATEGORY].includes(saved?.category)
-      ? saved.category
-      : CATEGORY_NAMES[0],
+    validCategory(saved?.category) ? saved.category : CATEGORY_NAMES[0],
   )
 
   return (
@@ -62,6 +78,16 @@ export default function ImposterSetup({ gameId, playerCount, saved, onStart, onC
               {name}
             </button>
           ))}
+          {customCategories.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className={`pill ${category === name ? 'pill-active' : ''}`}
+              onClick={() => setCategory(name)}
+            >
+              {name}
+            </button>
+          ))}
           <button
             type="button"
             className={`pill ${category === RANDOM_CATEGORY ? 'pill-active' : ''}`}
@@ -70,14 +96,29 @@ export default function ImposterSetup({ gameId, playerCount, saved, onStart, onC
             🎲 Random Category
           </button>
         </div>
+
         {category === RANDOM_CATEGORY && (
           <p className="hint">The app will pick a category at random when the round starts.</p>
+        )}
+
+        {aiEnabled && (
+          <AiCustomOption
+            label="Custom Category"
+            placeholder="Kitchen Utensils"
+            noun="word list"
+            hint="Name any category (e.g. “Kitchen Utensils”, “90s Cartoons”). The app generates a word list for it and keeps it in this room for the rest of the session."
+            onGenerate={(name, cb) => onGenerateContent(gameId, name, cb)}
+            onGenerated={(name) => setCategory(name)}
+          />
         )}
       </div>
 
       {error && <p className="error">{error}</p>}
 
-      <button className="btn btn-start" onClick={() => onStart({ imposterCount, category })}>
+      <button
+        className="btn btn-start"
+        onClick={() => onStart({ imposterCount, category })}
+      >
         {submitLabel ?? 'Start Round'}
       </button>
       <button className="btn btn-text" onClick={onCancel}>

@@ -16,9 +16,12 @@ import {
   deleteRoom,
   startGame as startGameOnRoom,
   endGame,
+  addAiContent,
+  aiContentFor,
   REJOIN_GRACE_MS,
 } from "./rooms.js";
 import { getLanIp } from "./network.js";
+import { AI_GENERATORS, aiContentAvailable, hostFacingAiError } from "./aiContent.js";
 import { GAMES } from "./games/registry.js";
 import {
   chaosTick,
@@ -85,6 +88,24 @@ function isRoundWitch(room, socket) {
   return room.game?.witchId != null && room.game.witchId === playerIdOf(socket);
 }
 
+// Which createGame() option each game reads its AI custom batches from.
+// The game module resolves the host's actual selection out of this list.
+const AI_CREATEGAME_KEY = {
+  imposter: "customCategories",
+  "emoji-movie": "customThemes",
+  fibbage: "customTopics",
+  taboo: "customCategories",
+  "fake-artist": "customThemes",
+};
+
+// Extra createGame() options carrying this room's AI custom content for
+// `gameId` (or {} for a game with no AI content). Used by every code path
+// that starts a game — the standalone start and both tournament paths.
+function aiCreateGameExtras(gameId, room) {
+  const key = AI_CREATEGAME_KEY[gameId];
+  return key ? { [key]: aiContentFor(room, gameId) } : {};
+}
+
 // The players a running game should actively wait on / advance through —
 // everyone in the room who's currently connected. A player who's
 // disconnected (but still inside their rejoin grace window) keeps their
@@ -106,6 +127,17 @@ function buildPublicRoom(room) {
     // Last host-configured options per game this session, so the setup
     // screen can pre-fill instead of resetting to defaults on replay.
     gameSettings: room.gameSettings ?? {},
+    // AI custom content: per game, the NAMES the host has generated this
+    // session (the batches themselves stay server-side — clients only need
+    // to show/select names). Plus whether the server can generate more at
+    // all, so the client hides the option when there's no API key.
+    aiContent: Object.fromEntries(
+      Object.entries(room.aiContent ?? {}).map(([gid, list]) => [
+        gid,
+        list.map((c) => c.name),
+      ]),
+    ),
+    aiContentEnabled: aiContentAvailable(),
     // Chaos Events layer: the host's frequency dial + any live event.
     chaos: chaosPublicSlice(room),
   };
@@ -442,6 +474,10 @@ function startTournamentGameNow(room, gameId) {
       ...(room.gameSettings?.[gameId] ?? {}),
       ...hostOptions,
       memory: room.itemMemory?.[gameId],
+      // So a tournament round can resolve an AI custom category / theme /
+      // topic the host picked in the lineup / "up next" config (same as
+      // the standalone start_game path below).
+      ...aiCreateGameExtras(gameId, room),
     });
   } catch (err) {
     console.warn(`Tournament: skipping ${gameId} — ${err.message}`);
@@ -575,6 +611,9 @@ io.on("connection", (socket) => {
       game = gameModule.createGame(playerIds, {
         ...(options ?? {}),
         memory: room.itemMemory?.[gameId],
+        // The game reads this to resolve an AI custom category / theme /
+        // topic the host picked; {} for games with no AI content.
+        ...aiCreateGameExtras(gameId, room),
       });
     } catch (err) {
       return callback?.({ error: err.message });
@@ -702,6 +741,53 @@ io.on("connection", (socket) => {
     syncBlackMagicTicker(room);
     syncTabooTicker(room);
     syncFakeArtistTicker(room);
+  });
+
+  // --- AI custom content ------------------------------------------------
+  // ONE event for every game's "Custom Category / Theme / Topic" option on
+  // its setup screen. Calls OpenAI (see aiContent.js) to fill a batch, then
+  // stashes it on the ROOM so it's a normal, re-selectable option for the
+  // rest of the session — no second API call. This is the only game action
+  // that does async I/O; it acks through the callback with { ok, name } or
+  // a plain-language { error } the setup screen shows inline (retry, or
+  // fall back to built-in content). Nothing here can wedge a game.
+  socket.on("ai_generate_content", async ({ code, gameId, name }, cb) => {
+    const room = getRoom(code);
+    if (!room) return cb?.({ error: "Room not found." });
+    if (!isRoomHost(room, socket)) {
+      return cb?.({ error: "Only the host can add custom content." });
+    }
+    const spec = AI_GENERATORS[gameId];
+    if (!spec) return cb?.({ error: "That game doesn't support custom content." });
+
+    const raw = (name ?? "").trim();
+    if (raw.length < 2 || raw.length > 40) {
+      return cb?.({ error: "Give it a name (2–40 characters)." });
+    }
+    // Don't shadow a built-in category/theme name; a same-name re-generate
+    // of an existing custom batch is fine (addAiContent replaces it).
+    const reserved = GAMES[gameId]?.AI_CONTENT_RESERVED ?? [];
+    if (reserved.some((n) => n.toLowerCase() === raw.toLowerCase())) {
+      return cb?.({ error: `"${raw}" is already a built-in option.` });
+    }
+
+    let result;
+    try {
+      result = await spec.generate(raw);
+    } catch (err) {
+      console.warn(
+        `[ai-content] room ${code} ${gameId} — "${raw}" failed (${err.code ?? "?"}): ${err.message}`,
+      );
+      return cb?.({ error: hostFacingAiError(err, spec.fallbackNoun) });
+    }
+
+    const added = addAiContent(room, gameId, result);
+    if (added.error) return cb?.({ error: added.error });
+
+    // Broadcast first so the host's setup screen already has the new option
+    // in room.aiContent by the time the ack callback (which selects it) runs.
+    broadcastRoom(room.code);
+    cb?.({ ok: true, name: result.name });
   });
 
   // --- Imposter-specific actions -------------------------------------

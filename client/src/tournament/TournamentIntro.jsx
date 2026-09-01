@@ -11,7 +11,18 @@ import { describeGameOptions } from '../games/gameSettingsSummary'
 // Random mode: the game was only just revealed by the wheel, so the host
 // configures its settings here before starting (pre-filled from the room's
 // last-used settings). Manual mode settings were fixed at lineup time.
-export default function TournamentIntro({ t, isHost, playerCount, savedByGame = {}, onStart }) {
+export default function TournamentIntro({
+  t,
+  isHost,
+  playerCount,
+  savedByGame = {},
+  onStart,
+  // Forwarded to the revealed game's own Setup UI so its AI "Custom
+  // Category / Theme / Topic" option is available on this screen too.
+  aiContent = {},
+  aiEnabled = false,
+  onGenerateContent,
+}) {
   const gameId = t.pendingGame?.id
   const game = getGame(gameId)
   const accent = accentName(gameId ?? '')
@@ -42,6 +53,9 @@ export default function TournamentIntro({ t, isHost, playerCount, savedByGame = 
           setConfiguring(false)
         }}
         onCancel={() => setConfiguring(false)}
+        aiContent={aiContent}
+        aiEnabled={aiEnabled}
+        onGenerateContent={onGenerateContent}
       />
     )
   }

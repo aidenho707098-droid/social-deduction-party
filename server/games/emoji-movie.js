@@ -451,6 +451,12 @@ export const CATEGORIES = [
 ];
 const CATEGORY_NAME = Object.fromEntries(CATEGORIES.map((c) => [c.key, c.name]));
 
+// Built-in category keys + display names an AI "Custom Theme" can't shadow.
+export const AI_CONTENT_RESERVED = [
+  ...CATEGORIES.map((c) => c.name),
+  ...CATEGORIES.map((c) => c.key),
+];
+
 export const id = "emoji-movie";
 export const name = "Crack the Code";
 export const minPlayers = 2;
@@ -554,7 +560,7 @@ function pointsFor(elapsedMs, revealedAtGuess, entry) {
 // keys on category+title so a second game keeps going through the pool.
 // If the filtered pool has fewer entries than the requested round count,
 // the game just runs fewer rounds.
-export function createGame(playerIds, { rounds, difficulty, categories, memory }) {
+export function createGame(playerIds, { rounds, difficulty, categories, memory, customThemes = [] }) {
   const requested = Number(rounds);
   if (!Number.isInteger(requested) || requested < 1) {
     throw new Error("Choose how many rounds to play.");
@@ -565,8 +571,17 @@ export function createGame(playerIds, { rounds, difficulty, categories, memory }
     throw new Error("Choose a difficulty.");
   }
 
+  // Built-in banks + this room's AI custom themes, keyed the same way. A
+  // custom theme name IS its key (as it appears in `categories`).
+  const banks = { ...BANKS };
+  for (const theme of customThemes) {
+    if (theme?.name && Array.isArray(theme.entries) && theme.entries.length) {
+      banks[theme.name] = theme.entries;
+    }
+  }
+
   const catKeys = (Array.isArray(categories) ? categories : ["movies"]).filter(
-    (c) => c in BANKS
+    (c) => c in banks
   );
   if (catKeys.length === 0) {
     throw new Error("Pick at least one category.");
@@ -574,7 +589,7 @@ export function createGame(playerIds, { rounds, difficulty, categories, memory }
 
   const pool = [];
   for (const cat of catKeys) {
-    const bank = mode === "mixed" ? BANKS[cat] : BANKS[cat].filter((e) => e.difficulty === mode);
+    const bank = mode === "mixed" ? banks[cat] : banks[cat].filter((e) => e.difficulty === mode);
     for (const entry of bank) pool.push({ ...entry, category: cat });
   }
   if (pool.length === 0) {

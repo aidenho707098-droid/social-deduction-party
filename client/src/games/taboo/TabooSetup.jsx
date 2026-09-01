@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
 import NumberStepper from '../NumberStepper'
+import AiCustomOption from '../AiCustomOption'
 import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
 
 // Keep in sync with CATEGORIES in server/games/tabooWords.js.
@@ -15,11 +16,24 @@ const CATEGORY_OPTIONS = [
 const RANDOM = 'random'
 const ALL_KEYS = CATEGORY_OPTIONS.map((c) => c.key)
 
-export default function TabooSetup({ gameId, playerCount, saved, onStart, onCancel, error, submitLabel }) {
+export default function TabooSetup({
+  gameId,
+  playerCount,
+  saved,
+  onStart,
+  onCancel,
+  error,
+  submitLabel,
+  aiContent = {},
+  aiEnabled = false,
+  onGenerateContent,
+}) {
+  const customCategories = aiContent[gameId] ?? [] // AI category names this session
   const savedCats = Array.isArray(saved?.categories) ? saved.categories : []
   const [randomEach, setRandomEach] = useState(() => savedCats.includes(RANDOM))
   const [categories, setCategories] = useState(() => {
-    const fromSaved = savedCats.filter((k) => ALL_KEYS.includes(k))
+    const valid = new Set([...ALL_KEYS, ...customCategories])
+    const fromSaved = savedCats.filter((k) => valid.has(k))
     return fromSaved.length ? fromSaved : ALL_KEYS
   })
   const [rounds, setRounds] = useState(() => clampRounds(saved?.rounds ?? ROUND_DEFAULT))
@@ -79,12 +93,38 @@ export default function TabooSetup({ gameId, playerCount, saved, onStart, onCanc
               {opt.label}
             </button>
           ))}
+          {customCategories.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className={`pill ${
+                !randomEach && categories.includes(name) ? 'pill-active' : ''
+              }`}
+              onClick={() => !randomEach && toggleCategory(name)}
+              disabled={randomEach}
+            >
+              {name}
+            </button>
+          ))}
         </div>
         <p className="hint hint-block">
           {randomEach
-            ? 'Every round pulls a fresh random category from all six.'
+            ? 'Every round pulls a fresh random category from all of them.'
             : 'Rounds are drawn from the categories you turn on, no repeats.'}
         </p>
+        {aiEnabled && (
+          <AiCustomOption
+            label="Custom Category"
+            placeholder="Kitchen Utensils"
+            noun="card set"
+            hint="Name a category. The app builds a batch of secret words (each with its own forbidden-word list) and keeps it in this room for the session."
+            onGenerate={(name, cb) => onGenerateContent(gameId, name, cb)}
+            onGenerated={(name) => {
+              setRandomEach(false)
+              setCategories((prev) => (prev.includes(name) ? prev : [...prev, name]))
+            }}
+          />
+        )}
       </div>
 
       <NumberStepper

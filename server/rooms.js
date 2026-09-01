@@ -106,6 +106,13 @@ export function createRoom(hostSocketId, hostName) {
     tournament: null, // set by the tournament layer (see server/tournament.js)
     itemMemory: {}, // gameId -> { seen: string[] }; session no-repeat memory
     gameSettings: {}, // gameId -> last host-configured options this session
+    // AI-generated custom content, per game: gameId -> [{ name, ...batch }].
+    // Host-typed names the server filled in via the OpenAI API (Imposter
+    // categories, Crack the Code themes, Fact or Fake topics, Taboo
+    // categories, Fake Artist themes). Lives only here, for the room's
+    // lifetime — selectable like built-in content for the rest of the
+    // session, gone when the room is cleaned up. No DB.
+    aiContent: {},
     chaosFrequency: "off", // app-wide Chaos Events dial; persists for the room
     chaos: null, // current round's chaos record (see chaosRuntime.js)
     chaosCarry: null, // Player Disable effect owed to a future round
@@ -286,6 +293,35 @@ export function setPlayerColor(code, playerId, colorId) {
   }
   player.color = colorId;
   return { room };
+}
+
+// Add (or replace, if the host re-generates the same name) an AI-built
+// content batch for `gameId` on the room. `batch` is { name, ...payload }.
+// Case-insensitive on the name so "ancient rome" and "Ancient Rome" don't
+// both appear. Capped per game so a host can't grow room memory without
+// bound over a long session.
+const MAX_AI_BATCHES_PER_GAME = 20;
+
+export function addAiContent(room, gameId, batch) {
+  if (!room) return { error: "Room not found." };
+  const list = (room.aiContent[gameId] ??= []);
+  const key = batch.name.toLowerCase();
+  const existingIndex = list.findIndex((c) => c.name.toLowerCase() === key);
+  if (existingIndex !== -1) {
+    list[existingIndex] = batch;
+    return { room, name: batch.name };
+  }
+  if (list.length >= MAX_AI_BATCHES_PER_GAME) {
+    return { error: "This room already has the maximum number of custom sets for this game." };
+  }
+  list.push(batch);
+  return { room, name: batch.name };
+}
+
+// The custom batches for one game, or [] — safe read used by index.js when
+// building createGame options and the public room view.
+export function aiContentFor(room, gameId) {
+  return room?.aiContent?.[gameId] ?? [];
 }
 
 export function toPublicRoom(room) {

@@ -22,6 +22,9 @@ export const id = "fake-artist";
 export const name = "Fake Artist";
 export const minPlayers = 3;
 
+// Built-in category names an AI "Custom Theme" can't shadow.
+export const AI_CONTENT_RESERVED = [...CATEGORY_NAMES];
+
 const TURN_MS = 25_000; // per player's drawing turn
 const VOTE_MS = 45_000;
 const GUESS_MS = 30_000; // the Fake Artist's one word-guess after the reveal
@@ -109,7 +112,7 @@ function setupRound(game, roundIndex, present) {
 
 // ---- lifecycle ----
 
-export function createGame(playerIds, { rounds, categories, memory } = {}) {
+export function createGame(playerIds, { rounds, categories, memory, customThemes = [] } = {}) {
   const requested = Number(rounds);
   if (!Number.isInteger(requested) || requested < 1) {
     throw new Error("Choose how many rounds to play.");
@@ -118,15 +121,29 @@ export function createGame(playerIds, { rounds, categories, memory } = {}) {
     throw new Error(`Fake Artist needs at least ${minPlayers} players.`);
   }
 
+  // This room's AI custom themes: each is { name, entries:[{ word, category }] }
+  // where `category` is a per-word general hint (what the Fake Artist sees).
+  // Unlike a built-in category, the theme name is never surfaced — only the
+  // per-word hint is, exactly like a built-in category name would be.
+  const themeEntries = {};
+  for (const t of customThemes) {
+    if (t?.name && Array.isArray(t.entries) && t.entries.length) {
+      themeEntries[t.name] = t.entries;
+    }
+  }
+  const allKeys = [...CATEGORY_NAMES, ...Object.keys(themeEntries)];
+
   const asked = Array.isArray(categories) ? categories : [];
   const randomMode = asked.includes(RANDOM_CATEGORY) || asked.length === 0;
   let catKeys = randomMode
-    ? [...CATEGORY_NAMES]
-    : asked.filter((c) => c in CATEGORIES);
-  if (catKeys.length === 0) catKeys = [...CATEGORY_NAMES];
+    ? allKeys
+    : asked.filter((c) => c in CATEGORIES || c in themeEntries);
+  if (catKeys.length === 0) catKeys = allKeys;
 
   const pool = catKeys.flatMap((c) =>
-    CATEGORIES[c].map((word) => ({ word, category: c }))
+    c in CATEGORIES
+      ? CATEGORIES[c].map((word) => ({ word, category: c }))
+      : themeEntries[c].map((e) => ({ word: e.word, category: e.category })),
   );
   const { items, seenKeys } = drawWithoutRepeats(
     pool,
