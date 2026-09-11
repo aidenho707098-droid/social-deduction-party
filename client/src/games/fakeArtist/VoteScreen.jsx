@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { PlayerDot } from '../../PlayerDot'
 import { playerColorMap } from '../../playerColors'
+import { VotedIndicator } from '../../VotedIndicator'
 import { useSound } from '../../sound/SoundContext'
 import SharedCanvas from './SharedCanvas'
+import TurnAttribution from './TurnAttribution'
 
 // One vote each, never yourself — same shape as the Imposter vote.
 export default function VoteScreen({ game, players, myId, myRole, onVote }) {
@@ -30,6 +32,8 @@ export default function VoteScreen({ game, players, myId, myRole, onVote }) {
       </p>
 
       <SharedCanvas src={game.canvas} />
+      <TurnAttribution game={game} players={players} myId={myId} />
+      <VotedIndicator players={players} votedPlayerIds={votedIds} myId={myId} />
 
       <ul className="player-list">
         {candidates.map((id) => {

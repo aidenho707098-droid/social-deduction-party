@@ -26,8 +26,8 @@ export const minPlayers = 3;
 export const AI_CONTENT_RESERVED = [...CATEGORY_NAMES];
 
 const TURN_MS = 25_000; // per player's drawing turn
-const VOTE_MS = 45_000;
-const GUESS_MS = 30_000; // the Fake Artist's one word-guess after the reveal
+const VOTE_MS = 40_500; // ~10% snappier than the original 45s
+const GUESS_MS = 27_000; // the Fake Artist's one word-guess after the reveal — ~10% snappier than the original 30s
 const LATE_GRACE_MS = 2_000;
 
 const DETECTIVE_POINTS = 2; // for a non-imposter who voted the actual imposter
@@ -455,10 +455,15 @@ export function getPublicState(game, presentPlayerIds) {
 
   if (game.phase === "reveal" && game.lastResult) {
     const r = game.lastResult;
+    // Withhold the real word from everyone (imposter included) until their
+    // guess is locked in or skipped — otherwise it's printed right above
+    // the imposter's own guess box, letting them just copy it back in for
+    // a free bonus point instead of genuinely guessing.
+    const guessResolved = game.imposterGuess !== null;
     state.result = {
       roundIndex: r.roundIndex,
       imposterId: r.imposterId,
-      word: r.word,
+      word: guessResolved ? r.word : null,
       category: r.category,
       counts: r.counts,
       caught: r.caught,

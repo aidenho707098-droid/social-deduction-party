@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import FactPrompt from './FactPrompt'
 import PersonalQuestion from './PersonalQuestion'
 import { playerColorMap } from '../../playerColors'
+import { VotedIndicator } from '../../VotedIndicator'
 import { useSound } from '../../sound/SoundContext'
 
 export default function VoteAnswer({ game, players = [], myId, myRole, isHost, onVote, onForceReveal }) {
@@ -54,6 +55,7 @@ export default function VoteAnswer({ game, players = [], myId, myRole, isHost, o
   const pct = Math.max(0, Math.min(100, (seconds / totalSeconds) * 100))
   const votedCount = game.votedPlayerIds?.length ?? 0
   const options = game.options ?? []
+  const voters = personal ? players.filter((p) => p.id !== game.subjectId) : players
 
   function vote(optionId) {
     if (optionId === myOptionId) {
@@ -97,6 +99,9 @@ export default function VoteAnswer({ game, players = [], myId, myRole, isHost, o
       </p>
 
       {timerBlock}
+      {!iAmSubject && (
+        <VotedIndicator players={voters} votedPlayerIds={game.votedPlayerIds} myId={myId} />
+      )}
 
       {personal ? (
         <PersonalQuestion

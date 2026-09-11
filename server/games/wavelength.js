@@ -28,7 +28,7 @@ export const minPlayers = 3;
 // Each Clue-Giver's own per-clue writing window (all run in parallel), and
 // the shared guessing window for each round.
 const WRITE_MS = 60_000;
-const GUESS_MS = 30_000;
+const GUESS_MS = 27_000; // ~10% snappier than the original 30s
 const LATE_GRACE_MS = 2_000;
 
 function randInt(min, max) {

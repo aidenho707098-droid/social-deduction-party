@@ -327,13 +327,13 @@ const PERSONAL_MIN_PLAYERS = 3
 // Time to write a fake answer, and time to vote. The client shows a
 // countdown seeded from `msLeft`; when it hits zero the host's device asks
 // the server to advance. The host can also advance early.
-const WRITE_MS = 45_000
-const VOTE_MS = 30_000
+const WRITE_MS = 40_500 // ~10% snappier than the original 45s
+const VOTE_MS = 27_000 // ~10% snappier than the original 30s
 
 // Personal mode "truth" phase, per player, per prompt: time to pick which
 // of the two offered prompts to answer, then time to write the answer.
-const CHOOSE_MS = 25_000
-const TRUTH_MS = 45_000
+const CHOOSE_MS = 22_500 // ~10% snappier than the original 25s
+const TRUTH_MS = 40_500 // ~10% snappier than the original 45s
 
 // Scoring.
 const TRUTH_POINTS = 2 // voted for (or wrote) the real answer

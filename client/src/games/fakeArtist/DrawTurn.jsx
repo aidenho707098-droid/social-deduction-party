@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { PlayerDot } from '../../PlayerDot'
 import { playerColorMap } from '../../playerColors'
 import { useSound } from '../../sound/SoundContext'
-import { HOST_GRACE_SECONDS } from '../timing'
 import SharedCanvas from './SharedCanvas'
 import { DRAW_W, DRAW_H, INK_LIMIT, inkFraction, inkExhausted, clampMove } from './inkModel'
 
@@ -12,6 +11,13 @@ const WIDTHS = [
   { key: 'M', px: 5 },
   { key: 'L', px: 8 },
 ]
+
+const ZOOM_MIN = 1
+const ZOOM_MAX = 2.5
+const ZOOM_STEP = 0.25
+
+const ptDist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
+const midpoint = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
 
 function RoleReminder({ myRole }) {
   const fa = myRole?.fakeArtist
@@ -40,12 +46,10 @@ export default function DrawTurn({ game, players, myId, myRole, isHost, onSubmit
   // --- turn clock (mirrors the server, ticked locally between pushes) ---
   const [msLeft, setMsLeft] = useState(game.msLeft ?? game.turnMs)
   const firedTimeout = useRef(false)
-  const firedReveal = useRef(false)
 
   useEffect(() => {
     setMsLeft(game.msLeft ?? game.turnMs)
     firedTimeout.current = false
-    firedReveal.current = false
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.currentDrawerId, game.roundIndex])
 
@@ -70,6 +74,12 @@ export default function DrawTurn({ game, players, myId, myRole, isHost, onSubmit
   const [tool, setTool] = useState({ color: PALETTE[0], px: WIDTHS[1].px })
   const [submitted, setSubmitted] = useState(false)
 
+  // --- zoom / pan (precision drawing on small screens) ---
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const pointersRef = useRef(new Map()) // pointerId -> last {x, y} in client coords
+  const pinchRef = useRef(null) // { startDist, startZoom, startPan, startMid }
+
   const strokes = strokesRef.current
   const frac = inkFraction(strokes, INK_LIMIT)
   const noInk = inkExhausted(strokes, INK_LIMIT)
@@ -81,6 +91,10 @@ export default function DrawTurn({ game, players, myId, myRole, isHost, onSubmit
     drawingRef.current = false
     lastPtRef.current = null
     setSubmitted(false)
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
+    pointersRef.current.clear()
+    pinchRef.current = null
     setRev((r) => r + 1)
   }, [game.currentDrawerId, game.roundIndex])
 
@@ -147,6 +161,23 @@ export default function DrawTurn({ game, players, myId, myRole, isHost, onSubmit
   function onPointerDown(e) {
     if (locked) return
     e.currentTarget.setPointerCapture?.(e.pointerId)
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+    // A second finger landing means pinch-to-zoom/pan, not a stroke — undo
+    // the single-point stroke the first finger may have just started.
+    if (pointersRef.current.size === 2) {
+      if (drawingRef.current) {
+        strokesRef.current.pop()
+        drawingRef.current = false
+        lastPtRef.current = null
+      }
+      const [a, b] = [...pointersRef.current.values()]
+      pinchRef.current = { startDist: ptDist(a, b), startZoom: zoom, startPan: pan, startMid: midpoint(a, b) }
+      setRev((r) => r + 1)
+      return
+    }
+    if (pointersRef.current.size > 2) return // ignore a third finger
+
     const p = toLogical(e)
     drawingRef.current = true
     lastPtRef.current = p
@@ -154,6 +185,18 @@ export default function DrawTurn({ game, players, myId, myRole, isHost, onSubmit
     setRev((r) => r + 1)
   }
   function onPointerMove(e) {
+    if (pointersRef.current.has(e.pointerId)) {
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    }
+    if (pinchRef.current && pointersRef.current.size === 2) {
+      const [a, b] = [...pointersRef.current.values()]
+      const { startDist, startZoom, startPan, startMid } = pinchRef.current
+      const nextZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, startZoom * (ptDist(a, b) / Math.max(1, startDist))))
+      const mid = midpoint(a, b)
+      setZoom(nextZoom)
+      setPan({ x: startPan.x + (mid.x - startMid.x), y: startPan.y + (mid.y - startMid.y) })
+      return
+    }
     if (!drawingRef.current) return
     const to = toLogical(e)
     const from = lastPtRef.current
@@ -167,7 +210,9 @@ export default function DrawTurn({ game, players, myId, myRole, isHost, onSubmit
     }
     setRev((r) => r + 1)
   }
-  function endStroke() {
+  function endStroke(e) {
+    if (e?.pointerId != null) pointersRef.current.delete(e.pointerId)
+    if (pointersRef.current.size < 2) pinchRef.current = null
     drawingRef.current = false
     setRev((r) => r + 1)
   }
@@ -175,6 +220,13 @@ export default function DrawTurn({ game, players, myId, myRole, isHost, onSubmit
     if (locked || !strokesRef.current.length) return
     strokesRef.current.pop()
     setRev((r) => r + 1)
+  }
+  function zoomBy(delta) {
+    setZoom((z) => Math.round(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z + delta)) * 100) / 100)
+  }
+  function zoomReset() {
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
   }
 
   const compose = useCallback(async () => {
@@ -212,14 +264,6 @@ export default function DrawTurn({ game, players, myId, myRole, isHost, onSubmit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amDrawing, timeUp, submitted])
 
-  // the host's device nudges the server on if a turn overruns its grace
-  useEffect(() => {
-    if (!isHost || amDrawing || !timeUp || firedReveal.current) return
-    firedReveal.current = true
-    const t = setTimeout(onForceAdvance, HOST_GRACE_SECONDS * 1000)
-    return () => clearTimeout(t)
-  }, [isHost, amDrawing, timeUp, onForceAdvance])
-
   const pct = Math.max(0, Math.min(100, (msLeft / Math.max(1, game.turnMs)) * 100))
 
   const header = (
@@ -254,19 +298,46 @@ export default function DrawTurn({ game, players, myId, myRole, isHost, onSubmit
           </div>
         </div>
 
-        <div className="fa-canvas-frame fa-canvas-live" style={{ aspectRatio: `${DRAW_W} / ${DRAW_H}` }}>
-          <canvas
-            ref={canvasRef}
-            width={DRAW_W}
-            height={DRAW_H}
-            className={`fa-canvas-el ${locked ? 'fa-canvas-locked' : ''}`}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={endStroke}
-            onPointerCancel={endStroke}
-            onPointerLeave={endStroke}
-          />
+        <div className="fa-canvas-zoom-wrap" style={{ aspectRatio: `${DRAW_W} / ${DRAW_H}` }}>
+          <div
+            className="fa-canvas-zoom-inner"
+            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
+          >
+            <canvas
+              ref={canvasRef}
+              width={DRAW_W}
+              height={DRAW_H}
+              className={`fa-canvas-el ${locked ? 'fa-canvas-locked' : ''}`}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={endStroke}
+              onPointerCancel={endStroke}
+              onPointerLeave={endStroke}
+            />
+          </div>
           {noInk && !submitted && <div className="fa-canvas-note">Out of ink — that's your turn</div>}
+        </div>
+
+        <div className="fa-zoom-controls">
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={zoom <= ZOOM_MIN}
+            onClick={() => zoomBy(-ZOOM_STEP)}
+          >
+            −
+          </button>
+          <button type="button" className="btn btn-secondary btn-sm fa-zoom-reset" onClick={zoomReset}>
+            🔍 {Math.round(zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={zoom >= ZOOM_MAX}
+            onClick={() => zoomBy(ZOOM_STEP)}
+          >
+            +
+          </button>
         </div>
 
         <div className="fa-toolbar">

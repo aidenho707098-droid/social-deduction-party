@@ -229,5 +229,45 @@ check("categories reuse Imposter-style labels", CATEGORY_NAMES.includes("Animals
   check("imposter's hint category matches the round", impView.fakeArtist.category === g.entries[0].category);
 }
 
+// --- public reveal state withholds the word until the guess is in ---
+{
+  const g = fa.createGame(IDS, { rounds: 1, categories: ["Animals"] });
+  const imp = g.imposterByRound[0];
+  fa.startDrawing(g);
+  while (g.phase === "draw") fa.submitDrawing(g, g.turnOrder[g.currentTurn], PNG, present());
+  fa.startVoting(g);
+  for (const v of IDS) if (v !== imp) fa.submitVote(g, v, imp, present());
+  fa.submitVote(g, imp, IDS.find((i) => i !== imp), present());
+  check("reveal phase reached", g.phase === "reveal");
+  const beforeGuess = fa.getPublicState(g, present());
+  check(
+    "word hidden from public state while the imposter's guess is pending",
+    beforeGuess.result.guessPending === true && beforeGuess.result.word == null
+  );
+  fa.submitImposterGuess(g, imp, "not the word at all");
+  const afterGuess = fa.getPublicState(g, present());
+  check(
+    "word revealed in public state once the guess is resolved",
+    afterGuess.result.guessPending === false && afterGuess.result.word === g.entries[0].word
+  );
+}
+
+// --- a timeout advances the turn exactly once (no double-skip) -----
+{
+  const g = fa.createGame(IDS, { rounds: 1, categories: ["Nature"] });
+  fa.startDrawing(g);
+  const drawer0 = g.turnOrder[0];
+  g.turnDeadline = Date.now() - 5000; // pretend the clock ran out
+  check("first tickTurn advances exactly one turn", fa.tickTurn(g, present()) === true && g.currentTurn === 1);
+  // A second, redundant timeout signal for the same lapsed deadline (e.g. a
+  // racing host-forced-advance) must be a no-op now that the deadline has
+  // been renewed for the new current drawer — it must NOT skip turn 2 too.
+  check(
+    "a second tickTurn right after does not skip an extra player",
+    fa.tickTurn(g, present()) === false && g.currentTurn === 1
+  );
+  check("still the correct next drawer, not skipped past", g.turnOrder[g.currentTurn] === g.turnOrder[1]);
+}
+
 console.log(`\n${failures === 0 ? "ALL FAKE ARTIST CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 process.exit(failures === 0 ? 0 : 1);

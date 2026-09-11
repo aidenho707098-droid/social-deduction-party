@@ -411,6 +411,34 @@ img.emoji {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
 }
 
+/* cross-game "who's voted" strip — see VotedIndicator.jsx */
+.voted-indicator {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+.voted-chip {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+}
+.voted-chip-done {
+  color: var(--violet-ink);
+  border-color: var(--violet);
+  background: var(--violet-tint);
+}
+.voted-chip-check {
+  margin-left: 6px;
+  font-weight: 800;
+}
+
 .player-away-tag {
   margin-left: auto;
   font-size: 11px;
@@ -4238,9 +4266,6 @@ img.emoji {
   font-size: 13px;
   font-style: italic;
 }
-.fa-canvas-live {
-  touch-action: none;
-}
 .fa-canvas-el {
   cursor: crosshair;
   touch-action: none;
@@ -4260,6 +4285,35 @@ img.emoji {
   padding: 4px 10px;
   border-radius: 999px;
   box-shadow: var(--shadow-sm);
+}
+
+/* zoomable/pannable live drawing surface — pinch (or the +/- controls) lets
+   a player scale the canvas up for more precise touches on a small screen.
+   The wrap is the fixed on-page viewport; the inner layer is what actually
+   scales/translates, clipped by the wrap so it never disturbs page layout. */
+.fa-canvas-zoom-wrap {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--r-sm);
+  border: 2px solid var(--border-2);
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  touch-action: none;
+}
+.fa-canvas-zoom-inner {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+.fa-zoom-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.fa-zoom-reset {
+  min-width: 68px;
 }
 
 /* role reminder strip during a turn */
@@ -4361,6 +4415,38 @@ img.emoji {
   font-weight: 800;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* numbered turn-order legend — which layer of the drawing is whose */
+.fa-attribution {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.fa-attribution-chip {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px 4px 6px;
+}
+.fa-attribution-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  font-size: 10px;
+  font-weight: 800;
   color: var(--muted);
 }
 

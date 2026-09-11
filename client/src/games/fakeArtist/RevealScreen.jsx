@@ -46,7 +46,13 @@ export default function RevealScreen({
       <SharedCanvas src={game.canvas} />
 
       <p className="emoji-answer-title">
-        The word was: <strong>{r.word}</strong>
+        {r.word ? (
+          <>
+            The word was: <strong>{r.word}</strong>
+          </>
+        ) : (
+          <>Word hidden until the guess is in…</>
+        )}
         <span className="emoji-cat">{r.category}</span>
       </p>
 

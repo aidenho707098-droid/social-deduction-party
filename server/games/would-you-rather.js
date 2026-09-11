@@ -277,12 +277,12 @@ const CUSTOM_MIN_PLAYERS = 3;
 // How long players get to answer each poll round (both modes). The client
 // shows a countdown seeded from `msLeft`; at zero the host's device asks
 // the server to reveal. The host can also reveal early.
-const ANSWER_MS = 25_000;
+const ANSWER_MS = 22_500; // ~10% snappier than the original 25s
 
 // Custom mode only: time to write each open-ended prompt answer, one at a
 // time. Tracked per player (each player has their own clock for their
 // current prompt) — see getPrivateState / tickCollect.
-const COLLECT_MS = 45_000;
+const COLLECT_MS = 40_500; // ~10% snappier than the original 45s
 
 // Tiered majority payout, checked high-to-low against the winning option's
 // share of everyone who answered. Below 51% (a weak plurality on a 3–4

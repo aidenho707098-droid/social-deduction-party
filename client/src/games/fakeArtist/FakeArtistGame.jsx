@@ -30,7 +30,13 @@ export default function FakeArtistGame({ game, players, myRole, isHost, myId, ac
 
     case 'gallery':
       return (
-        <Gallery game={game} isHost={isHost} onStartVote={actions.fakeArtistStartVote} />
+        <Gallery
+          game={game}
+          players={players}
+          myId={myId}
+          isHost={isHost}
+          onStartVote={actions.fakeArtistStartVote}
+        />
       )
 
     case 'vote':

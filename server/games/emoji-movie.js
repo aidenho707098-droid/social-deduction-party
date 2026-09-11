@@ -468,7 +468,7 @@ export const DIFFICULTY_MODES = ["easy", "medium", "hard", "mixed"];
 // emojis and a 6s step, everything is on screen by 12s; ANSWER_MS leaves a
 // comfortable window to keep guessing after the last reveal.
 const REVEAL_INTERVAL_MS = 6_000;
-const ANSWER_MS = 30_000;
+const ANSWER_MS = 27_000; // ~10% snappier than the original 30s
 
 // Scoring. A correct guess is BASE_POINTS shaped by three factors:
 //   * stage      — how many emojis were showing when it landed (the big one)

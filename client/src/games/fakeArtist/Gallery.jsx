@@ -1,8 +1,9 @@
 import SharedCanvas from './SharedCanvas'
+import TurnAttribution from './TurnAttribution'
 
 // Everyone's had a turn — a beat to study the finished picture before the
 // vote.
-export default function Gallery({ game, isHost, onStartVote }) {
+export default function Gallery({ game, players, myId, isHost, onStartVote }) {
   return (
     <div className="screen">
       <p className="wyr-round">
@@ -11,6 +12,7 @@ export default function Gallery({ game, isHost, onStartVote }) {
       </p>
 
       <SharedCanvas src={game.canvas} label="The finished shared drawing" />
+      <TurnAttribution game={game} players={players} myId={myId} />
 
       <p className="hint center-text">
         Who added the piece that doesn't quite fit? Study it before you vote.

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import WordPeek from './WordPeek'
 import { PlayerDot } from '../../PlayerDot'
+import { VotedIndicator } from '../../VotedIndicator'
 import { useSound } from '../../sound/SoundContext'
 
 export default function Voting({ players, myId, myRole, votedPlayerIds, totalVoters, voteLimit, onToggleVote }) {
@@ -27,6 +28,7 @@ export default function Voting({ players, myId, myRole, votedPlayerIds, totalVot
       </p>
 
       <WordPeek word={myRole?.word ?? null} />
+      <VotedIndicator players={players} votedPlayerIds={votedPlayerIds} myId={myId} />
 
       <ul className="player-list">
         {players.map((p) => {
