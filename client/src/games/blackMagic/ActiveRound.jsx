@@ -2,11 +2,13 @@ import Stopwatch from './Stopwatch'
 import HintFeed from './HintFeed'
 import { PlayerDot } from '../../PlayerDot'
 
-export default function ActiveRound({ game, players, myId, myRole, isHost, onAward, onReveal }) {
+export default function ActiveRound({ game, players, myId, myRole, isHost, onAward, onReveal, onGiveUp }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
   const iAmWitch = myId === game.witchId // from public state — reliable even before myRole lands
   const witchName = nameById[game.witchId] ?? 'someone'
   const others = players.filter((p) => p.id !== game.witchId)
+  const gaveUpIds = game.gaveUpPlayerIds ?? []
+  const iGaveUp = gaveUpIds.includes(myId)
 
   return (
     <div className="screen">
@@ -39,20 +41,23 @@ export default function ActiveRound({ game, players, myId, myRole, isHost, onAwa
 
           <span className="label">Who lifted The Curse?</span>
           <ul className="player-list bm-award-list">
-            {others.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  className="btn btn-secondary bm-award-btn"
-                  onClick={() => onAward(p.id)}
-                  disabled={p.connected === false}
-                >
-                  <PlayerDot color={p.colorHex ?? p.color} className="player-cdot-inline" />
-                  {p.name}
-                  {p.connected === false && ' (disconnected)'}
-                </button>
-              </li>
-            ))}
+            {others.map((p) => {
+              const gaveUp = gaveUpIds.includes(p.id)
+              return (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary bm-award-btn"
+                    onClick={() => onAward(p.id)}
+                    disabled={p.connected === false || gaveUp}
+                  >
+                    <PlayerDot color={p.colorHex ?? p.color} className="player-cdot-inline" />
+                    {p.name}
+                    {p.connected === false ? ' (disconnected)' : gaveUp ? ' (gave up)' : ''}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
 
           <button className="btn btn-text" onClick={onReveal}>
@@ -64,15 +69,31 @@ export default function ActiveRound({ game, players, myId, myRole, isHost, onAwa
           <p className="bm-role-player">
             The Witch this round is <strong>{witchName}</strong>
           </p>
-          <p className="wyr-prompt">Crack The Curse</p>
-          <p className="hint hint-block">
-            {witchName} is secretly following a hidden behaviour rule. Talk to
-            them, watch for the pattern, and be the first to say The Curse out
-            loud — {witchName} will award the point.
-          </p>
-          <p className="hint center-text">The round ends when someone lifts The Curse.</p>
 
-          <HintFeed hints={game.hints} />
+          {iGaveUp ? (
+            <div className="emoji-solved">
+              <div className="emoji-solved-title">🏳️ You gave up this round</div>
+              <div className="emoji-solved-points">
+                Sit back — you're back in it next round.
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="wyr-prompt">Crack The Curse</p>
+              <p className="hint hint-block">
+                {witchName} is secretly following a hidden behaviour rule. Talk to
+                them, watch for the pattern, and be the first to say The Curse out
+                loud — {witchName} will award the point.
+              </p>
+              <p className="hint center-text">The round ends when someone lifts The Curse.</p>
+
+              <HintFeed hints={game.hints} />
+
+              <button className="btn btn-text" onClick={onGiveUp}>
+                Give up on this round
+              </button>
+            </>
+          )}
 
           {isHost && (
             <button className="btn btn-text" onClick={onReveal}>

@@ -23,17 +23,27 @@ export default function VoteAnswer({ game, players = [], myId, myRole, isHost, o
   const iAmSubject = personal && game.subjectId === myId
   const denom = game.expectedCount ?? game.totalPlayers
 
-  useEffect(() => {
+  // Reset synchronously during render, not in an effect — Personal Mode's
+  // subject rotates every round and sits out voting (see the `!iAmSubject`
+  // guard below), so an async reset would leave a stale, already-timed-out
+  // `seconds` on the first render after someone goes from subject to voter,
+  // firing a false "time's up" buzz before they've even seen the options.
+  const roundKey = game.roundIndex
+  const roundKeyRef = useRef(roundKey)
+  if (roundKeyRef.current !== roundKey) {
+    roundKeyRef.current = roundKey
     setVotedId(null)
     setOwnWarning(false)
     setPending(false)
     firedForce.current = false
     firedTimeout.current = false
     setSeconds(Math.ceil(game.msLeft / 1000))
+  }
+
+  useEffect(() => {
     const timer = setInterval(() => setSeconds((s) => (s > 0 ? s - 1 : 0)), 1000)
     return () => clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.roundIndex])
+  }, [roundKey])
 
   useEffect(() => {
     if (seconds <= 0 && isHost && !firedForce.current) {

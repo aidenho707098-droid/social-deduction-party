@@ -17,6 +17,9 @@ import { useSoundDirector } from '../sound/useSoundDirector'
 import ChaosOverlay from '../chaos/ChaosOverlay'
 import ChaosStatusBar from '../chaos/ChaosStatusBar'
 import ChaosVignette from '../chaos/ChaosVignette'
+import FirstTimeWalkthrough from '../walkthrough/FirstTimeWalkthrough'
+import StepBadge from '../walkthrough/StepBadge'
+import { walkthroughKeyForGame } from '../walkthrough/keyFor'
 
 export default function Lobby() {
   const { code } = useParams()
@@ -219,6 +222,7 @@ export default function Lobby() {
     bmChooseCurse: (pick) => socket.emit('black_magic_choose_curse', { code, pick }),
     bmAward: (guesserId) => socket.emit('black_magic_award', { code, guesserId }),
     bmReveal: () => socket.emit('black_magic_reveal', { code }),
+    bmGiveUp: () => socket.emit('black_magic_give_up', { code }),
     bmNextRound: () => socket.emit('black_magic_next_round', { code }),
     wavelengthSubmitClue: (clue, cb) => socket.emit('wavelength_submit_clue', { code, clue }, cb),
     wavelengthGuess: (guess, cb) => socket.emit('wavelength_guess', { code, guess }, cb),
@@ -226,6 +230,7 @@ export default function Lobby() {
     wavelengthNextRound: () => socket.emit('wavelength_next_round', { code }),
     tabooStartRound: () => socket.emit('taboo_start_round', { code }),
     tabooGuess: (guess, cb) => socket.emit('taboo_guess', { code, guess }, cb),
+    tabooGiveUp: () => socket.emit('taboo_give_up', { code }),
     tabooReveal: () => socket.emit('taboo_reveal', { code }),
     tabooNextRound: () => socket.emit('taboo_next_round', { code }),
     fakeArtistStart: () => socket.emit('fake_artist_start', { code }),
@@ -328,6 +333,8 @@ export default function Lobby() {
           connected={connected}
           disconnectedPlayers={disconnectedPlayers}
         />
+        <FirstTimeWalkthrough walkthroughKey="tournament" />
+        <StepBadge walkthroughKey="tournament" phase={tour.phase} />
         {node}
       </>
     )
@@ -379,12 +386,15 @@ export default function Lobby() {
   if (room.status === 'in-game' && room.game) {
     const activeGame = getGame(room.game.id)
     if (!activeGame) return null
+    const wtKey = walkthroughKeyForGame(room.game)
     return (
       <>
         <ConnectionBanners
           connected={connected}
           disconnectedPlayers={disconnectedPlayers}
         />
+        <FirstTimeWalkthrough walkthroughKey={wtKey} />
+        <StepBadge walkthroughKey={wtKey} phase={room.game.phase} />
         <activeGame.Game
           game={room.game}
           players={room.players}
@@ -485,6 +495,7 @@ export default function Lobby() {
           key={room.chaos.event.roundKey}
           event={room.chaos.event}
           players={room.players ?? []}
+          myId={myPlayerId}
           myScore={
             (room.game?.scores ?? []).find((s) => s.playerId === myPlayerId)?.score ?? 0
           }

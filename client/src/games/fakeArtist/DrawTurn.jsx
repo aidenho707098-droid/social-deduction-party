@@ -47,11 +47,23 @@ export default function DrawTurn({ game, players, myId, myRole, isHost, onSubmit
   const [msLeft, setMsLeft] = useState(game.msLeft ?? game.turnMs)
   const firedTimeout = useRef(false)
 
-  useEffect(() => {
+  // Reset the countdown the instant the active turn changes — done here,
+  // synchronously during render (React's sanctioned way to derive state
+  // from a changed prop), NOT in a useEffect. A spectator's local `msLeft`
+  // free-runs down to 0 right along with whoever they're watching draw; if
+  // the reset only happened in an effect, it would land one render too
+  // late — the very first render after they're promoted to drawer would
+  // still see the *previous* turn's expired countdown, so the auto-submit
+  // effect below would see a stale `timeUp: true` and instantly submit a
+  // blank canvas before anyone actually drew anything (looks exactly like
+  // the turn got skipped).
+  const turnKey = `${game.currentDrawerId}:${game.roundIndex}`
+  const turnKeyRef = useRef(turnKey)
+  if (turnKeyRef.current !== turnKey) {
+    turnKeyRef.current = turnKey
     setMsLeft(game.msLeft ?? game.turnMs)
     firedTimeout.current = false
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.currentDrawerId, game.roundIndex])
+  }
 
   useEffect(() => {
     const t = setInterval(() => setMsLeft((m) => Math.max(0, m - 250)), 250)
@@ -79,6 +91,12 @@ export default function DrawTurn({ game, players, myId, myRole, isHost, onSubmit
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const pointersRef = useRef(new Map()) // pointerId -> last {x, y} in client coords
   const pinchRef = useRef(null) // { startDist, startZoom, startPan, startMid }
+
+  // The 5-swatch palette covers the common case with one tap; this ref
+  // fronts a native <input type="color"> (a real colour wheel on every
+  // platform) for anyone who wants something the palette doesn't have.
+  const customColorRef = useRef(null)
+  const isCustomColor = !PALETTE.includes(tool.color)
 
   const strokes = strokesRef.current
   const frac = inkFraction(strokes, INK_LIMIT)
@@ -353,6 +371,26 @@ export default function DrawTurn({ game, players, myId, myRole, isHost, onSubmit
                 onClick={() => setTool((t) => ({ ...t, color: c }))}
               />
             ))}
+            <button
+              type="button"
+              className={`fa-swatch fa-swatch-custom ${isCustomColor ? 'fa-swatch-on' : ''}`}
+              style={isCustomColor ? { background: tool.color } : undefined}
+              aria-label="pick a custom colour"
+              disabled={locked}
+              onClick={() => customColorRef.current?.click()}
+            >
+              {!isCustomColor && '🎨'}
+            </button>
+            <input
+              ref={customColorRef}
+              type="color"
+              className="fa-swatch-custom-input"
+              tabIndex={-1}
+              aria-hidden="true"
+              value={isCustomColor ? tool.color : PALETTE[0]}
+              disabled={locked}
+              onChange={(e) => setTool((t) => ({ ...t, color: e.target.value }))}
+            />
           </div>
           <div className="fa-widths">
             {WIDTHS.map((w) => (

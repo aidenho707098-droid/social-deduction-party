@@ -23,6 +23,7 @@ import {
   applyDisable,
 } from "./chaos.js";
 import { chaosGameConfig, eligibleModifiers, SPEED_MS } from "./chaosGames.js";
+import { GAMES } from "./games/registry.js";
 
 // How long the server will accept a Risk It wager after the event fires.
 // The client pop-up enforces the crisp 3-second decision feel; this is a
@@ -66,6 +67,18 @@ function rosterOf(game, fallback) {
   return ids.length ? ids : fallback;
 }
 
+// Narrow a roster down to whoever is actually an active participant in the
+// CURRENT round, per the game's own rules — e.g. Fibbage Personal Mode's
+// subject sits out their own round and scores nothing on it. Games that
+// don't define `chaosParticipants` have no such concept: everyone on the
+// roster counts. Every modifier roll / resolution below must run over THIS
+// set, never the raw roster, or a sat-out player can still get hit by
+// Half Reset, offered the Risk It wager, etc.
+function activeParticipants(game, roster) {
+  const mod = GAMES[game?.id];
+  return mod?.chaosParticipants ? mod.chaosParticipants(game, roster) : roster;
+}
+
 // deps: { connectedPlayerIds(room) -> string[] }
 export function chaosTick(room, deps) {
   if (!room || room.status !== "in-game" || !room.game) return;
@@ -77,7 +90,7 @@ export function chaosTick(room, deps) {
   const roundKey = `${game.id}:${game.roundIndex}`;
   const phase = game.phase;
   const connected = deps.connectedPlayerIds(room);
-  const present = rosterOf(game, connected);
+  const present = activeParticipants(game, rosterOf(game, connected));
 
   // 1) Settle anything owed on the round that just finished scoring.
   settle(room, cfg, roundKey, phase, present);
@@ -126,6 +139,7 @@ function beginRound(room, cfg, game, roundKey, present) {
   room.chaos = {
     roundKey,
     roundIndex: game.roundIndex,
+    eligibleIds: present, // who's an active participant this round (see activeParticipants)
     modifier: modifier
       ? {
           id: modifier.id,
@@ -347,6 +361,9 @@ export function recordWager(room, playerId) {
   if (chaos.wagerDeadline && Date.now() > chaos.wagerDeadline) {
     return { error: "The wager window closed." };
   }
+  if (chaos.eligibleIds && !chaos.eligibleIds.includes(playerId)) {
+    return { error: "You're sitting out this round." };
+  }
   if (chaos.wagers[playerId] != null) return { ok: true, amount: chaos.wagers[playerId] };
   const current = room.game?.scores?.get(playerId) ?? 0;
   if (current <= 0) return { error: "Nothing to wager." };
@@ -385,6 +402,12 @@ export function chaosPublicSlice(room) {
         }
       : null,
     result: chaos.result ?? null,
+    // null = every present player was eligible (the game defines no
+    // sit-out concept); an array means only these ids may see/act on an
+    // interactive modifier (e.g. Risk It) and are the only ones a
+    // round-end modifier (e.g. Half Reset) can touch — see
+    // server/chaosRuntime.js activeParticipants().
+    eligiblePlayerIds: chaos.eligibleIds ?? null,
     wagered: Object.keys(chaos.wagers ?? {}),
     wagerOpen:
       chaos.modifier?.id === "risk-it" &&

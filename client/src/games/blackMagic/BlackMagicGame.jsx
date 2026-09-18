@@ -41,6 +41,7 @@ export default function BlackMagicGame({ game, players, myRole, isHost, myId, ac
           isHost={isHost}
           onAward={actions.bmAward}
           onReveal={actions.bmReveal}
+          onGiveUp={actions.bmGiveUp}
         />
       )
 

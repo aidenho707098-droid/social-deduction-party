@@ -184,10 +184,23 @@ function advanceTournamentIfGameOver(room) {
 // A player just dropped or was removed — give the running game (if it
 // defines the optional hook) a chance to unstick itself: skip a vanished
 // speaker's turn, reveal a round everyone still present has finished, etc.
-function reconcileGame(room) {
+//
+// `final` distinguishes WHY presence changed, for games that care:
+//   * false — a raw socket "disconnect" just fired. Could be a refresh or a
+//     WiFi blip; the player still holds their seat for REJOIN_GRACE_MS (see
+//     armGraceTimer below) and may reconnect any moment.
+//   * true  — the player is actually, permanently gone: the rejoin grace
+//     expired, or the host kicked them. This is finalizePlayerRemoval's call,
+//     always right after removePlayer().
+// Most games don't look at this (a vanished speaker's turn should skip
+// right away either way) and keep working exactly as before. A game whose
+// round can't survive losing ONE specific player at all (Black Magic's
+// Witch) uses it to wait out the same grace window everyone else gets
+// instead of ending the round the instant a socket blips.
+function reconcileGame(room, { final = true } = {}) {
   if (room?.status !== "in-game" || !room.game) return;
   const gameModule = GAMES[room.game.id];
-  gameModule.reconcilePresence?.(room.game, connectedPlayerIds(room));
+  gameModule.reconcilePresence?.(room.game, connectedPlayerIds(room), { final });
 }
 
 // --- Rejoin grace timers -----------------------------------------------
@@ -229,7 +242,7 @@ function clearGraceTimer(code, playerId) {
 function finalizePlayerRemoval(code, playerId) {
   clearGraceTimer(code, playerId);
   removePlayer(code, playerId);
-  reconcileGame(getRoom(code));
+  reconcileGame(getRoom(code), { final: true });
   refreshFibbageVoteRoles(getRoom(code));
   broadcastRoom(code);
   syncEmojiTicker(getRoom(code));
@@ -1041,6 +1054,16 @@ io.on("connection", (socket) => {
     syncBlackMagicTicker(room);
   });
 
+  socket.on("black_magic_give_up", ({ code }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "black-magic") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES["black-magic"].giveUp(room.game, playerId);
+    if (res?.ok) broadcastRoom(room.code);
+    cb?.(res ?? { ok: false });
+  });
+
   socket.on("black_magic_next_round", ({ code }) => {
     const room = getRoom(code);
     if (!room || !isRoomHost(room, socket) || room.game?.id !== "black-magic") return;
@@ -1131,6 +1154,19 @@ io.on("connection", (socket) => {
     );
     broadcastRoom(room.code);
     syncTabooTicker(room); // everyone solving early can end the phase
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("taboo_give_up", ({ code }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "taboo") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES.taboo.giveUp(room.game, playerId, connectedPlayerIds(room));
+    if (res?.ok) {
+      broadcastRoom(room.code);
+      syncTabooTicker(room); // everyone giving up/solving can end the phase
+    }
     cb?.(res ?? { ok: false });
   });
 
@@ -1312,7 +1348,7 @@ io.on("connection", (socket) => {
     const info = markDisconnected(socket.id);
     if (!info) return; // stale socket / already reconnected elsewhere
 
-    reconcileGame(getRoom(info.code)); // don't stall the round on the player who just dropped
+    reconcileGame(getRoom(info.code), { final: false }); // don't stall the round on the player who just dropped — but don't end anything final on a mere blip either
     refreshFibbageVoteRoles(getRoom(info.code)); // that drop may have started voting
     broadcastRoom(info.code); // others immediately see them as "disconnected"
     syncEmojiTicker(getRoom(info.code));

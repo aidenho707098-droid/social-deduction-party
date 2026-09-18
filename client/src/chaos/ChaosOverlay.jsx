@@ -42,7 +42,7 @@ function reduced() {
   )
 }
 
-export default function ChaosOverlay({ event, players = [], myScore = 0, actions }) {
+export default function ChaosOverlay({ event, players = [], myId = null, myScore = 0, actions }) {
   const { muted, volume } = useSound()
   const snd = useRef({ muted, volume })
   snd.current = { muted, volume }
@@ -60,6 +60,11 @@ export default function ChaosOverlay({ event, players = [], myScore = 0, actions
   // points (the button is just disabled for them); the spec is that every
   // player sees the accept/decline prompt.
   const isWager = m?.id === 'risk-it'
+  // null means the game defines no "sits out this round" concept — everyone
+  // present is eligible. An array means only these ids are actual active
+  // participants this round (e.g. Fact or Fake Personal Mode's subject) —
+  // see server/chaosRuntime.js activeParticipants().
+  const eligible = event?.eligiblePlayerIds == null || event.eligiblePlayerIds.includes(myId)
 
   useEffect(() => {
     if (!m || !roundKey) return
@@ -161,7 +166,15 @@ export default function ChaosOverlay({ event, players = [], myScore = 0, actions
           </div>
         )}
 
-        {stage === 'wager' && (
+        {stage === 'wager' && !eligible && (
+          <div className="chaos-card chaos-wager">
+            <div className="chaos-kicker">🎲 RISK IT</div>
+            <div className="chaos-wager-q">You're sitting out this round.</div>
+            <div className="chaos-wager-sub">Nothing to wager — watch how it plays out.</div>
+          </div>
+        )}
+
+        {stage === 'wager' && eligible && (
           <div className="chaos-card chaos-wager">
             <div className="chaos-kicker">🎲 RISK IT</div>
             {myScore > 0 ? (

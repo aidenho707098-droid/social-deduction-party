@@ -37,8 +37,20 @@ export default function WriteAnswer({ game, players = [], myId, isHost, onSubmit
   )
 
   // New round: reset and restart the countdown from the server's remaining
-  // time. Keyed on roundIndex so it doesn't restart when someone else submits.
-  useEffect(() => {
+  // time — done here, synchronously during render, NOT in a useEffect. In
+  // Personal Mode the subject rotates every round, so this same mounted
+  // component carries a player straight from sitting out (or writing) last
+  // round into whatever role they have THIS round. If the reset only
+  // happened in an effect, it would land one render too late: the first
+  // render of the new round would still see last round's leftover `seconds`
+  // (often already <= 0 for whoever was the subject and so never had their
+  // countdown stopped), so as a writer this round it would read
+  // `timeUp: true` immediately and fire a false auto-submit before they've
+  // even read the prompt.
+  const roundKey = game.roundIndex
+  const roundKeyRef = useRef(roundKey)
+  if (roundKeyRef.current !== roundKey) {
+    roundKeyRef.current = roundKey
     setText('')
     setSubmittedText(null)
     setEditing(true)
@@ -46,11 +58,13 @@ export default function WriteAnswer({ game, players = [], myId, isHost, onSubmit
     firedForce.current = false
     firedTimeout.current = false
     setSeconds(Math.ceil(game.msLeft / 1000))
+  }
+
+  useEffect(() => {
     inputRef.current?.focus()
     const timer = setInterval(() => setSeconds((s) => s - 1), 1000)
     return () => clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.roundIndex])
+  }, [roundKey])
 
   // Time's up: the host's device asks the server to move everyone to
   // voting — after a short grace so any auto-submitted answers land first.

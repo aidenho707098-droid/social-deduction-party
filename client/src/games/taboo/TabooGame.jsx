@@ -28,6 +28,7 @@ export default function TabooGame({ game, players, myRole, isHost, myId, actions
           myRole={myRole}
           isHost={isHost}
           onGuess={actions.tabooGuess}
+          onGiveUp={actions.tabooGiveUp}
           onReveal={actions.tabooReveal}
         />
       )

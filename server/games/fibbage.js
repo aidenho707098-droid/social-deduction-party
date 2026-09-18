@@ -943,6 +943,16 @@ export function reconcilePresence(game, presentPlayerIds) {
   }
 }
 
+// Optional framework hook: who's actually an active participant in the
+// CURRENT round — everyone present in bank mode; everyone present except
+// the subject in personal mode (they sit out and score nothing on their
+// own round). The Chaos Events layer calls this (falling back to "everyone
+// present" for games that don't define it) so a modifier like Half Reset or
+// Risk It never targets / offers itself to someone sitting out.
+export function chaosParticipants(game, presentPlayerIds) {
+  return writerIds(game, presentPlayerIds)
+}
+
 // Host "Force proceed": move the game on with only the input that's in.
 // During "truth", build the rounds from whatever answers came back; during
 // "write", pool whatever fakes were submitted and start voting; during

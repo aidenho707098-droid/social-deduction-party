@@ -1013,6 +1013,98 @@ img.emoji {
 }
 
 /* ============================================================
+   First-time walkthrough (guided step carousel) + persistent
+   in-game "Step X of Y" badge. Shares the .modal-overlay/.modal-card
+   shell above rather than a bespoke dialog style.
+   ============================================================ */
+
+.wt-card {
+  max-width: 380px;
+  align-items: center;
+  text-align: center;
+}
+
+.wt-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wt-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.wt-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-2);
+  transition: background var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
+}
+
+.wt-dot-active {
+  background: var(--violet);
+  transform: scale(1.25);
+}
+
+.wt-skip {
+  padding: 0;
+  font-size: 13px;
+}
+
+.wt-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px 4px;
+  animation: row-in var(--dur-3) var(--ease-out) both;
+}
+
+.wt-icon {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.wt-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.wt-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.wt-nav {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wt-badge {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 40;
+  background: var(--violet-tint-2);
+  color: var(--violet-ink);
+  border-radius: var(--r-pill);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ============================================================
    Pills (round / option pickers)
    ============================================================ */
 
@@ -4169,16 +4261,26 @@ img.emoji {
 }
 
 /* --- in-game modifier reference (tap the chip) ---------------- */
+/* A plain "i", not the "ⓘ" glyph — that character bakes its own circle
+   into the font's metrics, which isn't centered the same way across fonts
+   and reads as noticeably off-center inside this button's own circle
+   border. A plain letter centers reliably via flex. */
 .chaos-guide-trigger {
   margin-left: 6px;
   width: 20px;
   height: 20px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   border-radius: 50%;
   border: 1.5px solid rgba(255, 255, 255, 0.5);
   background: transparent;
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
+  font-style: italic;
+  font-family: Georgia, 'Times New Roman', serif;
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
@@ -4407,6 +4509,32 @@ img.emoji {
 .fa-width:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+.fa-swatch-custom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  background: conic-gradient(
+    from 0deg,
+    #e5484d,
+    #f2820b,
+    #f2d022,
+    #2e9e5b,
+    #2f6fed,
+    #8b3fe5,
+    #e5484d
+  );
+}
+/* Visually hidden but still focusable/clickable via the swatch button's
+   ref click() — this IS the picker; native colour-wheel UI is the browser's
+   own, we just need an invisible trigger the same size as its swatch. */
+.fa-swatch-custom-input {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .fa-turn-tag {

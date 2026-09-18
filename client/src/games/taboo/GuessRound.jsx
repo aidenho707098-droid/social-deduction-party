@@ -10,11 +10,13 @@ function ordinal(n) {
   return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
-export default function GuessRound({ game, players, myId, myRole, isHost, onGuess, onReveal }) {
+export default function GuessRound({ game, players, myId, myRole, isHost, onGuess, onGiveUp, onReveal }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
   const colorById = playerColorMap(players)
   const secret = myRole?.taboo
   const amDescriber = secret?.role === 'describer'
+  const gaveUpIds = game.gaveUpPlayerIds ?? []
+  const iGaveUp = gaveUpIds.includes(myId)
 
   const [guess, setGuess] = useState('')
   const [lockedIn, setLockedIn] = useState(false)
@@ -32,8 +34,21 @@ export default function GuessRound({ game, players, myId, myRole, isHost, onGues
   const inputRef = useRef(null)
   const { play } = useSound()
 
-  // New round: reset everything, restart the local clock from the server.
-  useEffect(() => {
+  // New round: reset everything, restart the local clock from the server —
+  // done here, synchronously during render, NOT in a useEffect. The
+  // Describer rotates every round, so this same mounted component carries a
+  // player straight from describing (or guessing) last round into whatever
+  // role they have THIS round. If the reset only happened in an effect, it
+  // would land one render too late: the first render of the new round would
+  // still see last round's leftover `msLeft` (often already 0 for whoever's
+  // local clock ran out while they were the Describer, since the timeout
+  // effect below skips them then), so as a guesser this round it would read
+  // `timeUp: true` immediately and fire a false "time's up" buzz before
+  // they've even seen the word.
+  const roundKey = game.roundIndex
+  const roundKeyRef = useRef(roundKey)
+  if (roundKeyRef.current !== roundKey) {
+    roundKeyRef.current = roundKey
     setGuess('')
     setLockedIn(false)
     setLockedPlacing(0)
@@ -45,11 +60,14 @@ export default function GuessRound({ game, players, myId, myRole, isHost, onGues
     firedTimeout.current = false
     prevDrop.current = game.timeDropCount ?? 0
     setMsLeft(game.msLeft ?? game.startMs)
+  }
+
+  useEffect(() => {
     if (!amDescriber) inputRef.current?.focus()
     const timer = setInterval(() => setMsLeft((m) => Math.max(0, m - 250)), 250)
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.roundIndex])
+  }, [roundKey])
 
   // Snap the local clock to the server's whenever a push drifts us by ~1s.
   // The dynamic 30s drops land here as a big jump and snap immediately.
@@ -83,7 +101,7 @@ export default function GuessRound({ game, players, myId, myRole, isHost, onGues
 
   // Time's up and this guesser never locked in — fire whatever's typed.
   useEffect(() => {
-    if (amDescriber || !timeUp || lockedIn || firedTimeout.current) return
+    if (amDescriber || !timeUp || lockedIn || iGaveUp || firedTimeout.current) return
     firedTimeout.current = true
     const value = guess.trim()
     if (value && !pending) {
@@ -127,6 +145,11 @@ export default function GuessRound({ game, players, myId, myRole, isHost, onGues
   const solvedIds = game.solvedPlayerIds ?? []
   const guessedIds = game.guessedPlayerIds ?? []
   const placingOf = (pid) => solvedIds.indexOf(pid) + 1
+
+  function giveUp() {
+    if (lockedIn || iGaveUp || timeUp || pending) return
+    onGiveUp()
+  }
 
   const header = (
     <>
@@ -184,7 +207,13 @@ export default function GuessRound({ game, players, myId, myRole, isHost, onGues
                 return (
                   <div key={p.id} className="wyr-board-row">
                     <span className={`emoji-verdict ${place ? 'ok' : ''}`}>
-                      {place ? '✓' : guessedIds.includes(p.id) ? '…' : ''}
+                      {place
+                        ? '✓'
+                        : gaveUpIds.includes(p.id)
+                          ? '🏳️'
+                          : guessedIds.includes(p.id)
+                            ? '…'
+                            : ''}
                     </span>
                     <span>
                       <PlayerDot color={colorById[p.id]} className="player-cdot-inline" />
@@ -218,6 +247,11 @@ export default function GuessRound({ game, players, myId, myRole, isHost, onGues
           <div className="emoji-solved-title">🔒 Locked in — {ordinal(lockedPlacing)}!</div>
           <div className="emoji-solved-points">+{lockedPoints} points</div>
         </div>
+      ) : iGaveUp ? (
+        <div className="emoji-solved">
+          <div className="emoji-solved-title">🏳️ You gave up this round</div>
+          <div className="emoji-solved-points">Sit back — you'll get a fresh word next round.</div>
+        </div>
       ) : (
         <form className="emoji-form" onSubmit={submit}>
           <input
@@ -246,6 +280,11 @@ export default function GuessRound({ game, players, myId, myRole, isHost, onGues
               ? 'Not quite — keep guessing, spelling can be rough.'
               : 'First right answer scores most. Wrong guesses are free and never touch the clock.'}
           </p>
+          {!timeUp && (
+            <button type="button" className="btn btn-text" onClick={giveUp} disabled={pending}>
+              Give up on this word
+            </button>
+          )}
         </form>
       )}
 

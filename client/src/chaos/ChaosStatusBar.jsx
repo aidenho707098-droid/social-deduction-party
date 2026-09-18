@@ -36,7 +36,7 @@ export default function ChaosStatusBar({ event, players = [], myId, actions }) {
           <span className="chaos-mult-tag">{result.multiplier}x</span>
         )}
         <span className="chaos-bar-tag">{settled ? 'resolved' : 'active'}</span>
-        <ChaosGuide trigger="ⓘ" highlightId={m.id} />
+        <ChaosGuide trigger="i" highlightId={m.id} />
       </div>
 
       {iChoose && (

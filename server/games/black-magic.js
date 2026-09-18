@@ -254,6 +254,7 @@ export function createGame(playerIds, { rounds, assignment, memory }) {
     limitMs: LIMIT_MS,
     scores: new Map(playerIds.map((pid) => [pid, 0])),
     lastResult: null,
+    gaveUpPlayerIds: new Set(), // Players sitting this round out — reset every round
   };
 
   if (method === "rotation") {
@@ -292,6 +293,7 @@ export function chooseCurse(game, pick) {
   game.curse = { ...chosen };
   game.roundStartedAt = Date.now();
   game.endedAt = null;
+  game.gaveUpPlayerIds = new Set();
   game.phase = "active";
 }
 
@@ -344,7 +346,21 @@ export function awardGuess(game, guesserId, presentPlayerIds) {
   if (game.phase !== "active") return;
   if (guesserId === game.witchId) return;
   if (!presentPlayerIds.includes(guesserId)) return;
+  if (game.gaveUpPlayerIds.has(guesserId)) return;
   endRound(game, "lifted", guesserId);
+}
+
+// A Player bows out of a round that's dragging on — no per-player action
+// exists in this game the way Taboo has a guess to submit, so this is just
+// a visible "I'm done trying" flag: it takes them out of The Witch's award
+// list (so they can't score this round) and out of the pressure of
+// pretending to keep guessing, same as everyone else's normal spot in the
+// round otherwise. Cleared automatically at the top of every new round.
+export function giveUp(game, playerId) {
+  if (game.phase !== "active") return { ok: false };
+  if (playerId === game.witchId) return { ok: false, isWitch: true };
+  game.gaveUpPlayerIds.add(playerId);
+  return { ok: true };
 }
 
 // The Witch (or host, as a fallback) ended the round manually.
@@ -353,10 +369,18 @@ export function revealCurse(game) {
 }
 
 // Optional framework hook: if The Witch drops out mid-round (while
-// choosing or performing) the round can't continue — abandon it, no
-// points.
-export function reconcilePresence(game, presentPlayerIds) {
+// choosing or performing) the round can't continue on without them — but
+// a raw socket disconnect (`final: false`) is just as likely a refresh or a
+// WiFi blip as it is someone actually leaving, so this only ABANDONS the
+// round once the disconnect is `final` — i.e. the server's own rejoin-grace
+// window (REJOIN_GRACE_MS) has expired without them coming back, or the
+// host kicked them. A `final: false` call is a no-op: the round just sits
+// waiting, same as it would for any other disconnected player, and either
+// the Witch reconnects (nothing to undo — we never touched the round) or
+// the grace expires and this hook fires again with `final: true`.
+export function reconcilePresence(game, presentPlayerIds, { final = true } = {}) {
   if (
+    final &&
     (game.phase === "active" || game.phase === "choose") &&
     !presentPlayerIds.includes(game.witchId)
   ) {
@@ -424,6 +448,7 @@ export function getPublicState(game, presentPlayerIds) {
     // state: the client hides these on The Witch's screen, and The Witch
     // already knows their own Curse anyway.
     state.hints = revealedHints(game.curse, Math.max(0, raw));
+    state.gaveUpPlayerIds = [...game.gaveUpPlayerIds];
   }
 
   if (game.phase === "reveal") {

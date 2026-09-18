@@ -18,17 +18,33 @@ export default function GuessPhase({ game, players = [], myRole, myId, isHost, o
   const firedBuzz = useRef(false)
   const { play } = useSound()
 
-  useEffect(() => {
+  // Reset the countdown (and pick/lock state) the instant the round changes
+  // — done here, synchronously during render, NOT in a useEffect. The
+  // Clue-Giver rotates every round, so this same mounted component carries a
+  // player straight from being last round's guesser (or Clue-Giver) into
+  // whatever role they have THIS round. If the reset only happened in an
+  // effect, it would land one render too late: the first render of the new
+  // round would still see last round's leftover `seconds` (often already
+  // <= 0 for whoever's local clock had run out watching the reveal), so the
+  // buzz effect below would see a stale `timeUp: true` and instantly fire a
+  // false "time's up" buzz — or worse, auto-submit a leftover `pick` — before
+  // this round's clue has even been read.
+  const roundKey = game.roundIndex
+  const roundKeyRef = useRef(roundKey)
+  if (roundKeyRef.current !== roundKey) {
+    roundKeyRef.current = roundKey
     setPick(null)
     setLocked(false)
     setPending(false)
     firedForce.current = false
     firedBuzz.current = false
     setSeconds(Math.ceil(game.msLeft / 1000))
+  }
+
+  useEffect(() => {
     const timer = setInterval(() => setSeconds((s) => s - 1), 1000)
     return () => clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.roundIndex])
+  }, [roundKey])
 
   // Host advances the round after a short grace past zero, so any
   // auto-locked guesses land first.
