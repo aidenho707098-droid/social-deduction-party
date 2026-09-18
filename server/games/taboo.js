@@ -5,8 +5,9 @@
 // detection. Everyone else privately TYPES their guess; a lenient fuzzy
 // match (shared with Crack the Code) forgives typos. Multiple guessers can
 // score in one round: correct guesses are ranked by ORDER (1st is worth
-// most, down to a floor). The Describer scores on how QUICKLY the first
-// correct guess landed.
+// most, down to a floor), PLUS a small speed bonus on top so two guesses
+// near the same placement still separate by how fast they came in. The
+// Describer scores on how QUICKLY the first correct guess landed.
 //
 //   phase:  describe -> guess -> reveal -> ( describe -> guess ... ) -> final
 //
@@ -52,6 +53,19 @@ function placingPoints(placing) {
   return PLACING_POINTS[placing - 1] ?? MIN_PLACING_POINTS;
 }
 
+// SECONDARY factor: a small speed bonus on top of placingPoints(). The
+// smallest gap between adjacent placing tiers is 100 (400->300, and
+// 300->floor 200), so this is capped below that — placement always wins,
+// speed only breaks ties/adds variation within or near a tier. Measured
+// against the full NOMINAL window (like describerPointsFor below) so the
+// dynamic-timer drops don't distort the payout.
+const TIME_BONUS_MAX = 60;
+
+function timeBonusFor(elapsedMs) {
+  const frac = Math.max(0, Math.min(1, 1 - elapsedMs / START_MS));
+  return Math.round(TIME_BONUS_MAX * frac);
+}
+
 const DESCRIBER_BASE = 900;
 const DESCRIBER_MIN = 120;
 
@@ -94,17 +108,49 @@ function editDistance(a, b) {
   return prev[b.length];
 }
 
+// A word and its close inflections (plural/-s, -ed, -ing, -er/-ers) as a
+// guesser would naturally say them — "hiking"/"hiked"/"hiker" for "hike".
+// Only strips suffixes long enough that the remaining stem is still a real
+// word-ish chunk (min lengths below), and always keeps the original word
+// too so exact/edit-distance matching still applies on top of this.
+// English spelling drops a trailing "e" before "-ing"/"-ed" (hike -> hiking)
+// and doubles a final consonant after a short vowel (run -> running) — both
+// undone here so the stem lines back up with the dictionary form.
+function inflectionsOf(word) {
+  const forms = new Set([word]);
+  const addWithUndo = (base) => {
+    if (base.length < 2) return;
+    forms.add(base);
+    forms.add(base + "e"); // hik -> hike
+    const last = base[base.length - 1];
+    const prev = base[base.length - 2];
+    if (last === prev && !"aeiou".includes(last)) forms.add(base.slice(0, -1)); // runn -> run
+  };
+  if (word.length > 3 && word.endsWith("es")) addWithUndo(word.slice(0, -2));
+  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) forms.add(word.slice(0, -1));
+  if (word.length > 4 && word.endsWith("ing")) addWithUndo(word.slice(0, -3));
+  if (word.length > 4 && word.endsWith("ed")) addWithUndo(word.slice(0, -2));
+  if (word.length > 5 && word.endsWith("ers")) addWithUndo(word.slice(0, -3));
+  if (word.length > 4 && word.endsWith("er")) addWithUndo(word.slice(0, -2));
+  return forms;
+}
+
 function isCorrectGuess(rawGuess, entry) {
   const guess = normalize(rawGuess);
   if (guess.length < 2) return false;
+  const guessForms = inflectionsOf(guess);
 
   const targets = [entry.word, ...(entry.alts ?? [])]
     .map(normalize)
     .filter(Boolean);
   for (const target of targets) {
-    if (guess === target) return true;
     const tolerance = target.length <= 3 ? 0 : target.length <= 6 ? 1 : 2;
-    if (tolerance > 0 && editDistance(guess, target) <= tolerance) return true;
+    for (const targetForm of inflectionsOf(target)) {
+      for (const guessForm of guessForms) {
+        if (guessForm === targetForm) return true;
+        if (tolerance > 0 && editDistance(guessForm, targetForm) <= tolerance) return true;
+      }
+    }
   }
   return false;
 }
@@ -245,6 +291,21 @@ export function startRound(game, playerId, opts = {}) {
   return { ok: true };
 }
 
+// A guesser is "done" for the round once they've either got it right or
+// given up — both take them out of the "is everyone still trying" check
+// that ends the round early, without one blocking the other.
+function guessDone(game, pid) {
+  const g = game.guesses.get(pid);
+  return !!(g && (g.correct || g.gaveUp));
+}
+
+function maybeAutoReveal(game, describerId, presentPlayerIds) {
+  const guessers = presentPlayerIds.filter((pid) => pid !== describerId);
+  if (guessers.length > 0 && guessers.every((pid) => guessDone(game, pid))) {
+    revealRound(game, presentPlayerIds);
+  }
+}
+
 // A guesser locks in a typed guess. Wrong guesses cost nothing and don't
 // lock you out; a correct one locks you in with a placing for the round.
 export function submitGuess(game, playerId, rawGuess, presentPlayerIds) {
@@ -259,6 +320,7 @@ export function submitGuess(game, playerId, rawGuess, presentPlayerIds) {
   if (prev?.correct) {
     return { ok: false, lockedIn: true, placing: prev.placing, points: prev.points };
   }
+  if (prev?.gaveUp) return { ok: false, gaveUp: true };
 
   const entry = currentEntry(game);
   const elapsedMs = now - game.roundStartedAt;
@@ -269,10 +331,15 @@ export function submitGuess(game, playerId, rawGuess, presentPlayerIds) {
   let points = 0;
   let timeDropped = false;
 
+  let basePoints = 0;
+  let bonusPoints = 0;
+
   if (correct) {
     game.correctOrder.push(playerId);
     placing = game.correctOrder.length;
-    points = placingPoints(placing);
+    basePoints = placingPoints(placing);
+    bonusPoints = timeBonusFor(elapsedMs);
+    points = basePoints + bonusPoints;
     if (game.firstCorrectElapsedMs == null) game.firstCorrectElapsedMs = elapsedMs;
     game.guesses.set(playerId, {
       guess: cleanGuess,
@@ -280,6 +347,8 @@ export function submitGuess(game, playerId, rawGuess, presentPlayerIds) {
       elapsedMs,
       placing,
       points,
+      placingPoints: basePoints,
+      timeBonus: bonusPoints,
     });
 
     // DYNAMIC TIMER — each guesser's FIRST CORRECT answer (validated above,
@@ -299,11 +368,9 @@ export function submitGuess(game, playerId, rawGuess, presentPlayerIds) {
     game.guesses.set(playerId, { guess: cleanGuess, correct: false, elapsedMs });
   }
 
-  // Everyone present bar the Describer has it right -> end the round early.
-  const guessers = presentPlayerIds.filter((pid) => pid !== describerId);
-  if (guessers.length > 0 && guessers.every((pid) => game.guesses.get(pid)?.correct)) {
-    revealRound(game, presentPlayerIds);
-  }
+  // Everyone present bar the Describer is done (right, or gave up) -> end
+  // the round early.
+  maybeAutoReveal(game, describerId, presentPlayerIds);
 
   return {
     ok: true,
@@ -311,9 +378,38 @@ export function submitGuess(game, playerId, rawGuess, presentPlayerIds) {
     lockedIn: correct,
     placing,
     points,
+    placingPoints: basePoints,
+    timeBonus: bonusPoints,
     timeDropped,
     msLeft: Math.max(0, game.deadline - Date.now()),
   };
+}
+
+// A guesser bows out of a word they're not going to get — no points, but
+// they stop counting toward "is everyone still trying", so the round isn't
+// held hostage waiting on someone who's checked out. Cleared automatically
+// every new round along with the rest of `game.guesses`.
+export function giveUp(game, playerId, presentPlayerIds) {
+  if (game.phase !== "guess") return { ok: false };
+  const describerId = currentDescriber(game);
+  if (playerId === describerId) return { ok: false, isDescriber: true };
+
+  const prev = game.guesses.get(playerId);
+  if (prev?.correct) {
+    return { ok: false, lockedIn: true, placing: prev.placing, points: prev.points };
+  }
+  if (prev?.gaveUp) return { ok: true };
+
+  const now = Date.now();
+  game.guesses.set(playerId, {
+    guess: prev?.guess ?? null,
+    correct: false,
+    gaveUp: true,
+    elapsedMs: now - game.roundStartedAt,
+  });
+
+  maybeAutoReveal(game, describerId, presentPlayerIds);
+  return { ok: true };
 }
 
 // Score the round and freeze a full breakdown for the reveal screen.
@@ -335,6 +431,8 @@ export function revealRound(game, presentPlayerIds) {
       correct,
       placing: correct ? g.placing : null,
       points,
+      placingPoints: correct ? g.placingPoints : 0,
+      timeBonus: correct ? g.timeBonus : 0,
       elapsedMs: g?.elapsedMs ?? null,
     };
   });
@@ -386,14 +484,7 @@ export function nextRound(game) {
 export function reconcilePresence(game, presentPlayerIds) {
   if (presentPlayerIds.length === 0) return;
   if (game.phase === "guess") {
-    const describerId = currentDescriber(game);
-    const guessers = presentPlayerIds.filter((pid) => pid !== describerId);
-    if (
-      guessers.length > 0 &&
-      guessers.every((pid) => game.guesses.get(pid)?.correct)
-    ) {
-      revealRound(game, presentPlayerIds);
-    }
+    maybeAutoReveal(game, currentDescriber(game), presentPlayerIds);
   }
 }
 
@@ -439,7 +530,10 @@ export function getPublicState(game, presentPlayerIds) {
   };
 
   if (game.phase === "guess") {
-    state.guessedPlayerIds = guesserIds.filter((pid) => game.guesses.has(pid));
+    state.guessedPlayerIds = guesserIds.filter(
+      (pid) => game.guesses.has(pid) && !game.guesses.get(pid).gaveUp
+    );
+    state.gaveUpPlayerIds = guesserIds.filter((pid) => game.guesses.get(pid)?.gaveUp);
     state.solvedPlayerIds = game.correctOrder.filter((pid) =>
       guesserIds.includes(pid)
     );

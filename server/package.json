@@ -10,8 +10,9 @@
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env index.js",
     "start": "node --env-file-if-exists=.env index.js",
-    "test:chaos": "node chaos.selftest.mjs && node chaosRuntime.selftest.mjs && node chaos-integration.selftest.mjs",
-    "test:fake-artist": "node fake-artist.selftest.mjs && node ../client/src/games/fakeArtist/inkModel.selftest.mjs"
+    "test:chaos": "node chaos.selftest.mjs && node chaosRuntime.selftest.mjs && node chaos-integration.selftest.mjs && node chaos-eligibility.selftest.mjs",
+    "test:fake-artist": "node fake-artist.selftest.mjs && node ../client/src/games/fakeArtist/inkModel.selftest.mjs",
+    "test:tournament": "node tournament.selftest.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -3,14 +3,17 @@ import { playerColorMap } from '../playerColors'
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
-// Shown after each game: that game's final standings converted to
-// tournament points, plus the running overall leaderboard.
+// Shown after every game EXCEPT the last one: that game's final standings
+// converted to tournament points, plus the running overall leaderboard.
+// After the last game the server skips this screen entirely (phase goes
+// straight to "complete") so it isn't a redundant beat right before
+// TournamentComplete's own grand-finale reveal — see recordGameResult() in
+// server/tournament.js.
 export default function TournamentBetween({ t, players, myId, isHost, onNext }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
   const colorById = playerColorMap(players)
   const nameOf = (id) => nameById[id] ?? 'Unknown'
   const last = t.history[t.history.length - 1]
-  const isFinalGame = t.currentIndex + 1 >= t.totalGames
 
   const gameRanks = last?.skipped
     ? []
@@ -72,7 +75,7 @@ export default function TournamentBetween({ t, players, myId, isHost, onNext }) 
 
       {isHost ? (
         <button className="btn btn-primary" onClick={onNext}>
-          {isFinalGame ? 'See Tournament Winner →' : 'Next Game →'}
+          Next Game →
         </button>
       ) : (
         <p className="hint center-text waiting">Waiting for the host to continue…</p>

@@ -226,7 +226,20 @@ export function recordGameResult(tournament, gameId, standings) {
   });
   tournament.currentGameId = null;
   tournament.currentParticipants = [];
-  tournament.phase = "between";
+
+  // Every OTHER game pauses on "between" (that game's results -> tournament
+  // points, host clicks through) before the next one starts. The LAST game
+  // skips straight to "complete" — its own between-screen would just be a
+  // redundant beat immediately before the tournament's real grand finale,
+  // which already shows the same standings. currentIndex still names the
+  // game that just finished here (stepAt bumps it for a fresh game), so
+  // this mirrors stepAt's own "nothing left" check.
+  if (tournament.currentIndex + 1 >= tournament.totalGames) {
+    tournament.currentIndex += 1;
+    tournament.phase = "complete";
+  } else {
+    tournament.phase = "between";
+  }
 }
 
 // --- Public (broadcast) view ------------------------------------------
