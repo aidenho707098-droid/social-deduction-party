@@ -29,7 +29,9 @@ export default function TournamentSetup({
   const [configIndex, setConfigIndex] = useState(null) // lineup slot being configured
   const [error, setError] = useState('')
 
-  const eligible = GAMES.filter((g) => playerCount >= g.minPlayers)
+  const eligible = GAMES.filter(
+    (g) => playerCount >= g.minPlayers && (!g.maxPlayers || playerCount <= g.maxPlayers),
+  )
 
   function addGame(id) {
     setLineup((l) => [...l, id])

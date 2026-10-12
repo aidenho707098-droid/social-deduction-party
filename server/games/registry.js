@@ -6,6 +6,8 @@ import * as blackMagic from "./black-magic.js";
 import * as wavelength from "./wavelength.js";
 import * as taboo from "./taboo.js";
 import * as fakeArtist from "./fake-artist.js";
+import * as whoAmI from "./who-am-i.js";
+import * as alphabetSoup from "./alphabet-soup.js";
 
 // Every game module exports the same shape: id, name, minPlayers,
 // createGame(), getPublicState(), getPrivateState(). index.js and rooms.js
@@ -20,4 +22,6 @@ export const GAMES = {
   [wavelength.id]: wavelength,
   [taboo.id]: taboo,
   [fakeArtist.id]: fakeArtist,
+  [whoAmI.id]: whoAmI,
+  [alphabetSoup.id]: alphabetSoup,
 };

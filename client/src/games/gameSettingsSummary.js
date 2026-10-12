@@ -10,11 +10,14 @@ export function describeGameOptions(options) {
   if (o.mode === 'bank') parts.push('Standard')
   else if (o.mode === 'custom') parts.push('Custom Mode')
   else if (o.mode === 'personal') parts.push('Personal Mode')
+  else if (o.mode === 'typed') parts.push('Typed')
+  else if (o.mode === 'spoken') parts.push('Spoken')
   else if (o.mode) parts.push(String(o.mode))
 
-  if (o.rounds && (!o.mode || o.mode === 'bank')) {
+  if (o.rounds && (!o.mode || ['bank', 'typed', 'spoken'].includes(o.mode))) {
     parts.push(`${o.rounds} rounds`)
   }
+  if (o.burnedLetters) parts.push('burned letters')
   if (o.promptsPerPlayer) {
     parts.push(`${o.promptsPerPlayer} prompt${o.promptsPerPlayer === 1 ? '' : 's'}/player`)
   }
@@ -22,7 +25,9 @@ export function describeGameOptions(options) {
     parts.push(`${o.imposterCount} imposter${o.imposterCount === 1 ? '' : 's'}`)
   }
   if (o.category) parts.push(o.category)
-  if (Array.isArray(o.categories)) {
+  if (Array.isArray(o.categories) && o.categories.includes('__random__')) {
+    parts.push('random category')
+  } else if (Array.isArray(o.categories)) {
     parts.push(`${o.categories.length} categor${o.categories.length === 1 ? 'y' : 'ies'}`)
   }
   if (o.difficulty && o.difficulty !== 'mixed') parts.push(o.difficulty)

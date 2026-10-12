@@ -50,10 +50,27 @@ const PHASE_CUES = {
     vote: 'round-start',
     reveal: REVEAL,
   },
+  'alphabet-soup': {
+    // The letter reveal's ticking + landing chime fire inside SoupReveal
+    // (they're timed to the animation); the "locked in" confirm blip
+    // inside TypedRound; Spoken's life-lost buzz inside SpokenRound.
+    review: REVEAL, // Typed: the answer cards come in
+    reveal: (c) => (c.soupSpoken ? REVEAL : null), // Typed already chimed at review
+  },
+  'who-am-i': {
+    reveal: REVEAL,
+    // correct/wrong-guess blips fire inside AskScreen (play('correct' |
+    // 'wrong')) — the active player's own device knows the outcome
+    // instantly, no need to wait on this director.
+  },
 }
 
 function buildCtx(game, myRole, myId) {
-  const ctx = { personalWin: null, bmGuesserIsMe: false }
+  const ctx = {
+    personalWin: null,
+    bmGuesserIsMe: false,
+    soupSpoken: game.id === 'alphabet-soup' && game.mode === 'spoken',
+  }
 
   if (game.id === 'imposter' && game.phase === 'results') {
     if (typeof game.detectivesWin === 'boolean' && myRole?.role) {

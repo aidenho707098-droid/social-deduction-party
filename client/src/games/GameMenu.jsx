@@ -10,8 +10,11 @@ export default function GameMenu({ playerCount, onPick, onCancel }) {
 
       <div className="game-menu-list">
         {GAMES.map((game, i) => {
-          const disabled = playerCount < game.minPlayers
+          const tooFew = playerCount < game.minPlayers
+          const tooMany = Boolean(game.maxPlayers) && playerCount > game.maxPlayers
+          const disabled = tooFew || tooMany
           const accent = accentName(game.id)
+          const range = game.maxPlayers ? `${game.minPlayers}–${game.maxPlayers}` : `${game.minPlayers}+`
           return (
             <div key={game.id} className="game-menu-row">
               <button
@@ -26,9 +29,11 @@ export default function GameMenu({ playerCount, onPick, onCancel }) {
                 <span className="game-card-body">
                   <span className="game-card-name">{game.name}</span>
                   <span className="game-card-meta">
-                    {disabled
+                    {tooFew
                       ? `Needs ${game.minPlayers}+ players · ${game.genre}`
-                      : `${game.minPlayers}+ players · ${game.genre}`}
+                      : tooMany
+                        ? `Supports up to ${game.maxPlayers} players · ${game.genre}`
+                        : `${range} players · ${game.genre}`}
                   </span>
                 </span>
               </button>

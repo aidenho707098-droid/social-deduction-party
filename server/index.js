@@ -23,6 +23,7 @@ import {
 import { getLanIp } from "./network.js";
 import { AI_GENERATORS, aiContentAvailable, hostFacingAiError } from "./aiContent.js";
 import { GAMES } from "./games/registry.js";
+import { pumpValidation as pumpSoupValidation } from "./alphabetSoupRuntime.js";
 import {
   chaosTick,
   chaosPublicSlice,
@@ -245,10 +246,18 @@ function finalizePlayerRemoval(code, playerId) {
   reconcileGame(getRoom(code), { final: true });
   refreshFibbageVoteRoles(getRoom(code));
   broadcastRoom(code);
+  // A permanent departure can change what a game's PRIVATE payload looks
+  // like even though nobody acted (Who Am I? purges the removed player's
+  // identity out of everyone else's redacted list in reconcilePresence) —
+  // most games' private state is static per role-per-round and just
+  // resends unchanged, which is harmless.
+  sendPrivateRoles(getRoom(code));
   syncEmojiTicker(getRoom(code));
   syncBlackMagicTicker(getRoom(code));
   syncTabooTicker(getRoom(code));
   syncFakeArtistTicker(getRoom(code));
+  syncWhoAmITicker(getRoom(code));
+  syncAlphabetSoupTicker(getRoom(code));
 }
 
 // Emoji Movie Guess reveals emojis one at a time on a server clock, but
@@ -407,6 +416,106 @@ function syncFakeArtistTicker(room) {
   }
 }
 
+// Who Am I?'s clock is server-owned and switches meaning (a 30s question
+// window vs. a 20s guess window) without ever changing `phase` — both live
+// on the same "turns" phase, so this ticker just defers to the game's own
+// tick() to decide whether the active player's clock has actually run out.
+// Idempotent, like the others.
+const whoAmITickers = new Map(); // roomCode -> intervalId
+
+function syncWhoAmITicker(room) {
+  if (!room) return;
+  const active =
+    room.status === "in-game" && room.game?.id === "who-am-i" && room.game.phase === "turns";
+  const existing = whoAmITickers.get(room.code);
+
+  if (active && !existing) {
+    const timerId = setInterval(() => {
+      const current = getRoom(room.code);
+      const game = current?.game;
+      if (!current || game?.id !== "who-am-i" || game.phase !== "turns") {
+        clearInterval(whoAmITickers.get(room.code));
+        whoAmITickers.delete(room.code);
+        return;
+      }
+      const changed = GAMES["who-am-i"].tick(game, connectedPlayerIds(current));
+      if (changed) sendPrivateRoles(current);
+      broadcastRoom(room.code);
+      syncWhoAmITicker(current);
+    }, 1000);
+    whoAmITickers.set(room.code, timerId);
+  } else if (!active && existing) {
+    clearInterval(existing);
+    whoAmITickers.delete(room.code);
+  }
+}
+
+// Alphabet Soup runs several short server clocks — the letter-reveal intro
+// (the answer clock must not start until it ends), the 40s typed window,
+// the wait for background validation, the dispute votes, and Spoken mode's
+// 10s→4s turns and 5s challenge / vote windows. Those windows are short
+// enough that a 1s tick would visibly lag a transition, so this ticker
+// checks every 250ms but only broadcasts when something changed or once a
+// second for the countdowns. Each beat also pumps any queued answer
+// validations (a round-end retry is queued by a phase change, not a
+// socket event). Idempotent, like the others.
+const alphabetSoupTickers = new Map(); // roomCode -> intervalId
+const ALPHABET_SOUP_TICK_MS = 250;
+const ALPHABET_SOUP_LIVE_PHASES = new Set(["intro", "answer", "checking", "review", "turns"]);
+
+function soupRuntimeDeps() {
+  return {
+    getRoom,
+    onVerdict: (room, playerId) => {
+      const player = room.players.get(playerId);
+      if (player) sendPrivateRoleTo(room, player);
+    },
+  };
+}
+
+function syncAlphabetSoupTicker(room) {
+  if (!room) return;
+  const active =
+    room.status === "in-game" &&
+    room.game?.id === "alphabet-soup" &&
+    ALPHABET_SOUP_LIVE_PHASES.has(room.game.phase);
+  const existing = alphabetSoupTickers.get(room.code);
+
+  if (active && !existing) {
+    let lastBroadcast = 0;
+    const timerId = setInterval(() => {
+      const current = getRoom(room.code);
+      const game = current?.game;
+      if (
+        !current ||
+        game?.id !== "alphabet-soup" ||
+        !ALPHABET_SOUP_LIVE_PHASES.has(game.phase)
+      ) {
+        clearInterval(alphabetSoupTickers.get(room.code));
+        alphabetSoupTickers.delete(room.code);
+        return;
+      }
+      try {
+        const changed = GAMES["alphabet-soup"].tick(game, connectedPlayerIds(current));
+        pumpSoupValidation(current, soupRuntimeDeps());
+        const now = Date.now();
+        if (changed || now - lastBroadcast >= 1000) {
+          lastBroadcast = now;
+          broadcastRoom(room.code);
+          if (changed) sendPrivateRoles(current);
+        }
+      } catch (err) {
+        console.warn(`[alphabet-soup] tick error for ${room.code}:`, err);
+      }
+      syncAlphabetSoupTicker(current);
+    }, ALPHABET_SOUP_TICK_MS);
+    alphabetSoupTickers.set(room.code, timerId);
+  } else if (!active && existing) {
+    clearInterval(existing);
+    alphabetSoupTickers.delete(room.code);
+  }
+}
+
 // Sends each player THEIR OWN private game data — a different payload per
 // socket, addressed to that player's current live socket id. Skips anyone
 // currently disconnected; they get it re-sent when they reconnect.
@@ -512,6 +621,8 @@ function startTournamentGameNow(room, gameId) {
   syncBlackMagicTicker(room);
   syncTabooTicker(room);
   syncFakeArtistTicker(room);
+  syncWhoAmITicker(room);
+  syncAlphabetSoupTicker(room);
 }
 
 // Advance the tournament to whatever comes next for tournament.currentIndex:
@@ -588,6 +699,8 @@ io.on("connection", (socket) => {
     syncBlackMagicTicker(room);
     syncTabooTicker(room);
     syncFakeArtistTicker(room);
+    syncWhoAmITicker(room);
+    syncAlphabetSoupTicker(room);
   });
 
   // Lobby-only: a player changes their colour identity. The server checks
@@ -616,6 +729,11 @@ io.on("connection", (socket) => {
     if (playerIds.length < gameModule.minPlayers) {
       return callback?.({
         error: `${gameModule.name} needs at least ${gameModule.minPlayers} players.`,
+      });
+    }
+    if (gameModule.maxPlayers && playerIds.length > gameModule.maxPlayers) {
+      return callback?.({
+        error: `${gameModule.name} supports at most ${gameModule.maxPlayers} players.`,
       });
     }
 
@@ -647,6 +765,8 @@ io.on("connection", (socket) => {
     syncBlackMagicTicker(room);
     syncTabooTicker(room);
     syncFakeArtistTicker(room);
+    syncWhoAmITicker(room);
+    syncAlphabetSoupTicker(room);
   });
 
   // --- Chaos Events layer ----------------------------------------------
@@ -754,6 +874,7 @@ io.on("connection", (socket) => {
     syncBlackMagicTicker(room);
     syncTabooTicker(room);
     syncFakeArtistTicker(room);
+    syncAlphabetSoupTicker(room);
   });
 
   // --- AI custom content ------------------------------------------------
@@ -1268,6 +1389,169 @@ io.on("connection", (socket) => {
     broadcastRoom(room.code);
     sendPrivateRoles(room); // the next round's Fake Artist gets their category
     syncFakeArtistTicker(room);
+    return;
+  });
+
+  // --- Who Am I? actions -------------------------------------------
+  // The active player's own actions (ask / startGuess / guess) all route
+  // through here; everything else (who's active, the clock) is public
+  // state nobody needs a special event for. `who_am_i_guess` acks with the
+  // verdict so the guesser's own device can show the reveal animation
+  // immediately, without waiting on the next room_update.
+
+  socket.on("who_am_i_ask", ({ code, answer }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "who-am-i") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES["who-am-i"].askQuestion(room.game, playerId, answer, connectedPlayerIds(room));
+    broadcastRoom(room.code);
+    syncWhoAmITicker(room);
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("who_am_i_start_guess", ({ code }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "who-am-i") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES["who-am-i"].startGuess(room.game, playerId);
+    if (res?.ok) {
+      broadcastRoom(room.code);
+      syncWhoAmITicker(room);
+    }
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("who_am_i_guess", ({ code, guess }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "who-am-i") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES["who-am-i"].submitGuess(
+      room.game, playerId, guess, connectedPlayerIds(room)
+    );
+    broadcastRoom(room.code);
+    sendPrivateRoles(room); // a correct guess just unlocked the guesser's own identity
+    syncWhoAmITicker(room);
+    cb?.(res ?? { ok: false });
+  });
+
+  socket.on("who_am_i_next_round", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "who-am-i") return;
+    GAMES["who-am-i"].nextRound(room.game, connectedPlayerIds(room));
+    broadcastRoom(room.code);
+    sendPrivateRoles(room); // the new round's identities are dealt
+    syncWhoAmITicker(room);
+  });
+
+  // --- Alphabet Soup actions -------------------------------------------
+  // Typed: `alphabet_soup_submit` locks ONE answer in and acks straight
+  // back with it (or a short reason it bounced) so the input clears
+  // instantly; the background category check then runs without blocking
+  // the next answer, and its verdict reaches only the author (private
+  // state). Nobody else sees answer text until the round closes.
+  // Spoken: turn actions carry the server's `turnSeq` so a tap that raced
+  // the buzzer can never act on the NEXT player's turn.
+
+  function soupContext(socket, code) {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "alphabet-soup") return null;
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return null;
+    return { room, playerId, present: connectedPlayerIds(room) };
+  }
+
+  function afterSoupAction(room, { privateFor = null, everyone = false } = {}) {
+    broadcastRoom(room.code);
+    if (everyone) sendPrivateRoles(room);
+    else if (privateFor) {
+      const player = room.players.get(privateFor);
+      if (player) sendPrivateRoleTo(room, player);
+    }
+    syncAlphabetSoupTicker(room);
+  }
+
+  socket.on("alphabet_soup_submit", ({ code, text }, cb) => {
+    const ctx = soupContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const { room, playerId, present } = ctx;
+    const phaseBefore = room.game.phase;
+    const res = GAMES["alphabet-soup"].submitAnswer(room.game, playerId, text, present);
+    cb?.(res);
+    if (!res.ok) return;
+    pumpSoupValidation(room, soupRuntimeDeps());
+    afterSoupAction(room, { privateFor: playerId, everyone: room.game.phase !== phaseBefore });
+  });
+
+  socket.on("alphabet_soup_done", ({ code }, cb) => {
+    const ctx = soupContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const { room, playerId, present } = ctx;
+    const phaseBefore = room.game.phase;
+    const res = GAMES["alphabet-soup"].markDone(room.game, playerId, present);
+    cb?.(res);
+    if (res.ok) afterSoupAction(room, { privateFor: playerId, everyone: room.game.phase !== phaseBefore });
+  });
+
+  socket.on("alphabet_soup_dispute", ({ code, answerId }, cb) => {
+    const ctx = soupContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = GAMES["alphabet-soup"].openDispute(ctx.room.game, ctx.playerId, answerId, ctx.present);
+    cb?.(res);
+    if (res.ok) afterSoupAction(ctx.room, { everyone: true });
+  });
+
+  socket.on("alphabet_soup_dispute_vote", ({ code, disputeId, overturn }, cb) => {
+    const ctx = soupContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = GAMES["alphabet-soup"].voteDispute(
+      ctx.room.game, ctx.playerId, disputeId, overturn === true, ctx.present
+    );
+    cb?.(res);
+    if (res.ok) afterSoupAction(ctx.room, { everyone: true });
+  });
+
+  socket.on("alphabet_soup_settle", ({ code }, cb) => {
+    const ctx = soupContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = GAMES["alphabet-soup"].settleReview(ctx.room.game, ctx.playerId, ctx.present);
+    cb?.(res);
+    if (res.ok) afterSoupAction(ctx.room, { everyone: true });
+  });
+
+  socket.on("alphabet_soup_said_it", ({ code, turnSeq }, cb) => {
+    const ctx = soupContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = GAMES["alphabet-soup"].saidIt(ctx.room.game, ctx.playerId, turnSeq, ctx.present);
+    cb?.(res);
+    if (res.ok) afterSoupAction(ctx.room, { everyone: true });
+  });
+
+  socket.on("alphabet_soup_challenge", ({ code, turnSeq }, cb) => {
+    const ctx = soupContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = GAMES["alphabet-soup"].challenge(ctx.room.game, ctx.playerId, turnSeq, ctx.present);
+    cb?.(res);
+    if (res.ok) afterSoupAction(ctx.room, { everyone: true });
+  });
+
+  socket.on("alphabet_soup_challenge_vote", ({ code, turnSeq, uphold }, cb) => {
+    const ctx = soupContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = GAMES["alphabet-soup"].voteChallenge(
+      ctx.room.game, ctx.playerId, turnSeq, uphold === true, ctx.present
+    );
+    cb?.(res);
+    if (res.ok) afterSoupAction(ctx.room, { everyone: true });
+  });
+
+  socket.on("alphabet_soup_next_round", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "alphabet-soup") return;
+    GAMES["alphabet-soup"].nextRound(room.game, connectedPlayerIds(room));
+    afterSoupAction(room, { everyone: true });
   });
 
   socket.on("back_to_lobby", ({ code }) => {
@@ -1282,6 +1566,8 @@ io.on("connection", (socket) => {
     syncBlackMagicTicker(room);
     syncTabooTicker(room);
     syncFakeArtistTicker(room);
+    syncWhoAmITicker(room);
+    syncAlphabetSoupTicker(room);
   });
 
   // --- Host session-management controls ---------------------------------
@@ -1336,6 +1622,8 @@ io.on("connection", (socket) => {
     syncBlackMagicTicker(room);
     syncTabooTicker(room);
     syncFakeArtistTicker(room);
+    syncWhoAmITicker(room);
+    syncAlphabetSoupTicker(room);
     callback?.({ ok: true });
   });
 
@@ -1355,6 +1643,8 @@ io.on("connection", (socket) => {
     syncBlackMagicTicker(getRoom(info.code)); // The Witch leaving abandons the round
     syncTabooTicker(getRoom(info.code));
     syncFakeArtistTicker(getRoom(info.code));
+    syncWhoAmITicker(getRoom(info.code));
+    syncAlphabetSoupTicker(getRoom(info.code));
     armGraceTimer(info.code, info.playerId); // remove them if they don't return in time
   });
 });
@@ -1395,7 +1685,7 @@ function cleanupRoom(code, category, detail) {
   io.to(code).emit("room_closed", { reason: category });
 
   clearWheelTimer(code);
-  for (const map of [emojiTickers, blackMagicTickers, tabooTickers, fakeArtistTickers]) {
+  for (const map of [emojiTickers, blackMagicTickers, tabooTickers, fakeArtistTickers, alphabetSoupTickers]) {
     const timerId = map.get(code);
     if (timerId) clearInterval(timerId);
     map.delete(code);

@@ -22,6 +22,12 @@ import { rules as tabooRules } from './taboo/rules'
 import FakeArtistSetup from './fakeArtist/FakeArtistSetup'
 import FakeArtistGame from './fakeArtist/FakeArtistGame'
 import { rules as fakeArtistRules } from './fakeArtist/rules'
+import WhoAmISetup from './whoAmI/WhoAmISetup'
+import WhoAmIGame from './whoAmI/WhoAmIGame'
+import { rules as whoAmIRules } from './whoAmI/rules'
+import AlphabetSoupSetup from './alphabetSoup/AlphabetSoupSetup'
+import AlphabetSoupGame from './alphabetSoup/AlphabetSoupGame'
+import { rules as alphabetSoupRules } from './alphabetSoup/rules'
 
 // To add a game: write its Setup + Game components and a rules.js, then
 // add one entry here. Nothing else in the lobby/room framework needs to
@@ -36,6 +42,8 @@ export const GAMES = [
   { id: 'wavelength', name: 'Wavelength', minPlayers: 3, genre: 'spectrum guessing', Setup: WavelengthSetup, Game: WavelengthGame, rules: wavelengthRules },
   { id: 'taboo', name: 'Taboo', minPlayers: 3, genre: 'describe & guess', Setup: TabooSetup, Game: TabooGame, rules: tabooRules },
   { id: 'fake-artist', name: 'Fake Artist', minPlayers: 3, genre: 'draw & deduce', Setup: FakeArtistSetup, Game: FakeArtistGame, rules: fakeArtistRules },
+  { id: 'who-am-i', name: 'Who Am I?', minPlayers: 3, maxPlayers: 10, genre: 'yes/no deduction', Setup: WhoAmISetup, Game: WhoAmIGame, rules: whoAmIRules },
+  { id: 'alphabet-soup', name: 'Alphabet Soup', minPlayers: 3, maxPlayers: 10, genre: 'category & letter', Setup: AlphabetSoupSetup, Game: AlphabetSoupGame, rules: alphabetSoupRules },
 ]
 
 export function getGame(id) {

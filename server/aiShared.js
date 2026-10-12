@@ -44,20 +44,29 @@ export function aiContentAvailable() {
 // One JSON-mode chat completion. Returns the PARSED object, or throws an
 // Error tagged with a small, stable `.code`:
 //   "no_api_key" | "timeout" | "rate_limit" | "api_error" | "bad_response"
-export async function callJSON({ system, user, timeoutMs = REQUEST_TIMEOUT_MS }) {
+// `maxRetries` is the SDK's own retry count; a caller with its own retry
+// policy (the Alphabet Soup answer validator) passes 0 so `timeoutMs` is a
+// real ceiling rather than a per-attempt one.
+export async function callJSON({
+  system,
+  user,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+  maxRetries = 1,
+  reasoningEffort = "minimal", // fastest + cheapest; content generation is easy
+}) {
   let completion;
   try {
     completion = await getClient().chat.completions.create(
       {
         model: MODEL,
-        reasoning_effort: "minimal", // fastest + cheapest; these tasks are easy
+        reasoning_effort: reasoningEffort,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
         ],
       },
-      { timeout: timeoutMs, maxRetries: 1 },
+      { timeout: timeoutMs, maxRetries },
     );
   } catch (err) {
     if (err?.code === "no_api_key") throw err;

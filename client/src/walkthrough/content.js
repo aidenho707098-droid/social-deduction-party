@@ -144,6 +144,87 @@ export const WALKTHROUGHS = {
     phaseSteps: { collect: 0, answer: 1, result: 2 },
   },
 
+  'who-am-i': {
+    title: 'How Who Am I? works',
+    steps: [
+      {
+        icon: '🎭',
+        title: 'First, everyone gets a secret identity — except themselves',
+        text: "Every player can see everyone ELSE's identity. Your own is hidden from you until you earn it.",
+      },
+      {
+        icon: '🗣️',
+        title: 'Then, take turns asking yes/no questions',
+        text: 'Ask the group a question out loud. They answer out loud — you tap Yes (keep going) or No (pass the turn) on your phone.',
+      },
+      {
+        icon: '⌨️',
+        title: 'On your turn, you can guess instead',
+        text: "Tap Guess and type who you think you are. Right locks you in with a placing and reveals it; wrong just passes the turn.",
+      },
+      {
+        icon: '🏆',
+        title: 'Finally, earlier and more efficient guesses score more',
+        text: "The round ends once everyone's guessed or run out of questions — placement plus a bonus for asking fewer questions decides the points.",
+      },
+    ],
+    phaseSteps: { turns: 1, reveal: 3 },
+  },
+
+  'alphabet-soup-typed': {
+    title: 'How Alphabet Soup (Typed) works',
+    steps: [
+      {
+        icon: '🥣',
+        title: 'First, the soup picks a category and a letter',
+        text: 'Watch the bowl — your 40 seconds only start once the letter lands.',
+      },
+      {
+        icon: '⌨️',
+        title: 'Then, send answers one at a time',
+        text: 'Up to 5. Each locks in the moment you hit Enter (no take-backs) and gets a ✓ or ✕ a moment later. Wrong letters and your own repeats bounce back for free.',
+      },
+      {
+        icon: '🗳️',
+        title: 'Next, see what everyone said',
+        text: 'Answers only you gave score +2, shared ones +1. Think one was wrongly rejected? Dispute it — the room votes.',
+      },
+      {
+        icon: '🏆',
+        title: 'Finally, scores lock in',
+        text: 'Most unique answers in the round earns a +2 bonus. Leaderboard, then the next bowl.',
+      },
+    ],
+    phaseSteps: { intro: 0, answer: 1, checking: 1, review: 2, reveal: 3 },
+  },
+
+  'alphabet-soup-spoken': {
+    title: 'How Alphabet Soup (Spoken) works',
+    steps: [
+      {
+        icon: '🥣',
+        title: 'First, the soup picks a category and a letter',
+        text: 'The first turn starts once the letter lands.',
+      },
+      {
+        icon: '🗣️',
+        title: 'Then, say an answer out loud on your turn',
+        text: 'Tap "Said it" before your ring runs out (10s, a second shorter every lap). Out of time = lose a life.',
+      },
+      {
+        icon: '✋',
+        title: 'Anyone can challenge',
+        text: 'Wrong letter, doesn’t fit, or a repeat? Challenge it (twice a round). The room votes — a majority costs a life, a tie doesn’t.',
+      },
+      {
+        icon: '🏆',
+        title: 'Finally, last one standing wins',
+        text: '3 lives each. Points go 5 / 3 / 2 / 1 by finishing order.',
+      },
+    ],
+    phaseSteps: { intro: 0, turns: 1, reveal: 3 },
+  },
+
   tournament: {
     title: 'How Tournament Mode works',
     steps: [

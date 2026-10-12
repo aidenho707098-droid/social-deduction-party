@@ -32,7 +32,7 @@ function shuffle(array) {
 
 function eligibleGameIds(playerCount) {
   return Object.values(GAMES)
-    .filter((mod) => playerCount >= mod.minPlayers)
+    .filter((mod) => playerCount >= mod.minPlayers && (!mod.maxPlayers || playerCount <= mod.maxPlayers))
     .map((mod) => mod.id);
 }
 

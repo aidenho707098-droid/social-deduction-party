@@ -32,7 +32,7 @@ See `server/.env.example` for the list.
 
 | Variable | Used for | Required? |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | AI "Custom Category / Theme / Topic" generation on the setup screens for Imposter, Crack the Code, Fact or Fake, Taboo and Fake Artist (OpenAI `gpt-5-nano`; see `server/aiShared.js` + `server/aiContent.js`) | Optional — without it those options are hidden and every game still works from its built-in content |
+| `OPENAI_API_KEY` | (1) AI "Custom Category / Theme / Topic" generation on the setup screens for Imposter, Crack the Code, Fact or Fake, Taboo and Fake Artist (`server/aiContent.js`); (2) Alphabet Soup Typed mode's background check that each answer fits the category (`server/categoryValidator.js`). Both use OpenAI `gpt-5-nano` via `server/aiShared.js` | Optional — without it the custom-content options are hidden, and Alphabet Soup accepts every answer that starts with the right letter (no category check). Every game still works |
 
 On Render, don't upload `.env` — set the same variables in the dashboard
 (Service → **Environment** → **Add Environment Variable**), then redeploy.

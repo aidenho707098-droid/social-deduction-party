@@ -14,6 +14,10 @@ export function walkthroughKeyForGame(game) {
       return 'wavelength'
     case 'fake-artist':
       return 'fake-artist'
+    case 'who-am-i':
+      return 'who-am-i'
+    case 'alphabet-soup':
+      return game.mode === 'spoken' ? 'alphabet-soup-spoken' : 'alphabet-soup-typed'
     case 'fibbage':
       return game.personal ? 'fibbage-personal' : null
     case 'would-you-rather':

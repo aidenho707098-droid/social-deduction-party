@@ -73,6 +73,23 @@ const ICONS = {
       <path d="m14.5 17.5-2.5 3.5" />
     </>
   ),
+  // Who Am I? — a big question mark: the identity nobody can see but them.
+  'who-am-i': (
+    <>
+      <path d="M8.3 9a3.7 3.7 0 1 1 5.8 3c-1.1.75-2.1 1.5-2.1 2.9v.4" />
+      <path d="M12 18.4h.01" />
+    </>
+  ),
+  // Alphabet Soup — a bowl with a letter tile floating above it.
+  'alphabet-soup': (
+    <>
+      <path d="M3 12.5h18a9 7.5 0 0 1-18 0Z" />
+      <path d="M8.5 20h7" />
+      <rect x="8.8" y="3" width="6.4" height="6.4" rx="1.4" />
+      <path d="m10.6 8 1.4-3.4L13.4 8" />
+      <path d="M11.1 6.9h1.8" />
+    </>
+  ),
 }
 
 export function GameIcon({ id }) {

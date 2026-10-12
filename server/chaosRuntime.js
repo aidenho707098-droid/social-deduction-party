@@ -130,6 +130,7 @@ function beginRound(room, cfg, game, roundKey, present) {
     const pool = eligibleModifiers(game.id, MODIFIERS, {
       playerCount,
       roundsLeft: roundsLeftAfter(game),
+      game,
     });
     const pinned = process.env.CHAOS_FORCE_MODIFIER;
     modifier =
@@ -160,6 +161,11 @@ function beginRound(room, cfg, game, roundKey, present) {
   };
 
   if (!modifier) return;
+
+  // Optional game hook: a game whose round opens with its own timed
+  // animation (Alphabet Soup's letter reveal) delays it so the takeover
+  // plays first and doesn't eat into anyone's answering time.
+  GAMES[game.id]?.onChaosAnnounced?.(game, room.chaos.modifier);
 
   // INSTANT — rewrite totals right now.
   if (modifier.timing === "instant") {

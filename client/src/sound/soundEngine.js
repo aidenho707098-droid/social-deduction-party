@@ -44,6 +44,12 @@ export const SOUND_MANIFEST = {
   // Taboo: the round timer just lost 30s because a guesser buzzed in. A
   // short, sharp alert — reuses the buzzer bed until a bespoke asset lands.
   'time-drop': { src: 'wrong.mp3', gain: 0.8 },
+  // Alphabet Soup letter reveal: the spin bed re-used quietly as a soft
+  // tick under the stirring swirl (SoupReveal rides its playbackRate up and
+  // back down with the stir), then one clean landing chime when the letter
+  // tile settles — same arcade family as the wheel, no whooshes.
+  'soup-stir': { src: 'wheel-spin.mp3', gain: 0.18 },
+  'soup-land': { src: 'wheel-land.mp3', gain: 0.5 },
   // Tournament grand finale — a short, crisp rising achievement chime.
   // Triumphant and clean, not a long sting or a crowd.
   'grand-finale': { src: 'grand-finale.mp3', gain: 0.7 },

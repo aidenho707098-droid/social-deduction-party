@@ -71,6 +71,36 @@ export const CHAOS_GAMES = {
     scoredPhases: ["reveal", "final"],
     speedRound: false,
   },
+  "who-am-i": {
+    // One "turns" phase per round covers the whole deal-to-done rotation;
+    // it scores at "reveal" exactly like Taboo. Speed Round slashes
+    // whichever of the two windows (question / guess) is currently running
+    // down to 10s — same shape as Taboo's single dynamic `deadline`.
+    rollPhases: ["turns"],
+    scoredPhases: ["reveal", "final"],
+    speedRound: true,
+    timer: { phases: ["turns"], deadlineField: "deadline", windowKeys: ["questionMs", "guessMs"] },
+  },
+  "alphabet-soup": {
+    // Rolls on the letter-reveal intro, so the takeover plays BEFORE the
+    // soup animation (the game pushes its intro clock back by the takeover's
+    // length via its onChaosAnnounced hook — nobody loses answering time).
+    // Scores land at "reveal": in Typed mode that's AFTER disputes resolve
+    // (the "review" phase in between carries provisional points only).
+    //
+    // FLAGGED:
+    //   * Speed Round — Typed mode only (40s answer window -> 10s). Spoken
+    //     turns are already 10s -> 4s and the challenge/vote windows are
+    //     5s; clamping to 10s would do nothing, so it's filtered out there.
+    //   * Countdown Chaos — works in both: hides the Typed timer bar and the
+    //     Spoken countdown ring (see the [data-chaos-blind] rules).
+    //   * Risk It — its wager beat lengthens the takeover; the intro waits
+    //     for it too.
+    rollPhases: ["intro"],
+    scoredPhases: ["reveal", "final"],
+    speedRound: (game) => game?.mode === "typed",
+    timer: { phases: ["answer"], deadlineField: "deadline", windowKeys: ["answerMs"] },
+  },
 };
 
 export function chaosGameConfig(gameId) {
@@ -83,13 +113,16 @@ export function isChaosEligible(gameId) {
 
 // Modifiers this game can draw — the full pool minus the ones its config
 // can't support. `roundsLeft` is how many scoring rounds remain AFTER the
-// current one (Player Disable needs at least 1).
-export function eligibleModifiers(gameId, modifiers, { playerCount, roundsLeft }) {
+// current one (Player Disable needs at least 1). `game` (optional) lets a
+// config decide per-game-state — `speedRound` may be a function of it
+// (Alphabet Soup allows Speed Round in Typed mode only).
+export function eligibleModifiers(gameId, modifiers, { playerCount, roundsLeft, game = null }) {
   const cfg = CHAOS_GAMES[gameId];
   if (!cfg) return [];
+  const speedOk = typeof cfg.speedRound === "function" ? cfg.speedRound(game) : cfg.speedRound;
   return modifiers.filter((m) => {
     const needs = m.needs ?? {};
-    if (needs.speedRound && !cfg.speedRound) return false;
+    if (needs.speedRound && !speedOk) return false;
     if (needs.minPlayers && playerCount < needs.minPlayers) return false;
     if (needs.nextRound && !(roundsLeft > 0)) return false;
     return true;

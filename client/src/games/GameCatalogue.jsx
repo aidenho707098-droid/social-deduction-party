@@ -37,7 +37,8 @@ export default function GameCatalogue({ onClose }) {
               <span className="game-card-body">
                 <span className="game-card-name">{game.name}</span>
                 <span className="game-card-meta">
-                  {game.minPlayers}+ players · {game.genre}
+                  {game.maxPlayers ? `${game.minPlayers}–${game.maxPlayers}` : `${game.minPlayers}+`} players ·{' '}
+                  {game.genre}
                 </span>
               </span>
               <span className="game-card-cta">View rules</span>
