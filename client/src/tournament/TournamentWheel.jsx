@@ -1,8 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { GameIcon } from '../games/gameStyle'
+import { ACCENT_HEX, ICON_ON } from '../games/gamePalette'
 import { useSound } from '../sound/SoundContext'
 
-const SEG_COLORS = ['#5b3e99', '#ff7a50', '#f0b429']
+// Segments cycle the four game accents by POSITION (not per game), so
+// neighbouring slices never share a colour — the pool is a varying subset.
+const SEG_KEYS = Object.keys(ACCENT_HEX)
+function segKey(i, n) {
+  // With n % 4 === 1 the last slice would match the first; shift it.
+  if (n > 1 && i === n - 1 && n % SEG_KEYS.length === 1) return SEG_KEYS[1]
+  return SEG_KEYS[i % SEG_KEYS.length]
+}
 const R = 118
 const C = 130
 const SIZE = 260
@@ -13,7 +21,8 @@ function pointOn(deg, r) {
 }
 
 // Shown to EVERYONE before every game in a random tournament. The server
-// has already decided `wheel.landedOn`; this just animates the reveal so
+// builds the pool from games that fit the room AT SPIN TIME and has
+// already decided `wheel.landedOn`; this just animates the reveal so
 // it lands there. The host's device (and a server timer) then kick off the
 // actual game.
 export default function TournamentWheel({ t, isHost, onReady }) {
@@ -117,12 +126,12 @@ export default function TournamentWheel({ t, isHost, onReady }) {
                 <g key={`${g.id}-${i}`}>
                   <path
                     d={`M ${C} ${C} L ${x0} ${y0} A ${R} ${R} 0 ${seg > 180 ? 1 : 0} 1 ${x1} ${y1} Z`}
-                    fill={SEG_COLORS[i % 3]}
+                    fill={ACCENT_HEX[segKey(i, pool.length)]}
                     stroke="#f7f4fb"
                     strokeWidth="2"
                   />
                   <foreignObject x={lx - 14} y={ly - 14} width="28" height="28">
-                    <div className="tour-wheel-ico">
+                    <div className="tour-wheel-ico" style={{ color: ICON_ON[segKey(i, pool.length)] }}>
                       <GameIcon id={g.id} />
                     </div>
                   </foreignObject>

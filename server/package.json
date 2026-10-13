@@ -13,8 +13,11 @@
     "test:chaos": "node chaos.selftest.mjs && node chaosRuntime.selftest.mjs && node chaos-integration.selftest.mjs && node chaos-eligibility.selftest.mjs",
     "test:fake-artist": "node fake-artist.selftest.mjs && node ../client/src/games/fakeArtist/inkModel.selftest.mjs",
     "test:who-am-i": "node who-am-i.selftest.mjs",
-    "test:alphabet-soup": "node alphabet-soup.selftest.mjs",
-    "test:tournament": "node tournament.selftest.mjs"
+    "test:alphabet-soup": "node alphabet-soup.selftest.mjs && node ../client/src/games/alphabetSoup/soupMotion.selftest.mjs",
+    "test:hot-potato": "node hot-potato.selftest.mjs",
+    "test:tournament": "node tournament.selftest.mjs",
+    "test:catalog": "node catalog.selftest.mjs",
+    "test:categories": "node categories.selftest.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

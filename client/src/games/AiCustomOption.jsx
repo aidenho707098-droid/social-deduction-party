@@ -42,20 +42,26 @@ export default function AiCustomOption({
     })
   }
 
+  // Always its own full-width block with equal space above and below (see
+  // .ai-custom-slot), so it never crowds the preset options around it —
+  // whichever layout a setup screen drops it into.
   if (!open) {
     return (
-      <button
-        type="button"
-        className="pill pill-custom-feature"
-        onClick={() => setOpen(true)}
-      >
-        ✨ {label}
-      </button>
+      <div className="ai-custom-slot">
+        <span className="ai-custom-label">Or make your own</span>
+        <button
+          type="button"
+          className="pill pill-custom-feature"
+          onClick={() => setOpen(true)}
+        >
+          ✨ {label}
+        </button>
+      </div>
     )
   }
 
   return (
-    <div className="ai-custom">
+    <div className="ai-custom-slot ai-custom">
       {hint && <p className="hint hint-block">{hint}</p>}
       <div className="row">
         <input

@@ -113,6 +113,9 @@ export function createRoom(hostSocketId, hostName) {
     // lifetime — selectable like built-in content for the rest of the
     // session, gone when the room is cleaned up. No DB.
     aiContent: {},
+    // Custom categories for Alphabet Soup + Hot Potato's shared selector:
+    // ONE room-level list, reusable in either game for the session.
+    customCategories: [],
     chaosFrequency: "off", // app-wide Chaos Events dial; persists for the room
     chaos: null, // current round's chaos record (see chaosRuntime.js)
     chaosCarry: null, // Player Disable effect owed to a future round
@@ -125,6 +128,10 @@ export function createRoom(hostSocketId, hostName) {
 export function startGame(room, game) {
   room.status = "in-game";
   room.game = game;
+  // Feeds the menu's "played" check and Surprise Me's preference for
+  // games this room hasn't tried yet.
+  room.playedGameIds = room.playedGameIds ?? new Set();
+  room.playedGameIds.add(game.id);
 }
 
 export function endGame(room) {
@@ -302,7 +309,7 @@ export function setPlayerColor(code, playerId, colorId) {
 // bound over a long session.
 const MAX_AI_BATCHES_PER_GAME = 20;
 
-export function addAiContent(room, gameId, batch) {
+export function addAiContent(room, gameId, batch, { max = MAX_AI_BATCHES_PER_GAME } = {}) {
   if (!room) return { error: "Room not found." };
   const list = (room.aiContent[gameId] ??= []);
   const key = batch.name.toLowerCase();
@@ -311,11 +318,43 @@ export function addAiContent(room, gameId, batch) {
     list[existingIndex] = batch;
     return { room, name: batch.name };
   }
-  if (list.length >= MAX_AI_BATCHES_PER_GAME) {
-    return { error: "This room already has the maximum number of custom sets for this game." };
+  if (list.length >= max) {
+    return { error: `This room already has the maximum of ${max} custom sets for this game.` };
   }
   list.push(batch);
   return { room, name: batch.name };
+}
+
+// --- Custom categories (shared by Alphabet Soup and Hot Potato) ---------
+// { key: "custom:N", name, tags, broad, letters: string[] | null,
+//   unverified, createdIn } — `letters` is null until Alphabet Soup needs
+// it (a category created from Hot Potato). Lives in room memory only.
+export const MAX_CUSTOM_CATEGORIES = 10;
+
+export function addCustomCategory(room, record) {
+  room.customCategories ??= [];
+  if (room.customCategories.length >= MAX_CUSTOM_CATEGORIES) {
+    return { error: `This room already has the maximum of ${MAX_CUSTOM_CATEGORIES} custom categories.` };
+  }
+  room.customCategorySeq = (room.customCategorySeq ?? 0) + 1;
+  const category = { ...record, key: `custom:${room.customCategorySeq}` };
+  room.customCategories.push(category);
+  return { category };
+}
+
+// What every client may see: no letter data (Alphabet Soup's letters stay
+// server-side, like the bank's).
+export function publicCustomCategories(room) {
+  return (room.customCategories ?? []).map((c) => ({
+    key: c.key,
+    name: c.name,
+    tags: c.tags ?? [],
+    broad: c.broad !== false,
+    unverified: c.unverified === true,
+    hasLetters: Array.isArray(c.letters), // checked for Alphabet Soup yet (the letters themselves stay here)
+    noLetters: Array.isArray(c.letters) && c.letters.length === 0, // checked: unusable in Alphabet Soup
+    createdIn: c.createdIn,
+  }));
 }
 
 // The custom batches for one game, or [] — safe read used by index.js when
@@ -335,5 +374,6 @@ export function toPublicRoom(room) {
       color: p.color, // player-colour id
       colorHex: hexOf(p.color), // resolved hex, so clients never need the map
     })),
+    playedGameIds: [...(room.playedGameIds ?? [])],
   };
 }

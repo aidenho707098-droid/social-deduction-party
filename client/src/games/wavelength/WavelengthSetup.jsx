@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
+import { catalogEntry } from '../catalog'
 import NumberStepper from '../NumberStepper'
 import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
+
+const { minPlayers: MIN_PLAYERS } = catalogEntry('wavelength')
 
 export default function WavelengthSetup({ gameId, playerCount, saved, onStart, onCancel, error, submitLabel }) {
   const [rounds, setRounds] = useState(() => clampRounds(saved?.rounds ?? ROUND_DEFAULT))
 
-  const notEnough = playerCount < 3
+  const notEnough = playerCount < MIN_PLAYERS
 
   return (
     <div className="screen setup-screen">
@@ -28,7 +31,7 @@ export default function WavelengthSetup({ gameId, playerCount, saved, onStart, o
       />
 
       {notEnough && (
-        <p className="hint">Wavelength needs at least 3 players.</p>
+        <p className="hint">Wavelength needs at least {MIN_PLAYERS} players.</p>
       )}
       {error && <p className="error">{error}</p>}
 

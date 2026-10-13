@@ -1,8 +1,9 @@
 // "Alphabet Soup" — a category-and-letter word game with two host modes.
 //
-// Every round deals a CATEGORY and a LETTER (letters come from a pool
-// without Q/U/V/X/Y/Z, and each category only ever pairs with letters it
-// has plenty of answers for — see alphabetSoupBank.js). Then:
+// Every round deals a CATEGORY and then a LETTER: any of the 26, with six
+// rare ones weighted to turn up rarely (LETTER_DRAW), and each category only
+// ever pairs with letters it has plenty of answers for — both in
+// alphabetSoupBank.js. Then:
 //
 //   TYPED  — everyone answers at once on their own phone: up to 5 answers
 //            in 40s, each locked in the moment it's sent. Answers are
@@ -10,9 +11,10 @@
 //            then scored for RARITY across the room. Players may dispute
 //            one rejected answer each; the room votes.
 //   SPOKEN — turn-based elimination. Say an answer out loud and tap "Said
-//            it" before the (shrinking) turn clock runs out; anyone may
-//            challenge, and the room votes. 3 lives each, last one standing
-//            wins the round.
+//            it" before the (shrinking) turn clock runs out — the turn
+//            passes at once. Until the next answer, anyone else still in may
+//            challenge it: the clock freezes for a 5s room vote (the only
+//            pause). 3 lives each, last one standing wins the round.
 //
 //   phase:  intro -> answer -> checking -> review -> reveal   (typed)
 //           intro -> turns -> reveal                           (spoken)
@@ -35,21 +37,27 @@
 import { shuffle } from "./deck.js";
 import {
   CATEGORIES,
-  CATEGORY_BY_KEY,
   CATEGORY_KEYS,
   LETTER_POOL,
   RANDOM_CATEGORY,
+  isRareLetter,
+  letterWeight,
 } from "./alphabetSoupBank.js";
+import { categoryMapFor, deckCandidates, deckTake, newCategoryDeck, resolveSelection } from "./categorySelection.js";
 import {
   canonicalAnswer,
   cleanAnswer,
+  farmingConflict,
   sameAnswer,
   startsWithLetter,
 } from "./wordMatch.js";
 
 export const id = "alphabet-soup";
 export const name = "Alphabet Soup";
-export const minPlayers = 3;
+// Typed works head-to-head; Spoken needs 3, since a challenge vote needs
+// someone other than the challenger and the speaker (see playerLimits.js).
+export const minPlayers = 2;
+export const modeMinPlayers = { spoken: 3 };
 export const maxPlayers = 10;
 
 export { CATEGORIES, RANDOM_CATEGORY, LETTER_POOL };
@@ -86,8 +94,7 @@ export const START_LIVES = 3;
 const TURN_START_MS = 10_000;
 const TURN_STEP_MS = 1_000; // shaved off after every full cycle of turns
 const TURN_MIN_MS = 4_000;
-export const CHALLENGE_WINDOW_MS = 5_000;
-export const CHALLENGE_VOTE_MS = 5_000;
+export const CHALLENGE_VOTE_MS = 5_000; // the ONLY pause in a Spoken round
 export const CHALLENGE_LIMIT = 2; // per player, per round
 const TAP_GRACE_MS = 400; // a "Said it" racing the buzzer still counts
 // A disconnected ACTIVE player's turn waits this long for them to come
@@ -103,62 +110,100 @@ const PLACEMENT_POINTS = [5, 3, 2, 1];
 // used by ANY earlier round is gone; otherwise only this exact
 // category+letter pair is avoided (so a game never repeats a prompt).
 function availableLetters(game, catKey) {
-  const cat = CATEGORY_BY_KEY[catKey];
+  const cat = game.catMap[catKey];
   if (!cat) return [];
   return cat.letters.filter((l) =>
     game.burnedOn ? !game.burned.includes(l) : !game.usedPairs.has(`${catKey}|${l}`),
   );
 }
 
-// Pick the next round's category + letter. Categories rotate (least-used
-// this game first, then ones not seen earlier this session) so a long game
-// moves around the bank; the letter is uniform over what's left for it.
-function pickRound(game) {
-  const candidates = game.categories.filter((k) => availableLetters(game, k).length > 0);
-  if (!candidates.length) return null;
-  const uses = (k) => game.categoryUses.get(k) ?? 0;
-  const fewest = Math.min(...candidates.map(uses));
-  let pool = candidates.filter((k) => uses(k) === fewest);
-  const fresh = pool.filter((k) => !game.sessionSeen.has(k));
-  if (fresh.length) pool = fresh;
-  const catKey = shuffle(pool)[0];
-  const letters = availableLetters(game, catKey);
-  const letter = shuffle(letters)[0];
-  return { catKey, letter, eligibleLetters: letters };
+// One letter from `letters`, weighted by LETTER_DRAW (renormalized over
+// just these letters, so a category with no rare letters draws evenly from
+// its normal ones). Exported for the selftest's frequency simulation.
+export function drawLetter(letters, rng = Math.random) {
+  const total = letters.reduce((sum, l) => sum + letterWeight(l), 0);
+  let r = rng() * total;
+  for (const l of letters) {
+    r -= letterWeight(l);
+    if (r < 0) return l;
+  }
+  return letters[letters.length - 1];
+}
+
+// Burned Letters only: with `roundsLeft` rounds still to deal (this one
+// included), must this round take a rare letter so the game doesn't strand
+// itself on rare letters it can't deal back-to-back? Max dealable from here
+// is N normals + min(R rares, N + 1) when the last round wasn't rare.
+function mustDrawRare(game, roundsLeft) {
+  if (!game.burnedOn || game.lastWasRare) return false;
+  const left = new Set();
+  for (const k of game.categories) for (const l of availableLetters(game, k)) left.add(l);
+  const rares = [...left].filter(isRareLetter).length;
+  const normals = left.size - rares;
+  if (!rares) return false;
+  // Taking a normal now leaves normals-1 / rares for roundsLeft-1 rounds.
+  return (normals - 1) + Math.min(rares, normals) < roundsLeft - 1;
+}
+
+// Pick the next round's category, THEN its letter. The category is drawn
+// uniformly from what's left of the host's selection this cycle — no
+// repeats until it's used up, then a reshuffle that never repeats the last
+// one (categorySelection.js); the letter is a weighted draw over what that
+// category has left. Guardrails, all decided before anything is
+// shown: no rare letter two rounds running, and a category whose only
+// remaining letters are off-limits isn't a candidate (so the CATEGORY is
+// redrawn, never changed after it's shown).
+export function pickRound(game, rng = Math.random) {
+  const roundsLeft = game.totalRounds - (game.dealt ?? 0);
+  const forceRare = mustDrawRare(game, roundsLeft);
+  const allowed = (k) =>
+    availableLetters(game, k).filter((l) =>
+      forceRare ? isRareLetter(l) : !(game.lastWasRare && isRareLetter(l)),
+    );
+  const { keys, refill } = deckCandidates(game.catDeck, (k) => allowed(k).length > 0);
+  if (!keys.length) return null;
+  const catKey = keys[Math.floor(rng() * keys.length)];
+  const letter = drawLetter(allowed(catKey), rng);
+  return { catKey, letter, refill };
 }
 
 // How many rounds can actually be dealt — Burned Letters caps the game at
-// the number of distinct letters the chosen categories can use.
-function roundCeiling(catKeys, burnedOn) {
+// the number of distinct (unburned) letters the chosen categories can use,
+// less any rare letters that couldn't be spaced out between normal ones.
+function roundCeiling(catKeys, burnedOn, catMap) {
   if (!burnedOn) return Infinity;
   const letters = new Set();
-  for (const k of catKeys) for (const l of CATEGORY_BY_KEY[k]?.letters ?? []) letters.add(l);
-  return letters.size;
+  for (const k of catKeys) for (const l of catMap[k]?.letters ?? []) letters.add(l);
+  const rares = [...letters].filter(isRareLetter).length;
+  const normals = letters.size - rares;
+  return normals + Math.min(rares, normals + 1);
 }
 
 // ---------- lifecycle ----------
 
 export function createGame(playerIds, options = {}) {
   const { rounds, categories, memory } = options;
-  if (playerIds.length < minPlayers) {
-    throw new Error(`Alphabet Soup needs at least ${minPlayers} players.`);
+  const mode = options.mode === "spoken" ? "spoken" : "typed";
+  const modeMin = modeMinPlayers[mode] ?? minPlayers;
+  if (playerIds.length < modeMin) {
+    throw new Error(`Alphabet Soup${mode === "spoken" ? " (Spoken)" : ""} needs at least ${modeMin} players.`);
   }
   if (playerIds.length > maxPlayers) {
     throw new Error(`Alphabet Soup supports at most ${maxPlayers} players.`);
   }
-  const mode = options.mode === "spoken" ? "spoken" : "typed";
   const requested = Number(rounds);
   if (!Number.isInteger(requested) || requested < 1) {
     throw new Error("Choose how many rounds to play.");
   }
 
-  const asked = Array.isArray(categories) ? categories : [];
-  const randomMode = asked.includes(RANDOM_CATEGORY) || asked.length === 0;
-  let catKeys = randomMode ? [...CATEGORY_KEYS] : asked.filter((k) => k in CATEGORY_BY_KEY);
-  if (!catKeys.length) catKeys = [...CATEGORY_KEYS];
+  // The bank plus this room's custom categories (options.customCategories,
+  // from index.js), and the host's selection out of them.
+  const catMap = categoryMapFor(options.customCategories, { game: "alphabet-soup" });
+  const catKeys = resolveSelection(categories, catMap);
+  const randomMode = catKeys.length === CATEGORY_KEYS.length && CATEGORY_KEYS.every((k) => catKeys.includes(k));
   const burnedOn = options.burnedLetters === true;
 
-  const totalRounds = Math.min(requested, roundCeiling(catKeys, burnedOn));
+  const totalRounds = Math.min(requested, roundCeiling(catKeys, burnedOn, catMap));
   const seen = Array.isArray(memory?.seen) ? memory.seen : [];
 
   const game = {
@@ -168,14 +213,16 @@ export function createGame(playerIds, options = {}) {
     totalRounds,
     roundIndex: 0,
     categories: catKeys,
-    randomMode,
+    catMap, // key -> category (bank + this room's custom ones)
+    randomMode, // true = the whole bank is selected ("All")
     burnedOn,
     burned: [], // letters used so far (Burned Letters)
     usedPairs: new Set(), // "catKey|L" dealt this game
-    categoryUses: new Map(),
-    // Session no-repeat memory: categories seen in earlier games this room.
-    // Restarts once the selected set has all been seen.
-    sessionSeen: new Set(seen.filter((k) => catKeys.includes(k)).length >= catKeys.length ? [] : seen),
+    dealt: 0, // rounds dealt so far
+    lastWasRare: false, // the previous round's letter was a rare one (never two in a row)
+    // The category draw bag; its first cycle skips categories this room
+    // already met in earlier games this session.
+    catDeck: newCategoryDeck(catKeys, seen),
     deckMemory: { seen: [...seen] }, // server-only; harvested by index.js
     scores: new Map(playerIds.map((pid) => [pid, 0])),
     seq: 0,
@@ -187,26 +234,42 @@ export function createGame(playerIds, options = {}) {
   return game;
 }
 
+// Record a pick as dealt: burned / used-pair / rotation bookkeeping.
+// Exported (with pickRound) so the selftest can simulate thousands of draws.
+export function commitPick(game, pick) {
+  const cat = game.catMap[pick.catKey];
+  deckTake(game.catDeck, pick.catKey, pick.refill);
+  if (game.burnedOn) game.burned.push(pick.letter);
+  game.usedPairs.add(`${cat.key}|${pick.letter}`);
+  game.dealt = (game.dealt ?? 0) + 1;
+  game.lastWasRare = isRareLetter(pick.letter);
+  return cat;
+}
+
+// QA only (like CHAOS_FORCE): SOUP_FORCE_ROUNDS="animals:Q,movies:X" deals
+// those category+letter pairs as rounds 1, 2, ... of every game, then
+// normal draws resume. A no-op unless the env var is set.
+function forcedPick(game) {
+  const spec = process.env.SOUP_FORCE_ROUNDS;
+  if (!spec) return null;
+  const [catKey, letter] = (spec.split(",")[game.dealt ?? 0] ?? "").trim().split(":");
+  const cat = game.catMap[catKey];
+  return cat && cat.letters.includes(letter) ? { catKey, letter } : null;
+}
+
 function setupRound(game, roundIndex, presentPlayerIds, now = Date.now()) {
-  const pick = pickRound(game);
+  const pick = forcedPick(game) ?? pickRound(game);
   if (!pick) return false;
 
-  const cat = CATEGORY_BY_KEY[pick.catKey];
+  const burnedBefore = [...game.burned];
+  const cat = commitPick(game, pick);
   game.roundIndex = roundIndex;
   game.round = {
     categoryKey: cat.key,
     categoryName: cat.name,
     letter: pick.letter,
-    // The letters the swirl may show: what this category could have landed
-    // on (the chosen letter included), so the bowl never shows a letter
-    // that was impossible this round.
-    eligibleLetters: [...pick.eligibleLetters].sort(),
-    burnedBefore: [...game.burned],
+    burnedBefore,
   };
-  if (game.burnedOn) game.burned.push(pick.letter);
-  game.usedPairs.add(`${cat.key}|${pick.letter}`);
-  game.categoryUses.set(cat.key, (game.categoryUses.get(cat.key) ?? 0) + 1);
-  game.sessionSeen.add(cat.key);
   if (!game.deckMemory.seen.includes(cat.key)) game.deckMemory.seen.push(cat.key);
   if (game.deckMemory.seen.length >= CATEGORY_KEYS.length) game.deckMemory.seen = [cat.key];
 
@@ -236,6 +299,7 @@ function setupRound(game, roundIndex, presentPlayerIds, now = Date.now()) {
   game.currentTurnIndex = 0;
   game.subPhase = null;
   game.challenge = null;
+  game.lastAnswer = null; // the most recent "Said it" — challengeable until the next answer / timeout
   game.lastEvent = null;
   return true;
 }
@@ -289,6 +353,15 @@ const REJECT_MESSAGES = {
   notPlaying: "You're not in this round.",
 };
 
+// This round's anti-farming flags (see alphabetSoupBank.js).
+function roundRules(game) {
+  const cat = game.catMap[game.round?.categoryKey];
+  return {
+    blockNumberedSequels: cat?.blockNumberedSequels === true,
+    blockRepeatedLeadWord: cat?.blockRepeatedLeadWord === true,
+  };
+}
+
 function capped(game, pid) {
   return (game.answers.get(pid)?.length ?? 0) >= ANSWER_CAP;
 }
@@ -304,10 +377,11 @@ function checkAnswerEnd(game, presentPlayerIds, now) {
 }
 
 // One answer, locked in on arrival. The instant checks (letter rule, a
-// repeat of the player's OWN earlier answer) reject without using a slot;
-// anything that passes takes a slot and is queued for category validation.
+// repeat of the player's OWN earlier answer, and in flagged categories a
+// numbered sequel or a reused first word of one) reject without using a
+// slot; anything that passes takes a slot and is queued for validation.
 export function submitAnswer(game, playerId, rawText, presentPlayerIds, now = Date.now()) {
-  const reject = (reason) => ({ ok: false, reason, message: REJECT_MESSAGES[reason] });
+  const reject = (reason, message = REJECT_MESSAGES[reason]) => ({ ok: false, reason, message });
   if (game.mode !== "typed" || game.phase !== "answer") return reject("closed");
   if (!game.roundPlayers.includes(playerId)) return reject("notPlaying");
   if (now > game.deadline + LATE_GRACE_MS) return reject("time");
@@ -320,6 +394,8 @@ export function submitAnswer(game, playerId, rawText, presentPlayerIds, now = Da
   if (canonicalAnswer(text).length < 2) return reject("short");
   if (!startsWithLetter(text, game.round.letter)) return reject("letter");
   if (list.some((a) => sameAnswer(a.text, text))) return reject("duplicate");
+  const farmed = farmingConflict(text, list.map((a) => a.text), roundRules(game));
+  if (farmed) return reject(farmed.reason, farmed.message);
 
   game.seq += 1;
   const answer = {
@@ -431,10 +507,13 @@ function finalizeChecking(game, presentPlayerIds, now) {
 }
 
 // Rarity scoring. Accepted answers are clustered across players with the
-// shared fuzzy match (plurals, spacing/hyphens, small typos); a cluster
-// given by ONE player is unique, by several is shared. Rejected answers get
-// their own cards so everyone sees what bounced (and owners can dispute).
+// shared fuzzy match (plurals, spacing/hyphens, small typos — and in
+// sequel categories, trailing sequel numbers, so "Avatar" and "Avatar 2"
+// are one shared answer); a cluster given by ONE player is unique, by
+// several is shared. Rejected answers get their own cards so everyone sees
+// what bounced (and owners can dispute).
 export function computeTypedResult(game) {
+  const sequels = roundRules(game).blockNumberedSequels;
   const entries = [];
   for (const pid of game.roundPlayers) {
     for (const a of game.answers.get(pid) ?? []) {
@@ -445,7 +524,7 @@ export function computeTypedResult(game) {
   const cluster = (list) => {
     const groups = [];
     for (const e of list) {
-      const g = groups.find((grp) => grp.entries.some((x) => sameAnswer(x.text, e.text)));
+      const g = groups.find((grp) => grp.entries.some((x) => sameAnswer(x.text, e.text, { sequels })));
       if (g) g.entries.push(e);
       else groups.push({ entries: [e] });
     }
@@ -650,6 +729,8 @@ function beginTurn(game, index, presentPlayerIds, now) {
   game.currentTurnIndex = index;
   game.turnSeq += 1;
   game.challenge = null;
+  // game.lastAnswer is deliberately kept: the previous player's answer stays
+  // challengeable through this new turn (see saidIt / endTurn).
   const pid = activePlayerId(game);
   if (presentPlayerIds.includes(pid)) {
     game.subPhase = "turn";
@@ -665,18 +746,24 @@ function eliminate(game, pid) {
   if (!game.eliminated.includes(pid)) game.eliminated.push(pid);
 }
 
+function loseLife(game, pid) {
+  if (!isAlive(game, pid)) return;
+  const left = (game.lives.get(pid) ?? 0) - 1;
+  if (left <= 0) eliminate(game, pid);
+  else game.lives.set(pid, left);
+}
+
 // The current turn is over. Optionally costs the active player a life, then
 // hands the turn to EXACTLY the next player still alive in the fixed round
 // order — never further (that's the timeout double-skip bug other games
 // hit). A disconnected next player isn't skipped either: their turn opens
 // in "waiting" and only passes on if they don't come back.
-function endTurn(game, presentPlayerIds, now, { lifeLost = false } = {}) {
+// Only a "Said it" leaves an answer open to challenge (keepAnswer); a turn
+// that ends any other way (timeout, skip, leaving) closes the previous one.
+function endTurn(game, presentPlayerIds, now, { lifeLost = false, keepAnswer = false } = {}) {
   const active = activePlayerId(game);
-  if (active != null && lifeLost && isAlive(game, active)) {
-    const left = (game.lives.get(active) ?? 0) - 1;
-    if (left <= 0) eliminate(game, active);
-    else game.lives.set(active, left);
-  }
+  if (active != null && lifeLost) loseLife(game, active);
+  if (!keepAnswer) game.lastAnswer = null;
 
   // A cycle = every player still alive has had a turn since the last one.
   if (active != null) game.cycleTurns.add(active);
@@ -701,6 +788,7 @@ function endTurn(game, presentPlayerIds, now, { lifeLost = false } = {}) {
 }
 
 function finishSpokenRound(game) {
+  game.lastAnswer = null;
   const survivors = alivePlayers(game);
   const order = [...survivors, ...[...game.eliminated].reverse()];
   const rows = order.map((pid, i) => {
@@ -716,71 +804,114 @@ function finishSpokenRound(game) {
   game.challenge = null;
 }
 
+// Everyone in the round except the challenged answerer votes — the active
+// player and eliminated players included.
 function challengeVoters(game, presentPlayerIds) {
-  const active = activePlayerId(game);
-  return game.roundPlayers.filter((pid) => pid !== active && presentPlayerIds.includes(pid));
+  const answerer = game.challenge?.answererId;
+  return game.roundPlayers.filter((pid) => pid !== answerer && presentPlayerIds.includes(pid));
 }
 
-// The active player said their answer out loud — open the challenge window.
+// The active player said their answer out loud. There's no challenge
+// window: the turn passes IMMEDIATELY to exactly the next player still in,
+// whose clock starts at once. The answer stays open to a challenge until
+// that player taps "Said it" or their turn runs out.
 export function saidIt(game, playerId, turnSeq, presentPlayerIds, now = Date.now()) {
   if (game.mode !== "spoken" || game.phase !== "turns" || game.subPhase !== "turn") return { ok: false };
   if (playerId !== activePlayerId(game)) return { ok: false, message: "It's not your turn." };
   if (turnSeq != null && turnSeq !== game.turnSeq) return { ok: false };
   if (now > game.deadline + TAP_GRACE_MS) return { ok: false, message: "Too late!" };
-  game.subPhase = "challenge";
-  game.deadline = now + CHALLENGE_WINDOW_MS;
-  game.challenge = { challengerId: null, votes: new Map() };
+  game.lastAnswer = { seq: game.turnSeq, playerId, challenged: false };
+  game.lastEvent = { seq: game.turnSeq, type: "said", playerId };
+  endTurn(game, presentPlayerIds, now, { keepAnswer: true });
   return { ok: true };
 }
 
-// Any other player still in the round may challenge — at most
-// CHALLENGE_LIMIT times a round, win or lose. The first challenge opens
-// the vote; the challenger's own vote counts as "uphold".
-export function challenge(game, playerId, turnSeq, presentPlayerIds, now = Date.now()) {
+// Challenge the MOST RECENT answer (`answerSeq` names it, so a tap that
+// raced the next "Said it" can't land on a newer answer). Not the
+// answerer, not an eliminated player (they still vote), and not the player
+// whose turn it is — except when only two are left, where the active
+// player is the only one who could. At most CHALLENGE_LIMIT a round, win
+// or lose. It freezes the running turn clock and opens a 5s vote; the
+// challenger's own vote counts as "uphold".
+export function challenge(game, playerId, answerSeq, presentPlayerIds, now = Date.now()) {
   if (game.mode !== "spoken" || game.phase !== "turns") return { ok: false };
-  if (game.subPhase !== "challenge") {
-    return { ok: false, message: game.subPhase === "vote" ? "Someone already challenged." : "Nothing to challenge." };
+  if (game.subPhase === "vote") return { ok: false, message: "Someone already challenged." };
+  if (game.subPhase !== "turn" && game.subPhase !== "waiting") return { ok: false };
+  const answer = game.lastAnswer;
+  if (!answer) return { ok: false, message: "Nothing to challenge yet." };
+  if (answerSeq != null && answerSeq !== answer.seq) {
+    return { ok: false, message: "That answer can't be challenged any more." };
   }
-  if (turnSeq != null && turnSeq !== game.turnSeq) return { ok: false };
-  if (playerId === activePlayerId(game)) return { ok: false };
+  if (answer.challenged) return { ok: false, message: "That answer was already challenged." };
+  if (playerId === answer.playerId) return { ok: false, message: "You can't challenge your own answer." };
   if (!game.roundPlayers.includes(playerId) || !isAlive(game, playerId)) {
     return { ok: false, message: "Only players still in the round can challenge." };
+  }
+  if (playerId === activePlayerId(game) && alivePlayers(game).length > 2) {
+    return { ok: false, message: "It's your turn — say your answer." };
   }
   const used = game.challengesUsed.get(playerId) ?? 0;
   if (used >= CHALLENGE_LIMIT) return { ok: false, message: "You're out of challenges this round." };
   game.challengesUsed.set(playerId, used + 1);
+  answer.challenged = true;
+  game.challenge = {
+    challengerId: playerId,
+    answererId: answer.playerId,
+    answerSeq: answer.seq,
+    votes: new Map([[playerId, true]]),
+    // The running clock, frozen — restored exactly when the vote ends.
+    resume: { subPhase: game.subPhase, msLeft: Math.max(0, game.deadline - now) },
+  };
   game.subPhase = "vote";
   game.deadline = now + CHALLENGE_VOTE_MS;
-  game.challenge = { challengerId: playerId, votes: new Map([[playerId, true]]) };
   maybeResolveChallenge(game, presentPlayerIds, now);
   return { ok: true };
 }
 
-// Everyone but the active player votes — including eliminated players.
+// Everyone but the challenged answerer votes — eliminated players included.
 export function voteChallenge(game, playerId, turnSeq, uphold, presentPlayerIds, now = Date.now()) {
   if (game.mode !== "spoken" || game.phase !== "turns" || game.subPhase !== "vote") return { ok: false };
   if (turnSeq != null && turnSeq !== game.turnSeq) return { ok: false };
-  if (playerId === activePlayerId(game) || !game.roundPlayers.includes(playerId)) return { ok: false };
+  if (playerId === game.challenge.answererId || !game.roundPlayers.includes(playerId)) return { ok: false };
   if (game.challenge.votes.has(playerId)) return { ok: false, message: "You've already voted." };
   game.challenge.votes.set(playerId, uphold === true);
   maybeResolveChallenge(game, presentPlayerIds, now);
   return { ok: true };
 }
 
+// Majority of votes cast upholds; a tie favours the answerer. Upheld costs
+// the ANSWERER a life (eliminated at 0). Either way the current turn picks
+// up with its clock exactly where it froze.
 function resolveChallenge(game, presentPlayerIds, now) {
-  const votes = [...game.challenge.votes.values()];
+  const ch = game.challenge;
+  const votes = [...ch.votes.values()];
   const up = votes.filter(Boolean).length;
   const down = votes.length - up;
-  const upheld = up > down; // ties favour the active player
+  const upheld = up > down;
+  if (upheld) loseLife(game, ch.answererId);
   game.lastEvent = {
     seq: game.turnSeq,
     type: upheld ? "upheld" : "overruled",
-    playerId: activePlayerId(game),
-    challengerId: game.challenge.challengerId,
+    playerId: ch.answererId,
+    challengerId: ch.challengerId,
+    eliminated: upheld && !isAlive(game, ch.answererId),
     up,
     down,
   };
-  endTurn(game, presentPlayerIds, now, { lifeLost: upheld });
+  game.challenge = null;
+  if (alivePlayers(game).length <= 1) {
+    finishSpokenRound(game);
+    return;
+  }
+  const active = activePlayerId(game);
+  if (ch.resume.subPhase === "turn" && !presentPlayerIds.includes(active)) {
+    // They dropped during the vote: hold their seat as usual.
+    game.subPhase = "waiting";
+    game.deadline = now + RECONNECT_WAIT_MS;
+  } else {
+    game.subPhase = ch.resume.subPhase;
+    game.deadline = now + ch.resume.msLeft;
+  }
 }
 
 function maybeResolveChallenge(game, presentPlayerIds, now) {
@@ -850,11 +981,6 @@ function tickTurn(game, presentPlayerIds, now) {
       game.lastEvent = { seq: game.turnSeq, type: "skipped", playerId: active };
       endTurn(game, presentPlayerIds, now);
       return true;
-    case "challenge":
-      if (now <= game.deadline) return false;
-      game.lastEvent = { seq: game.turnSeq, type: "accepted", playerId: active };
-      endTurn(game, presentPlayerIds, now);
-      return true;
     case "vote":
       if (now < game.deadline) return false;
       resolveChallenge(game, presentPlayerIds, now);
@@ -907,7 +1033,7 @@ export function reconcilePresence(game, presentPlayerIds, { final = false } = {}
 // therefore counts as a TIMEOUT (a life lost) — which is also what lets a
 // host drive a Spoken round to its end. A turn waiting on a disconnected
 // player is skipped with no penalty, same as its reconnect window running
-// out; an open challenge window closes with the answer accepted.
+// out; an open challenge vote is decided on the votes cast so far.
 export function forceAdvance(game, presentPlayerIds) {
   const now = Date.now();
   switch (game.phase) {
@@ -928,7 +1054,7 @@ export function forceAdvance(game, presentPlayerIds) {
       if (game.subPhase === "vote") {
         resolveChallenge(game, presentPlayerIds, now);
       } else {
-        const type = { turn: "timeout", challenge: "accepted", waiting: "skipped" }[game.subPhase] ?? "skipped";
+        const type = { turn: "timeout", waiting: "skipped" }[game.subPhase] ?? "skipped";
         game.lastEvent = { seq: game.turnSeq, type, playerId: activePlayerId(game) };
         endTurn(game, presentPlayerIds, now, { lifeLost: type === "timeout" });
       }
@@ -967,7 +1093,9 @@ export function getPublicState(game, presentPlayerIds, now = Date.now()) {
     randomMode: game.randomMode,
     burnedOn: game.burnedOn,
     letterPool: LETTER_POOL,
-    category: game.round ? { key: game.round.categoryKey, name: game.round.categoryName } : null,
+    // The anti-farming flags ride along: the client mirrors them in Typed
+    // mode and lists them as Challenge reasons in Spoken mode.
+    category: game.round ? { key: game.round.categoryKey, name: game.round.categoryName, ...roundRules(game) } : null,
     letter: game.round?.letter ?? null,
     burnedLetters: game.burnedOn ? game.round?.burnedBefore ?? [] : [],
     roundPlayerIds: game.roundPlayers ?? [],
@@ -975,7 +1103,8 @@ export function getPublicState(game, presentPlayerIds, now = Date.now()) {
   };
 
   if (game.phase === "intro") {
-    state.eligibleLetters = game.round.eligibleLetters;
+    // No per-round letter list: the swirl shows all 26 letters equally, so
+    // nothing in the payload hints at what will land (or how often).
     state.introLeadMs = game.introLeadMs;
     state.categoryMs = CATEGORY_MS;
     state.swirlMs = SWIRL_MS;
@@ -1044,11 +1173,9 @@ export function getPublicState(game, presentPlayerIds, now = Date.now()) {
       const windowMs =
         game.subPhase === "turn"
           ? turnWindowMs(game)
-          : game.subPhase === "challenge"
-            ? CHALLENGE_WINDOW_MS
-            : game.subPhase === "vote"
-              ? CHALLENGE_VOTE_MS
-              : RECONNECT_WAIT_MS;
+          : game.subPhase === "vote"
+            ? CHALLENGE_VOTE_MS
+            : RECONNECT_WAIT_MS;
       state.subPhase = game.subPhase;
       state.turnSeq = game.turnSeq;
       state.turnOrder = game.turnOrder;
@@ -1060,11 +1187,21 @@ export function getPublicState(game, presentPlayerIds, now = Date.now()) {
       state.lives = Object.fromEntries(game.lives);
       state.challengesUsed = Object.fromEntries(game.challengesUsed);
       state.eliminated = [...game.eliminated];
+      // The answer a Challenge would target right now (null on a round's
+      // first turn, after a timeout, or once it's been challenged).
+      state.lastAnswer =
+        game.lastAnswer && !game.lastAnswer.challenged
+          ? { seq: game.lastAnswer.seq, playerId: game.lastAnswer.playerId }
+          : null;
       state.challenge = game.challenge
         ? {
             challengerId: game.challenge.challengerId,
+            answererId: game.challenge.answererId,
             votedIds: [...game.challenge.votes.keys()],
             voterCount: challengeVoters(game, presentPlayerIds).length,
+            // The paused turn: whose clock froze, and at how much.
+            frozenMsLeft: game.challenge.resume.msLeft,
+            frozenSubPhase: game.challenge.resume.subPhase,
           }
         : null;
     }
@@ -1117,5 +1254,5 @@ export function getPrivateState(game, playerId) {
 
 // Tournament Mode default config.
 export function tournamentOptions() {
-  return { mode: "typed", rounds: 3, categories: [RANDOM_CATEGORY], burnedLetters: false };
+  return { mode: "typed", rounds: 3, categories: [...CATEGORY_KEYS], burnedLetters: false };
 }

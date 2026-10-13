@@ -24,6 +24,10 @@ not allowed — bundling them inside this app is fine.)
 Each file was downloaded from
 `https://assets.mixkit.co/active_storage/sfx/<ID>/<ID>-preview.mp3`.
 
+The three Hot Potato clips (`potato-tick.wav`, `potato-pass.wav`,
+`potato-pop.wav`) are NOT from Mixkit: they're synthesised from scratch by
+`client/scripts/make-potato-sounds.mjs` (run it to regenerate them).
+
 ## Replacing or adding a sound
 
 1. Drop a new file in this folder.

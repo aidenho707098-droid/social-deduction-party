@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
+import { catalogEntry, minPlayersFor } from '../catalog'
 import NumberStepper from '../NumberStepper'
 import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
-import { CATEGORY_OPTIONS, RANDOM, ALL_KEYS } from './categories'
+import CategorySelector from '../CategorySelector'
+import { CATEGORY_OPTIONS, normalizeSelection } from './categories'
 
-const MIN_PLAYERS = 3
-const MAX_PLAYERS = 10
-const LETTER_POOL_SIZE = 20 // A–Z minus Q U V X Y Z
+const ENTRY = catalogEntry('alphabet-soup')
+const MAX_PLAYERS = ENTRY.maxPlayers
+const LETTER_POOL_SIZE = 26 // Burned Letters: one round per letter, at most
 
 const MODES = [
   {
@@ -21,32 +23,45 @@ const MODES = [
   },
 ]
 
-export default function AlphabetSoupSetup({ gameId, playerCount, saved, onStart, onCancel, error, submitLabel }) {
+export default function AlphabetSoupSetup({
+  gameId,
+  playerCount,
+  saved,
+  onStart,
+  onCancel,
+  error,
+  submitLabel,
+  // The room's shared custom categories + "Create category" (Lobby.jsx).
+  customCategories = [],
+  onCreateCategory,
+}) {
   const savedCats = Array.isArray(saved?.categories) ? saved.categories : []
-  const [mode, setMode] = useState(() => (saved?.mode === 'spoken' ? 'spoken' : 'typed'))
-  const [randomEach, setRandomEach] = useState(() => savedCats.length === 0 || savedCats.includes(RANDOM))
-  const [categories, setCategories] = useState(() => {
-    const fromSaved = savedCats.filter((k) => ALL_KEYS.includes(k))
-    return fromSaved.length ? fromSaved : ALL_KEYS
-  })
+  // Spoken needs more players than Typed (challenge votes need a third
+  // person), so it's locked below its own minimum.
+  const modeLocked = (key) => playerCount < minPlayersFor(ENTRY, key)
+  const [mode, setMode] = useState(() =>
+    saved?.mode === 'spoken' && !modeLocked('spoken') ? 'spoken' : 'typed',
+  )
+  // One selection set; the retired "Random Category" (or nothing saved)
+  // migrates to every bank category.
+  const [categories, setCategories] = useState(() =>
+    normalizeSelection(savedCats, customCategories.map((c) => c.key)),
+  )
   const [rounds, setRounds] = useState(() => clampRounds(saved?.rounds ?? ROUND_DEFAULT))
   const [burned, setBurned] = useState(() => saved?.burnedLetters === true)
 
-  const tooFew = playerCount < MIN_PLAYERS
+  const minForMode = minPlayersFor(ENTRY, mode)
+  const tooFew = playerCount < minForMode
   const tooMany = playerCount > MAX_PLAYERS
-  const noCategories = !randomEach && categories.length === 0
+  const noCategories = categories.length === 0
   const blocked = tooFew || tooMany || noCategories
   const roundMax = burned ? Math.min(ROUND_MAX, LETTER_POOL_SIZE) : ROUND_MAX
-
-  function toggleCategory(key) {
-    setCategories((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
-  }
 
   function start() {
     onStart({
       mode,
       rounds: Math.min(rounds, roundMax),
-      categories: randomEach ? [RANDOM] : categories,
+      categories,
       burnedLetters: burned,
     })
   }
@@ -69,9 +84,12 @@ export default function AlphabetSoupSetup({ gameId, playerCount, saved, onStart,
               type="button"
               className={`tour-mode-card ${mode === m.key ? 'tour-mode-active' : ''}`}
               onClick={() => setMode(m.key)}
+              disabled={modeLocked(m.key)}
             >
               <span className="tour-mode-name">{m.name}</span>
-              <span className="tour-mode-desc">{m.desc}</span>
+              <span className="tour-mode-desc">
+                {modeLocked(m.key) ? `Needs ${minPlayersFor(ENTRY, m.key)}+ players. ${m.desc}` : m.desc}
+              </span>
             </button>
           ))}
         </div>
@@ -91,49 +109,18 @@ export default function AlphabetSoupSetup({ gameId, playerCount, saved, onStart,
       />
 
       <div>
-        <span className="label">Categories</span>
-        <div className="pill-group">
-          <button
-            type="button"
-            className={`pill ${randomEach ? 'pill-active' : ''}`}
-            onClick={() => setRandomEach((v) => !v)}
-          >
-            🎲 Random Category
-          </button>
-          {!randomEach && (
-            <>
-              <button type="button" className="pill" onClick={() => setCategories(ALL_KEYS)}>
-                All
-              </button>
-              <button type="button" className="pill" onClick={() => setCategories([])}>
-                None
-              </button>
-            </>
-          )}
-        </div>
-        <div
-          className={`pill-group pill-group-wrap taboo-cat-pills as-cat-pills ${
-            randomEach ? 'taboo-cat-pills-off' : ''
-          }`}
-        >
-          {CATEGORY_OPTIONS.map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              className={`pill ${!randomEach && categories.includes(opt.key) ? 'pill-active' : ''}`}
-              onClick={() => !randomEach && toggleCategory(opt.key)}
-              disabled={randomEach}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <CategorySelector
+          bank={CATEGORY_OPTIONS}
+          customCategories={customCategories}
+          value={categories}
+          onChange={setCategories}
+          withLetters
+          isUnavailable={(c) => (c.noLetters ? 'Too narrow for Alphabet Soup' : null)}
+          onCreate={onCreateCategory ? (name, { force }, cb) => onCreateCategory(gameId, name, force, cb) : null}
+        />
         <p className="hint hint-block">
-          {randomEach
-            ? `Every round draws from all ${CATEGORY_OPTIONS.length} categories.`
-            : noCategories
-              ? 'Turn on at least one category.'
-              : `${categories.length} categor${categories.length === 1 ? 'y' : 'ies'} on. Each category only ever comes up with letters that have plenty of answers.`}
+          Each round draws a category from your selection (no repeats until they've all come up), and only pairs it
+          with letters that have plenty of answers.
         </p>
       </div>
 
@@ -154,7 +141,7 @@ export default function AlphabetSoupSetup({ gameId, playerCount, saved, onStart,
         </p>
       </div>
 
-      {tooFew && <p className="hint">Alphabet Soup needs at least {MIN_PLAYERS} players.</p>}
+      {tooFew && <p className="hint">Alphabet Soup needs at least {minForMode} players{mode === 'spoken' ? ' in Spoken mode' : ''}.</p>}
       {tooMany && <p className="hint">Alphabet Soup supports at most {MAX_PLAYERS} players.</p>}
       {error && <p className="error">{error}</p>}
 

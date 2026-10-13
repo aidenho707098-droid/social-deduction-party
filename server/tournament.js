@@ -16,6 +16,7 @@
 //         (default: {} — the game's own defaults)
 
 import { GAMES } from "./games/registry.js";
+import { fitError, fitsSomeMode } from "./games/playerLimits.js";
 
 // FIXED rank -> points scale, regardless of how many players were in the
 // game. Anything 5th or lower scores 0.
@@ -30,9 +31,11 @@ function shuffle(array) {
   return copy;
 }
 
-function eligibleGameIds(playerCount) {
+// Games SOME mode of which can run with this many players. The Random Mode
+// wheel is built from this at spin time, so it tracks joins and leaves.
+export function eligibleGameIds(playerCount) {
   return Object.values(GAMES)
-    .filter((mod) => playerCount >= mod.minPlayers && (!mod.maxPlayers || playerCount <= mod.maxPlayers))
+    .filter((mod) => fitsSomeMode(mod, playerCount))
     .map((mod) => mod.id);
 }
 
@@ -102,11 +105,16 @@ export function createTournament({ mode, lineup, lineupSettings, totalGames }, p
   let orderedSettings = []; // parallel to orderedLineup: host-chosen createGame() options per slot
   let total;
   if (method === "manual") {
-    // Keep each game's chosen settings aligned with its lineup slot as we
-    // drop any games the current player count can't support.
+    // Every slot must fit the room as configured (incl. a per-mode minimum,
+    // e.g. Alphabet Soup Spoken). Reject rather than silently drop a game
+    // the host chose.
     const kept = (Array.isArray(lineup) ? lineup : [])
       .map((id, i) => ({ id, options: (Array.isArray(lineupSettings) && lineupSettings[i]) || {} }))
-      .filter((e) => eligible.includes(e.id));
+      .filter((e) => GAMES[e.id]);
+    for (const e of kept) {
+      const err = fitError(GAMES[e.id], playerIds.length, e.options);
+      if (err) throw new Error(err);
+    }
     orderedLineup = kept.map((e) => e.id);
     orderedSettings = kept.map((e) => e.options);
     if (orderedLineup.length < 2) {
@@ -183,6 +191,7 @@ export function stepAt(tournament, currentPlayerCount) {
 export function enterIntro(tournament, gameId) {
   tournament.pendingGameId = gameId;
   tournament.pendingGameOptions = null; // host reconfigures per reveal (random mode)
+  tournament.pendingReplaced = false;
   tournament.phase = "intro";
   tournament.wheel = null;
 }
@@ -194,6 +203,22 @@ export function beginGame(tournament, gameId, playerIds) {
   tournament.pendingGameOptions = null;
   tournament.phase = "playing";
   tournament.wheel = null;
+}
+
+// The "up next" game no longer fits the room (players left after the
+// lineup was built or the wheel spun) and the host swapped in another one
+// that does. It takes over this slot; the host may configure it on the
+// intro screen (`pendingReplaced`), in either mode.
+export function replacePendingGame(tournament, gameId) {
+  const t = tournament;
+  if (t.mode === "manual") {
+    t.lineup[t.currentIndex] = gameId;
+    t.lineupSettings[t.currentIndex] = {};
+  } else {
+    t.usedThisCycle.push(gameId);
+  }
+  enterIntro(t, gameId);
+  t.pendingReplaced = true;
 }
 
 // A game that couldn't be started (e.g. player count dropped below its
@@ -267,6 +292,10 @@ export function getTournamentPublicState(tournament, allPlayerIds) {
     state.pendingGame = {
       id: tournament.pendingGameId,
       name: GAMES[tournament.pendingGameId]?.name ?? tournament.pendingGameId,
+      replaced: Boolean(tournament.pendingReplaced),
+      // Filled in by index.js, which knows the room's settings: why this
+      // game can't start with the current player count, or null.
+      fitError: null,
     };
   }
 

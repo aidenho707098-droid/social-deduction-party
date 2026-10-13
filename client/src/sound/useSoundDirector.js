@@ -57,6 +57,10 @@ const PHASE_CUES = {
     review: REVEAL, // Typed: the answer cards come in
     reveal: (c) => (c.soupSpoken ? REVEAL : null), // Typed already chimed at review
   },
+  // Hot Potato needs no phase cues: the generic round-start blip announces
+  // every new potato (one potato = one roundIndex), and the countdown
+  // beeps, pass pops, holder ticks and explosion pop are all timed inside
+  // PotatoIntro / LiveRound / ExplosionScreen.
   'who-am-i': {
     reveal: REVEAL,
     // correct/wrong-guess blips fire inside AskScreen (play('correct' |

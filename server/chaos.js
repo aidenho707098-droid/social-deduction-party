@@ -47,6 +47,12 @@ export const UNDERDOG_MULT = 3; // last place's round points ×this
 // The pool. `blurb` is the one-liner shown under the name on the takeover.
 // `timing` drives when the glue applies it. `needs` flags extra
 // requirements the per-game filter checks.
+//
+// `minPlayers: 3` marks modifiers that degenerate head-to-head (2 present
+// participants): Score Swap just hands the leader's total to the trailer,
+// Steal / Tax Collector / The Tyrant / Rival all collapse into the same
+// one-way transfer between the only two players, and Player Disable has
+// exactly one possible target, so the winner simply gets a free round.
 export const MODIFIERS = [
   {
     id: "double-points",
@@ -71,14 +77,14 @@ export const MODIFIERS = [
     name: "Score Swap",
     blurb: "Two random players trade their total scores. Right now.",
     timing: "instant",
-    needs: { minPlayers: 2 },
+    needs: { minPlayers: 3 },
   },
   {
     id: "steal",
     name: "Steal",
     blurb: "Last place skims 40% of first place's haul this round.",
     timing: "roundend",
-    needs: { minPlayers: 2 },
+    needs: { minPlayers: 3 },
   },
   {
     id: "underdog-boost",
@@ -133,14 +139,14 @@ export const MODIFIERS = [
     name: "Rival",
     blurb: "Two players are paired — the one who scores higher this round rips 45% of the other's round points.",
     timing: "preround",
-    needs: { minPlayers: 2 },
+    needs: { minPlayers: 3 },
   },
   {
     id: "tax-collector",
     name: "Tax Collector",
     blurb: "The round winner rakes in 20% of everyone else's round points.",
     timing: "roundend",
-    needs: { minPlayers: 2 },
+    needs: { minPlayers: 3 },
   },
   {
     id: "half-reset",
@@ -155,14 +161,14 @@ export const MODIFIERS = [
     blurb: "The round winner zeroes out one rival's points for the NEXT round.",
     timing: "roundend",
     interactive: "target",
-    needs: { minPlayers: 2, nextRound: true },
+    needs: { minPlayers: 3, nextRound: true },
   },
   {
     id: "the-tyrant",
     name: "The Tyrant",
     blurb: "The points leader seizes 20% of every rival's round score.",
     timing: "roundend",
-    needs: { minPlayers: 2 },
+    needs: { minPlayers: 3 },
   },
 ];
 

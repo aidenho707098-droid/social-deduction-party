@@ -63,16 +63,119 @@ export function editDistance(a, b) {
 // Code's 3/6) because here BOTH sides are free text that already share a
 // first letter: "Iran" vs "Iraq" or "Mali" vs "Malta" must stay distinct.
 // Numbers must match exactly ("7 up" vs "8 up" are different answers).
-export function sameAnswer(a, b) {
-  const x = canonicalAnswer(a);
-  const y = canonicalAnswer(b);
+// Two answers with the same number of words are also compared word by
+// word, so a one-letter change in a short word is a different answer, not
+// a typo: "Horse fly" and "House fly" stay distinct (see sameWord()).
+// With `sequels` on (Movies, TV Shows, Video Games...) both sides are
+// compared with any trailing sequel number stripped — see stripSequel().
+export function sameAnswer(a, b, { sequels = false } = {}) {
+  const left = sequels ? stripSequel(a) : a;
+  const right = sequels ? stripSequel(b) : b;
+  const x = canonicalAnswer(left);
+  const y = canonicalAnswer(right);
   if (!x || !y) return false;
   if (x === y) return true;
   const digitsOf = (s) => (s.match(/\d+/g) ?? []).join(",");
   if (digitsOf(x) !== digitsOf(y)) return false;
   const len = Math.min(x.length, y.length);
   const tolerance = len <= 4 ? 0 : len <= 8 ? 1 : 2;
-  return tolerance > 0 && editDistance(x, y) <= tolerance;
+  if (tolerance === 0 || editDistance(x, y) > tolerance) return false;
+  const wx = significantWords(left);
+  const wy = significantWords(right);
+  if (wx.length > 1 && wx.length === wy.length) return wx.every((w, i) => sameWord(w, wy[i]));
+  return true;
+}
+
+// ---- anti-farming rules (per-category flags in alphabetSoupBank.js) ----
+
+// An answer's words: folded, apostrophes dropped ("Bug's" -> "bugs"), any
+// other punctuation treated as a space ("Kill Bill: Vol. 1" -> kill bill
+// vol 1).
+function wordsOf(value) {
+  return baseFold(value)
+    .replace(/['’]/g, "")
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+const ARTICLE_WORDS = new Set(["the", "a", "an"]);
+// A lone I is left out ("Me, Myself and I"); V and X are in ("Rocky V").
+const SEQUEL_NUMBER =
+  /^(\d+|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen)$/;
+const SEQUEL_LABEL = /^(part|pt|vol|volume|chapter|episode|book)$/;
+
+// NUMBERED SEQUEL rule: the comparison form of a title with ONE trailing
+// sequel marker removed — a number, roman numeral or spelled number,
+// optionally after "part" / "vol" / "chapter". "Avatar 2", "Avatar II" and
+// "Avatar" all compare as "avatar"; "The Godfather Part II" as "the
+// godfather". Only the END is touched ("21 Jump Street" is unchanged), and
+// a title that is nothing but a number ("Seven") is kept as typed.
+// Comparison only — answers are still displayed and validated as typed.
+export function stripSequel(value) {
+  const words = wordsOf(value);
+  const minLen = ARTICLE_WORDS.has(words[0]) ? 3 : 2; // keep at least one real word
+  if (words.length < minLen || !SEQUEL_NUMBER.test(words.at(-1))) return String(value ?? "");
+  words.pop();
+  if (words.length >= minLen && SEQUEL_LABEL.test(words.at(-1))) words.pop();
+  return words.join(" ");
+}
+
+// An answer's words with a leading "the" / "a" / "an" skipped (as in the
+// letter rule), each folded to its singular stem.
+function significantWords(value) {
+  const words = wordsOf(value);
+  if (words.length > 1 && ARTICLE_WORDS.has(words[0])) words.shift();
+  return words.map(singular);
+}
+
+// Is y just x with two neighbouring letters swapped ("baer" / "bear")?
+function isSwap(x, y) {
+  if (x.length !== y.length) return false;
+  const diff = [];
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) diff.push(i);
+  return diff.length === 2 && diff[1] === diff[0] + 1 && x[diff[0]] === y[diff[1]] && x[diff[1]] === y[diff[0]];
+}
+
+// Are two single (already stemmed) words the same word? A short word has no
+// context to tell a typo from a real neighbour ("horse" / "house", "black"
+// / "blank"), so up to 5 letters only a swapped pair counts as a typo;
+// longer words get the usual small edit budget ("amazonain" == "amazonian").
+function sameWord(x, y) {
+  if (x === y) return true;
+  if (/\d/.test(x) || /\d/.test(y)) return false;
+  const len = Math.min(x.length, y.length);
+  if (len <= 5) return len >= 3 && isSwap(x, y);
+  return editDistance(x, y) <= (len <= 8 ? 1 : 2);
+}
+
+// REPEATED LEADING WORD rule: the first significant word of an answer,
+// stemmed. "Amazonian fly" -> "amazonian", "Ants" -> "ant", "The Bear" ->
+// "bear". Single-word answers count ("Ant" then "Ant lion").
+export function leadWord(value) {
+  return significantWords(value)[0] ?? "";
+}
+
+export function sameLeadWord(a, b) {
+  const x = leadWord(a);
+  const y = leadWord(b);
+  return Boolean(x && y) && sameWord(x, y);
+}
+
+// Both rules against a player's OWN earlier answers this round (texts).
+// Returns null, or { reason, prior, message } for the first rule broken.
+// A plain repeat is the caller's "duplicate" check and is caught first.
+export function farmingConflict(text, earlier, { blockNumberedSequels = false, blockRepeatedLeadWord = false } = {}) {
+  if (blockNumberedSequels) {
+    const prior = earlier.find((e) => sameAnswer(e, text, { sequels: true }));
+    if (prior != null) return { reason: "sequel", prior, message: `Same title as your earlier answer '${prior}'.` };
+  }
+  if (blockRepeatedLeadWord) {
+    const prior = earlier.find((e) => sameLeadWord(e, text));
+    if (prior != null) {
+      return { reason: "leadWord", prior, message: `Too similar to your earlier answer '${prior}': same first word.` };
+    }
+  }
+  return null;
 }
 
 // The first letter of an answer, read two ways: as typed, and with a

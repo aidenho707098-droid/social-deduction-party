@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { GAMES, getGame } from '../games/registry'
+import { getGame } from '../games/registry'
+import { fitReason } from '../games/catalog'
+import { FilterChips, FitsToggle, GameList, GameSheet } from '../games/GameList'
 import { GameIcon } from '../games/gameStyle'
 import { accentName } from '../games/gamePalette'
 import { describeGameOptions } from '../games/gameSettingsSummary'
@@ -12,6 +14,7 @@ const RANDOM_COUNTS = [3, 4, 5, 6]
 // that game's own setup UI (pre-filled from the room's last-used settings).
 export default function TournamentSetup({
   playerCount,
+  playedGameIds = [],
   savedByGame = {},
   onConfigure,
   onCancel,
@@ -21,6 +24,9 @@ export default function TournamentSetup({
   aiContent = {},
   aiEnabled = false,
   onGenerateContent,
+  // Forwarded to Alphabet Soup / Hot Potato's category selector.
+  customCategories = [],
+  onCreateCategory,
 }) {
   const [mode, setMode] = useState(null) // null | 'manual' | 'random'
   const [lineup, setLineup] = useState([]) // ordered gameIds
@@ -29,9 +35,15 @@ export default function TournamentSetup({
   const [configIndex, setConfigIndex] = useState(null) // lineup slot being configured
   const [error, setError] = useState('')
 
-  const eligible = GAMES.filter(
-    (g) => playerCount >= g.minPlayers && (!g.maxPlayers || playerCount <= g.maxPlayers),
-  )
+  // The lineup builder uses the game menu's own list, filters and fit rules.
+  const [filter, setFilter] = useState('all')
+  const [fitsOnly, setFitsOnly] = useState(true)
+  const [sheetId, setSheetId] = useState(null)
+  const sheetGame = getGame(sheetId)
+  // A lineup game can stop fitting if players leave while the host builds.
+  const lineupProblems = lineup
+    .map((id, i) => ({ i, game: getGame(id), reason: fitReason(getGame(id), playerCount, lineupSettings[i]?.mode) }))
+    .filter((p) => p.reason)
 
   function addGame(id) {
     setLineup((l) => [...l, id])
@@ -63,6 +75,10 @@ export default function TournamentSetup({
     setError('')
     if (mode === 'manual') {
       if (lineup.length < 2) return setError('Add at least 2 games to the lineup.')
+      if (lineupProblems.length) {
+        const p = lineupProblems[0]
+        return setError(`${p.game?.name ?? 'A game'} no longer fits ${playerCount} players (${p.reason}). Remove it or change its settings.`)
+      }
       onConfigure({ mode: 'manual', lineup, lineupSettings })
     } else {
       onConfigure({ mode: 'random', totalGames })
@@ -85,6 +101,8 @@ export default function TournamentSetup({
           aiContent={aiContent}
           aiEnabled={aiEnabled}
           onGenerateContent={onGenerateContent}
+          customCategories={customCategories}
+          onCreateCategory={onCreateCategory}
         />
       )
     }
@@ -130,22 +148,36 @@ export default function TournamentSetup({
         <>
           <div>
             <span className="label">Add games</span>
-            <div className="tour-pick-list">
-              {eligible.map((g) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  className={`tour-pick-btn tour-pick-${accentName(g.id)}`}
-                  onClick={() => addGame(g.id)}
-                >
-                  <span className={`tour-pick-badge tour-pick-badge-${accentName(g.id)}`}>
-                    <GameIcon id={g.id} />
-                  </span>
-                  {g.name}
-                  <span className="tour-pick-add">+</span>
-                </button>
-              ))}
+            <div className="gb-inline-filters">
+              <FilterChips filter={filter} onFilter={setFilter} />
+              <FitsToggle on={fitsOnly} onChange={setFitsOnly} playerCount={playerCount} />
             </div>
+            <GameList
+              playerCount={playerCount}
+              filter={filter}
+              fitsOnly={fitsOnly}
+              playedGameIds={playedGameIds}
+              rowExtra={(g) => {
+                const n = lineup.filter((id) => id === g.id).length
+                return n ? `×${n}` : null
+              }}
+              onSelect={(g) => setSheetId(g.id)}
+            />
+            {sheetGame && (
+              <GameSheet
+                game={sheetGame}
+                playerCount={playerCount}
+                played={playedGameIds.includes(sheetGame.id)}
+                action={{
+                  label: 'Add to lineup',
+                  onClick: () => {
+                    addGame(sheetGame.id)
+                    setSheetId(null)
+                  },
+                }}
+                onClose={() => setSheetId(null)}
+              />
+            )}
           </div>
 
           <div>
@@ -155,8 +187,9 @@ export default function TournamentSetup({
             ) : (
               <ol className="tour-lineup-edit">
                 {lineup.map((id, i) => {
-                  const g = GAMES.find((x) => x.id === id)
+                  const g = getGame(id)
                   const summary = describeGameOptions(lineupSettings[i])
+                  const problem = lineupProblems.find((p) => p.i === i)
                   return (
                     <li key={`${id}-${i}`} className="tour-lineup-edit-item">
                       <span className="tour-lineup-num">{i + 1}</span>
@@ -174,6 +207,7 @@ export default function TournamentSetup({
                         >
                           ⚙ {summary || 'Settings'}
                         </button>
+                        {problem && <span className="tour-lineup-unfit">Doesn't fit: {problem.reason}</span>}
                       </span>
                       <button
                         type="button"

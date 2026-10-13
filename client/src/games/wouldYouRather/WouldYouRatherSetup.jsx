@@ -37,7 +37,7 @@ export default function WouldYouRatherSetup({ gameId, playerCount, saved, onStar
 
       <div>
         <span className="label">Question source</span>
-        <div className="pill-group">
+        <div className="pill-group pill-group-spaced">
           <button
             type="button"
             className={`pill ${activeMode === 'bank' ? 'pill-active' : ''}`}

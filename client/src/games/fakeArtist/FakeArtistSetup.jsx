@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
+import { catalogEntry } from '../catalog'
 import NumberStepper from '../NumberStepper'
 import AiCustomOption from '../AiCustomOption'
 import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
+
+const { minPlayers: MIN_PLAYERS } = catalogEntry('fake-artist')
 
 // Keep in sync with CATEGORY_NAMES in server/fakeArtistWords.js.
 const CATEGORY_OPTIONS = [
@@ -37,7 +40,7 @@ export default function FakeArtistSetup({
   })
   const [rounds, setRounds] = useState(() => clampRounds(saved?.rounds ?? ROUND_DEFAULT))
 
-  const notEnough = playerCount < 3
+  const notEnough = playerCount < MIN_PLAYERS
 
   function toggleCategory(key) {
     setCategories((prev) => {
@@ -134,7 +137,7 @@ export default function FakeArtistSetup({
         hint="The Fake Artist role and turn order rotate through the group each round."
       />
 
-      {notEnough && <p className="hint">Fake Artist needs at least 3 players.</p>}
+      {notEnough && <p className="hint">Fake Artist needs at least {MIN_PLAYERS} players.</p>}
       {error && <p className="error">{error}</p>}
 
       <button className="btn btn-start" onClick={start} disabled={notEnough}>

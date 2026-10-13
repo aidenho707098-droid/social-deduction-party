@@ -31,7 +31,7 @@ import {
 
 export const id = "taboo";
 export const name = "Taboo";
-export const minPlayers = 3;
+export const minPlayers = 2;
 
 // Built-in category keys + display names an AI "Custom Category" can't shadow.
 export const AI_CONTENT_RESERVED = [

@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
+import { catalogEntry } from '../catalog'
 import NumberStepper from '../NumberStepper'
 import AiCustomOption from '../AiCustomOption'
 import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
+
+const { minPlayers: MIN_PLAYERS } = catalogEntry('fibbage')
 
 const PROMPTS_PER_PLAYER_OPTIONS = [1, 2]
 
@@ -32,7 +35,7 @@ export default function FibbageSetup({
     customTopics.includes(saved?.topic) ? saved.topic : null,
   )
 
-  const notEnough = playerCount < 3
+  const notEnough = playerCount < MIN_PLAYERS
   const estimatedRounds = playerCount * promptsPerPlayer
   const customNoTopic = mode === 'custom' && !topic
 
@@ -154,7 +157,7 @@ export default function FibbageSetup({
       )}
 
       {notEnough && (
-        <p className="hint">Fact or Fake needs at least 3 players.</p>
+        <p className="hint">Fact or Fake needs at least {MIN_PLAYERS} players.</p>
       )}
       {customNoTopic && (
         <p className="hint">Generate or pick a custom topic to start.</p>

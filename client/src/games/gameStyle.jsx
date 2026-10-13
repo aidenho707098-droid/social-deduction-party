@@ -1,9 +1,10 @@
 // Per-game visual identity for the menu: a simple line-style icon housed in
 // a circular colour-filled badge. The accent colour (violet / coral /
-// mustard, cycling) is chosen in GameMenu from the game's position.
+// mustard / light violet, cycling) comes from catalog.js by position.
 
-// Line icons — stroke only, 24x24, no fills. Colour is inherited from the
-// badge (`currentColor`).
+// Line icons — stroke only, 24x24, no fills, one 2px stroke weight. Colour
+// is inherited from the badge (`currentColor`); a badge may nudge the
+// weight via CSS stroke-width (light violet runs slightly heavier).
 const ICONS = {
   // Imposter — a watchful eye.
   imposter: (
@@ -73,11 +74,14 @@ const ICONS = {
       <path d="m14.5 17.5-2.5 3.5" />
     </>
   ),
-  // Who Am I? — a big question mark: the identity nobody can see but them.
+  // Who Am I? — a "Hello, my name is" sticker: header strip on top, a "?"
+  // where the name should be.
   'who-am-i': (
     <>
-      <path d="M8.3 9a3.7 3.7 0 1 1 5.8 3c-1.1.75-2.1 1.5-2.1 2.9v.4" />
-      <path d="M12 18.4h.01" />
+      <rect x="2.5" y="4.5" width="19" height="15" rx="2.6" />
+      <path d="M2.5 9.2h19" />
+      <path d="M10.2 12.6a1.85 1.85 0 1 1 2.75 1.6c-.6.33-.95.75-.95 1.4v.15" />
+      <path d="M12 17.6h.01" />
     </>
   ),
   // Alphabet Soup — a bowl with a letter tile floating above it.
@@ -90,6 +94,15 @@ const ICONS = {
       <path d="M11.1 6.9h1.8" />
     </>
   ),
+  // Hot Potato — a lumpy potato with a lit fuse.
+  'hot-potato': (
+    <>
+      <path d="M12 7.5c4.6-.3 7.8 2.9 7.4 7-.4 4-3.9 6.2-7.6 6-4-.2-7-2.8-6.8-6.6.2-3.6 2.8-6.2 7-6.4Z" />
+      <path d="M13.5 7.4c.6-2 1.8-3 3.4-3.4" />
+      <path d="m18.4 2.2.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5Z" />
+      <path d="M9.6 13.4h.01M14.2 13.4h.01" />
+    </>
+  ),
 }
 
 export function GameIcon({ id }) {
@@ -98,7 +111,7 @@ export function GameIcon({ id }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.75"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

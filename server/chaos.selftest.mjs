@@ -97,7 +97,13 @@ check("MAXIMUM always fires (rng ~1)", rollChaos("maximum", () => 0.999999) === 
   check("no rounds left EXCLUDES Player Disable", !lastRound.some((m) => m.id === "player-disable"));
 
   const twoP = eligibleModifiers("taboo", MODIFIERS, { playerCount: 2, roundsLeft: 3 });
-  check("2 players still allows Score Swap", twoP.some((m) => m.id === "score-swap"));
+  // Head-to-head, the modifiers that need a third player drop out (see
+  // the note on MODIFIERS in chaos.js); the rest still work 1-v-1.
+  const TWO_PLAYER_OUT = ["score-swap", "steal", "tax-collector", "the-tyrant", "rival", "player-disable"];
+  check("2 players excludes the head-to-head-degenerate modifiers", TWO_PLAYER_OUT.every((id) => !twoP.some((m) => m.id === id)));
+  check("2 players keeps the 1-v-1 modifiers", ["double-points", "underdog-boost", "all-or-nothing", "point-reversal", "risk-it", "kingbreaker", "half-reset"].every((id) => twoP.some((m) => m.id === id)));
+  const threeP = eligibleModifiers("taboo", MODIFIERS, { playerCount: 3, roundsLeft: 3 });
+  check("3 players allows them again", TWO_PLAYER_OUT.every((id) => threeP.some((m) => m.id === id)));
 
   check("Imposter is chaos-ineligible", !CHAOS_GAMES["imposter"]);
   check(

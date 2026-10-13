@@ -7,16 +7,18 @@ import AlphabetStrip from './AlphabetStrip'
 import { useCountdown } from './useCountdown'
 
 // Spoken mode: turn-based elimination. The active player says an answer
-// OUT LOUD and taps "Said it" before their ring runs out; then everyone
-// else gets a 5s window to Challenge, and a challenge goes to a 5s room
-// vote. Every action carries the server's `turnSeq`, so a tap that raced
-// the buzzer can never land on the next player's turn.
+// OUT LOUD and taps "Said it" before their ring runs out — the turn passes
+// straight to the next player. Until that player answers (or runs out of
+// time), anyone else still in can Challenge the answer: the clock freezes
+// for a 5s room vote, then picks up where it stopped. Every action carries
+// the server's `turnSeq` (or, for a challenge, the answer's own seq), so a
+// tap that raced the buzzer can never land on the wrong turn or answer.
 
 const EVENT_COPY = {
   timeout: (n) => `${n} ran out of time — loses a life`,
-  upheld: (n) => `Challenge upheld — ${n} loses a life`,
+  upheld: (n, e) => `Challenge upheld — ${n} ${e.eliminated ? 'is out' : 'loses a life'}`,
   overruled: (n) => `Challenge failed — ${n}'s answer stands`,
-  accepted: () => null,
+  said: () => null,
   skipped: (n) => `${n} didn't make it back — turn skipped`,
   left: (n) => `${n} left the game`,
 }
@@ -29,7 +31,7 @@ export default function SpokenRound({ game, players, myId, myRole, actions }) {
 
   const active = game.activePlayerId
   const amActive = active === myId
-  const sub = game.subPhase // turn | challenge | vote | waiting
+  const sub = game.subPhase // turn | vote | waiting
   const msLeft = useCountdown(game.msLeft ?? 0, `${game.turnSeq}:${sub}`, 50)
   const myLives = game.lives?.[myId] ?? 0
   const amOut = (game.roundPlayerIds ?? []).includes(myId) && myLives <= 0
@@ -37,8 +39,32 @@ export default function SpokenRound({ game, players, myId, myRole, actions }) {
   const challengesLeft = Math.max(0, (game.challengeLimit ?? 2) - used)
   const myVote =
     myRole?.alphabetSoup?.turnSeq === game.turnSeq ? myRole.alphabetSoup.myVote : null
+  const target = game.lastAnswer // the answer a Challenge would hit now, or null
+  const aliveCount = (game.turnOrder ?? []).filter((pid) => (game.lives?.[pid] ?? 0) > 0).length
+  // The active player may only challenge in a two-player endgame (otherwise
+  // nobody could). Same rules the server enforces.
+  // null = no Challenge button at all (the active player, unless only two
+  // are left); '' = enabled; any other string = disabled, with the reason.
+  const challengeBlock = amActive && aliveCount > 2
+    ? null
+    : !target
+      ? (game.turnSeq ?? 0) <= 1
+        ? 'Nothing to challenge yet — this is the first turn.'
+        : 'No answer to challenge right now.'
+      : target.playerId === myId
+        ? 'That was your answer.'
+        : amOut
+          ? "You're out — you can still vote on challenges."
+          : challengesLeft <= 0
+            ? "You're out of challenges this round."
+            : sub === 'vote'
+              ? 'A vote is already running.'
+              : ''
+  const ch = game.challenge
+  const iCanVote = sub === 'vote' && ch && ch.answererId !== myId && (game.roundPlayerIds ?? []).includes(myId)
 
   const [pending, setPending] = useState(false)
+  const canChallenge = challengeBlock === '' && !pending
   const [note, setNote] = useState('')
   const [seq, setSeq] = useState(game.turnSeq)
   if (seq !== game.turnSeq) {
@@ -55,7 +81,7 @@ export default function SpokenRound({ game, players, myId, myRole, actions }) {
     if (!lastEventKey || seenEvent.current === lastEventKey) return
     seenEvent.current = lastEventKey
     const e = game.lastEvent
-    const text = EVENT_COPY[e.type]?.(e.playerId === myId ? 'You' : nm(e.playerId))
+    const text = EVENT_COPY[e.type]?.(e.playerId === myId ? 'You' : nm(e.playerId), e)
     if (e.type === 'timeout' || e.type === 'upheld') play('wrong')
     if (!text) return undefined
     setToast(text)
@@ -73,16 +99,23 @@ export default function SpokenRound({ game, players, myId, myRole, actions }) {
     })
   }
 
+  function raiseChallenge() {
+    if (!canChallenge) return
+    setPending(true)
+    actions.alphabetSoupChallenge(target.seq, (res) => {
+      setPending(false)
+      if (!res?.ok && res?.message) setNote(res.message)
+    })
+  }
+
   const ringLabel =
     sub === 'turn'
       ? amActive
         ? 'Say it!'
         : `${nm(active)}'s turn`
-      : sub === 'challenge'
-        ? 'Challenge window'
-        : sub === 'vote'
-          ? 'Vote!'
-          : 'Reconnecting…'
+      : sub === 'vote'
+        ? 'Vote!'
+        : 'Reconnecting…'
 
   return (
     <div className="screen as-round as-spoken">
@@ -101,6 +134,13 @@ export default function SpokenRound({ game, players, myId, myRole, actions }) {
         big={amActive}
       />
 
+      {sub === 'vote' && ch && (
+        <p className="hint center-text">
+          ⏸ {ch.frozenSubPhase === 'turn' ? `${amActive ? 'Your' : `${nm(active)}'s`} turn` : 'The turn'} is paused at{' '}
+          {Math.ceil((ch.frozenMsLeft ?? 0) / 1000)}s while the room votes.
+        </p>
+      )}
+
       {/* --- the active player's own controls --- */}
       {amActive && sub === 'turn' && (
         <button
@@ -112,65 +152,66 @@ export default function SpokenRound({ game, players, myId, myRole, actions }) {
           🗣️ Said it
         </button>
       )}
-      {amActive && sub === 'challenge' && (
-        <p className="hint center-text">Nice — waiting to see if anyone challenges…</p>
-      )}
-      {amActive && sub === 'vote' && (
-        <p className="as-callout as-callout-coral">
-          {nm(game.challenge?.challengerId)} challenged you! The room is voting…
-        </p>
-      )}
 
-      {/* --- everyone else --- */}
       {!amActive && sub === 'turn' && (
         <p className="hint center-text">
           <PlayerDot color={colorById[active]} className="player-cdot-inline" />
           <strong>{nm(active)}</strong> is answering out loud…
         </p>
       )}
-      {!amActive && sub === 'challenge' && (
+
+      {/* --- the vote (everyone but the challenged answerer) --- */}
+      {sub === 'vote' && ch && (
         <div className="as-challenge-box">
-          <p className="hint center-text">
-            Wrong letter, doesn't fit, or a repeat? Challenge it.
+          <p className="as-callout as-callout-coral">
+            {ch.challengerId === myId ? 'You' : nm(ch.challengerId)} challenged{' '}
+            {ch.answererId === myId ? 'your' : `${nm(ch.answererId)}’s`} answer.
+            {ch.answererId === myId ? ' The room is voting…' : ' Was it bad?'}
           </p>
-          <button
-            type="button"
-            className="btn btn-secondary as-challenge-btn"
-            onClick={() => act(actions.alphabetSoupChallenge)}
-            disabled={pending || amOut || challengesLeft <= 0}
-          >
-            ✋ Challenge
-          </button>
+          {iCanVote &&
+            (ch.challengerId === myId ? (
+              <p className="hint center-text">Your challenge counts as a vote to uphold.</p>
+            ) : myVote == null ? (
+              <div className="as-vote-btns">
+                <button type="button" className="btn btn-primary" onClick={() => act(actions.alphabetSoupChallengeVote, true)} disabled={pending}>
+                  Uphold — it was bad
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => act(actions.alphabetSoupChallengeVote, false)} disabled={pending}>
+                  It's fine
+                </button>
+              </div>
+            ) : (
+              <p className="hint center-text">You voted {myVote ? 'to uphold' : "that it's fine"}.</p>
+            ))}
           <p className="hint center-text">
-            {amOut
-              ? "You're out — you can still vote on challenges."
-              : `${challengesLeft} challenge${challengesLeft === 1 ? '' : 's'} left this round`}
+            {ch.votedIds?.length ?? 0} of {ch.voterCount ?? 0} voted · ties go to {nm(ch.answererId)}
           </p>
         </div>
       )}
-      {!amActive && sub === 'vote' && (
+
+      {/* --- Challenge: always on screen for everyone but the active player
+          (who only gets it in a two-player endgame); disabled when there's
+          nothing they may challenge. --- */}
+      {challengeBlock !== null && sub !== 'vote' && (
         <div className="as-challenge-box">
-          <p className="as-callout as-callout-coral">
-            {game.challenge?.challengerId === myId ? 'You' : nm(game.challenge?.challengerId)} challenged{' '}
-            {nm(active)}’s answer. Was it bad?
-          </p>
-          {game.challenge?.challengerId === myId ? (
-            <p className="hint center-text">Your challenge counts as a vote to uphold.</p>
-          ) : myVote == null ? (
-            <div className="as-vote-btns">
-              <button type="button" className="btn btn-primary" onClick={() => act(actions.alphabetSoupChallengeVote, true)} disabled={pending}>
-                Uphold — it was bad
-              </button>
-              <button type="button" className="btn btn-secondary" onClick={() => act(actions.alphabetSoupChallengeVote, false)} disabled={pending}>
-                It's fine
-              </button>
-            </div>
-          ) : (
-            <p className="hint center-text">You voted {myVote ? 'to uphold' : "that it's fine"}.</p>
-          )}
+          <button
+            type="button"
+            className="btn btn-secondary as-challenge-btn"
+            onClick={raiseChallenge}
+            disabled={!canChallenge}
+          >
+            ✋ Challenge{target && target.playerId !== myId ? ` ${nm(target.playerId)}'s answer` : ''}
+          </button>
           <p className="hint center-text">
-            {game.challenge?.votedIds?.length ?? 0} of {(game.challenge?.voterCount ?? 0)} voted · ties go to {nm(active)}
+            {challengeBlock ||
+              `Wrong letter, doesn't fit, or a repeat? ${challengesLeft} challenge${challengesLeft === 1 ? '' : 's'} left this round.`}
           </p>
+          {challengeBlock === '' && game.category?.blockNumberedSequels && (
+            <p className="hint center-text">A numbered sequel of a title you already used counts as a repeat.</p>
+          )}
+          {challengeBlock === '' && game.category?.blockRepeatedLeadWord && (
+            <p className="hint center-text">Don't reuse the first word of an earlier answer.</p>
+          )}
         </div>
       )}
       {sub === 'waiting' && (

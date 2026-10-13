@@ -101,6 +101,34 @@ export const CHAOS_GAMES = {
     speedRound: (game) => game?.mode === "typed",
     timer: { phases: ["answer"], deadlineField: "deadline", windowKeys: ["answerMs"] },
   },
+  "hot-potato": {
+    // One Chaos roll per POTATO: Short Rounds have one potato per round,
+    // Elimination many per match (the game's roundIndex counts potatoes).
+    // Rolls on the category intro, which waits for the takeover
+    // (onChaosAnnounced) like Alphabet Soup's letter reveal.
+    //
+    // FLAGGED (see `exclude`):
+    //   * Speed Round — handled by the GAME, not the generic 10s clamp
+    //     (every window is already under 10s): it pins every turn window to
+    //     the 2s Sprint floor, and the Hidden Fuse cap to 2s too. No `timer`
+    //     entry, so the glue never touches the deadline.
+    //   * Countdown Chaos — hides the turn ring / bar ([data-chaos-blind]).
+    //     A Hidden Fuse potato has no public clock, so the vignette idles.
+    //   * Elimination — points only land when a MATCH ends, so a per-potato
+    //     scoring modifier would almost always multiply nothing. Only the
+    //     two clock modifiers run there.
+    //   * Short Rounds — everyone but the exploder ties on +2, so modifiers
+    //     that hinge on a single "round winner" or a ranked top half are
+    //     either no-ops (All or Nothing, Tax Collector, The Tyrant, Rival)
+    //     or pick arbitrarily among the tied (Risk It, Point Reversal).
+    rollPhases: ["intro"],
+    scoredPhases: ["explode", "final"],
+    speedRound: true,
+    exclude: (game) =>
+      game?.mode === "elimination"
+        ? (m) => m.id !== "speed-round" && m.id !== "countdown-chaos"
+        : (m) => ["all-or-nothing", "tax-collector", "the-tyrant", "rival", "risk-it", "point-reversal"].includes(m.id),
+  },
 };
 
 export function chaosGameConfig(gameId) {
@@ -120,7 +148,10 @@ export function eligibleModifiers(gameId, modifiers, { playerCount, roundsLeft, 
   const cfg = CHAOS_GAMES[gameId];
   if (!cfg) return [];
   const speedOk = typeof cfg.speedRound === "function" ? cfg.speedRound(game) : cfg.speedRound;
+  // Optional per-game, per-state veto: (game) -> (modifier) -> true to drop it.
+  const excluded = cfg.exclude ? cfg.exclude(game) : () => false;
   return modifiers.filter((m) => {
+    if (excluded(m)) return false;
     const needs = m.needs ?? {};
     if (needs.speedRound && !speedOk) return false;
     if (needs.minPlayers && playerCount < needs.minPlayers) return false;

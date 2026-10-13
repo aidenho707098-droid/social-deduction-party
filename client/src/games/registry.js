@@ -28,23 +28,31 @@ import { rules as whoAmIRules } from './whoAmI/rules'
 import AlphabetSoupSetup from './alphabetSoup/AlphabetSoupSetup'
 import AlphabetSoupGame from './alphabetSoup/AlphabetSoupGame'
 import { rules as alphabetSoupRules } from './alphabetSoup/rules'
+import HotPotatoSetup from './hotPotato/HotPotatoSetup'
+import HotPotatoGame from './hotPotato/HotPotatoGame'
+import { rules as hotPotatoRules } from './hotPotato/rules'
 
-// To add a game: write its Setup + Game components and a rules.js, then
-// add one entry here. Nothing else in the lobby/room framework needs to
-// change. `rules` feeds the shared <HowToPlay> popup; `genre` is the short
-// style tag shown in the menu meta line and the Game Catalogue.
-export const GAMES = [
-  { id: 'imposter', name: 'Imposter', minPlayers: 3, genre: 'social deduction', Setup: ImposterSetup, Game: ImposterGame, rules: imposterRules },
-  { id: 'would-you-rather', name: 'Majority Pick', minPlayers: 2, genre: 'read the room', Setup: WouldYouRatherSetup, Game: WouldYouRatherGame, rules: wouldYouRatherRules },
-  { id: 'emoji-movie', name: 'Crack the Code', minPlayers: 2, genre: 'emoji guessing', Setup: EmojiMovieSetup, Game: EmojiMovieGame, rules: emojiMovieRules },
-  { id: 'fibbage', name: 'Fact or Fake', minPlayers: 3, genre: 'bluffing trivia', Setup: FibbageSetup, Game: FibbageGame, rules: fibbageRules },
-  { id: 'black-magic', name: 'Black Magic', minPlayers: 3, genre: 'hidden behaviour', Setup: BlackMagicSetup, Game: BlackMagicGame, rules: blackMagicRules },
-  { id: 'wavelength', name: 'Wavelength', minPlayers: 3, genre: 'spectrum guessing', Setup: WavelengthSetup, Game: WavelengthGame, rules: wavelengthRules },
-  { id: 'taboo', name: 'Taboo', minPlayers: 3, genre: 'describe & guess', Setup: TabooSetup, Game: TabooGame, rules: tabooRules },
-  { id: 'fake-artist', name: 'Fake Artist', minPlayers: 3, genre: 'draw & deduce', Setup: FakeArtistSetup, Game: FakeArtistGame, rules: fakeArtistRules },
-  { id: 'who-am-i', name: 'Who Am I?', minPlayers: 3, maxPlayers: 10, genre: 'yes/no deduction', Setup: WhoAmISetup, Game: WhoAmIGame, rules: whoAmIRules },
-  { id: 'alphabet-soup', name: 'Alphabet Soup', minPlayers: 3, maxPlayers: 10, genre: 'category & letter', Setup: AlphabetSoupSetup, Game: AlphabetSoupGame, rules: alphabetSoupRules },
-]
+import { CATALOG } from './catalog'
+
+// To add a game: its metadata goes in catalog.js (the single list every
+// menu, catalogue and tournament screen reads); its Setup + Game components
+// and rules.js are wired up here by id. `rules` feeds the shared
+// <HowToPlay> content. Nothing else in the lobby/room framework changes.
+const PARTS = {
+  imposter: { Setup: ImposterSetup, Game: ImposterGame, rules: imposterRules },
+  'would-you-rather': { Setup: WouldYouRatherSetup, Game: WouldYouRatherGame, rules: wouldYouRatherRules },
+  'emoji-movie': { Setup: EmojiMovieSetup, Game: EmojiMovieGame, rules: emojiMovieRules },
+  fibbage: { Setup: FibbageSetup, Game: FibbageGame, rules: fibbageRules },
+  'black-magic': { Setup: BlackMagicSetup, Game: BlackMagicGame, rules: blackMagicRules },
+  wavelength: { Setup: WavelengthSetup, Game: WavelengthGame, rules: wavelengthRules },
+  taboo: { Setup: TabooSetup, Game: TabooGame, rules: tabooRules },
+  'fake-artist': { Setup: FakeArtistSetup, Game: FakeArtistGame, rules: fakeArtistRules },
+  'who-am-i': { Setup: WhoAmISetup, Game: WhoAmIGame, rules: whoAmIRules },
+  'alphabet-soup': { Setup: AlphabetSoupSetup, Game: AlphabetSoupGame, rules: alphabetSoupRules },
+  'hot-potato': { Setup: HotPotatoSetup, Game: HotPotatoGame, rules: hotPotatoRules },
+}
+
+export const GAMES = CATALOG.map((entry) => ({ ...entry, ...PARTS[entry.id] }))
 
 export function getGame(id) {
   return GAMES.find((g) => g.id === id)

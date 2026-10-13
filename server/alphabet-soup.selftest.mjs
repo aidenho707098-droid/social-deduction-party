@@ -18,7 +18,10 @@ import {
   CATEGORIES,
   CATEGORY_BY_KEY,
   LETTER_POOL,
-  HARD_LETTERS,
+  LETTER_DRAW,
+  RARE_EXAMPLES,
+  MIN_RARE_EXAMPLES,
+  isRareLetter,
   RANDOM_CATEGORY,
 } from "./games/alphabetSoupBank.js";
 import * as server from "./games/wordMatch.js";
@@ -65,7 +68,7 @@ function pin(game, catKey, letter) {
 section("(a) content + selection");
 
 check("50+ categories in the bank", CATEGORIES.length >= 50, `${CATEGORIES.length}`);
-check("letter pool excludes Q U V X Y Z", HARD_LETTERS.every((l) => !LETTER_POOL.includes(l)) && LETTER_POOL.length === 20);
+check("letter pool is all 26 letters", LETTER_POOL.join("") === "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
 check(
   "every category's letters come from the pool",
   CATEGORIES.every((c) => c.letters.length > 0 && c.letters.every((l) => LETTER_POOL.includes(l))),
@@ -84,7 +87,6 @@ check(
     for (let r = 0; r < 5 && g.phase !== "final"; r++) {
       const cat = CATEGORY_BY_KEY[g.round.categoryKey];
       if (!cat.letters.includes(g.round.letter)) ok = false;
-      if (!g.round.eligibleLetters.includes(g.round.letter)) ok = false;
       g.phase = "reveal";
       soup.nextRound(g, P3);
     }
@@ -110,16 +112,19 @@ check(
 {
   const g = soup.createGame(P3, { rounds: 20, categories: ["us-states"], burnedLetters: true });
   check("Burned Letters caps rounds at the unburned letters available (US States = 7)", g.totalRounds === 7, `${g.totalRounds}`);
-  const g2 = soup.createGame(P3, { rounds: 25, categories: [RANDOM_CATEGORY], burnedLetters: true });
-  check("Burned Letters caps at 20 overall", g2.totalRounds === 20);
+  const g2 = soup.createGame(P3, { rounds: 40, categories: [RANDOM_CATEGORY], burnedLetters: true });
+  check("Burned Letters caps at 26 overall (all letters, rare ones included)", g2.totalRounds === 26, `${g2.totalRounds}`);
   const g3 = soup.createGame(P3, { rounds: 25, categories: [RANDOM_CATEGORY] });
   check("without Burned Letters no cap applies", g3.totalRounds === 25);
 }
 {
   let threw = 0;
-  try { soup.createGame(["a", "b"], { rounds: 3 }); } catch { threw++; }
+  try { soup.createGame(["a"], { rounds: 3 }); } catch { threw++; }
+  try { soup.createGame(["a", "b"], { rounds: 3, mode: "spoken" }); } catch { threw++; }
   try { soup.createGame(Array.from({ length: 11 }, (_, i) => `x${i}`), { rounds: 3 }); } catch { threw++; }
-  check("3–10 players enforced", threw === 2);
+  check("Typed 2–10 / Spoken 3–10 players enforced", threw === 3);
+  check("Typed accepts 2 players", soup.createGame(["a", "b"], { rounds: 3, mode: "typed" }).mode === "typed");
+  check("Spoken accepts 3 players", soup.createGame(["a", "b", "c"], { rounds: 3, mode: "spoken" }).mode === "spoken");
 }
 
 section("(a) intro clock");
@@ -127,7 +132,7 @@ section("(a) intro clock");
   const g = soup.createGame(P3, { rounds: 2, categories: [RANDOM_CATEGORY], mode: "typed" });
   const pub = soup.getPublicState(g, P3, g.introEndsAt - soup.INTRO_MS);
   check("round opens in the intro with the letter already chosen", g.phase === "intro" && /^[A-Z]$/.test(pub.letter));
-  check("intro carries the eligible pool for the swirl", pub.eligibleLetters.includes(pub.letter));
+  check("intro sends no per-round letter list (the swirl shows all 26)", pub.eligibleLetters === undefined);
   check("intro does NOT expose msLeft (Chaos vignette/timers stay idle)", pub.msLeft === undefined);
   check("intro total is ~2.5–3s of swirl after the 1s category chip", soup.SWIRL_MS >= 2500 && soup.SWIRL_MS <= 3000 && soup.CATEGORY_MS === 1000);
   check("tick before the intro ends changes nothing", soup.tick(g, P3, g.introEndsAt - 1) === false && g.phase === "intro");
@@ -172,6 +177,100 @@ section("(b) typed — instant checks + hidden info");
   check("auto-submit within the late grace is accepted", late.ok);
   const tooLate = soup.submitAnswer(g, "p2", "Trout", P3, g.deadline + 5000);
   check("well past the deadline is rejected", !tooLate.ok && tooLate.reason === "time");
+}
+
+section("(b) typed — anti-farming rules");
+{
+  check("flags: Movies / TV Shows / Video Games block numbered sequels", ["movies", "tv-shows", "video-games"].every((k) => CATEGORY_BY_KEY[k].blockNumberedSequels));
+  check("flags: Animals / Bugs / Foods block a repeated lead word", ["animals", "bugs", "foods"].every((k) => CATEGORY_BY_KEY[k].blockRepeatedLeadWord));
+  check("flags: Countries / Cities / Brands use neither", ["countries", "cities", "brands"].every((k) => !CATEGORY_BY_KEY[k].blockNumberedSequels && !CATEGORY_BY_KEY[k].blockRepeatedLeadWord));
+
+  // Run answers for one player through a pinned round; returns each result
+  // plus how many slots were used afterwards.
+  const run = (catKey, letter, texts, pid = "p1") => {
+    const { game: g, t0 } = started(P3, { mode: "typed" });
+    pin(g, catKey, letter);
+    const results = texts.map((t, i) => soup.submitAnswer(g, pid, t, P3, t0 + 10 + i));
+    return { g, t0, results, slots: g.answers.get(pid).length };
+  };
+  const reasons = (r) => r.results.map((x) => (x.ok ? "ok" : x.reason)).join(",");
+
+  const av = run("movies", "A", ["Avatar", "Avatar 2", "Avatar II"]);
+  check("Avatar, Avatar 2, Avatar II -> 2nd and 3rd rejected, no slots used", reasons(av) === "ok,sequel,sequel" && av.slots === 1, reasons(av));
+  check("sequel rejection names the earlier answer", av.results[1].message === "Same title as your earlier answer 'Avatar'.", av.results[1].message);
+  const avRev = run("movies", "A", ["Avatar 2", "Avatar"]);
+  check("either order: Avatar 2 then Avatar -> rejected", reasons(avRev) === "ok,sequel");
+  const avWater = run("movies", "A", ["Avatar", "Avatar: The Way of Water"]);
+  check("Avatar + Avatar: The Way of Water both accepted", reasons(avWater) === "ok,ok");
+  const hp = run("movies", "H", ["Harry Potter and the Chamber of Secrets", "Harry Potter and the Goblet of Fire"]);
+  check("two Harry Potter titles both accepted", reasons(hp) === "ok,ok");
+  const toy = run("movies", "T", ["Toy Story", "Toy Story 3"]);
+  check("Toy Story, Toy Story 3 -> second rejected", reasons(toy) === "ok,sequel");
+  const misc = run("movies", "S", ["Seven", "Se7en", "Shrek", "Shrek Forever After"]);
+  check("a number-only title ('Seven') isn't stripped to nothing; other titles fine", misc.results[0].ok && misc.results[3].ok, reasons(misc));
+  const gf = run("movies", "G", ["The Godfather", "The Godfather Part II"]);
+  check("'Part II' is stripped", reasons(gf) === "ok,sequel", reasons(gf));
+  check("non-trailing numbers untouched", server.stripSequel("21 Jump Street") === "21 Jump Street" && !server.sameAnswer("21 Jump Street", "22 Jump Street", { sequels: true }));
+  check("stripping is comparison-only: answers keep their typed text", av.g.answers.get("p1")[0].text === "Avatar" && avRev.g.answers.get("p1")[0].text === "Avatar 2");
+  check("stripping only applies in flagged categories", reasons(run("famous-people", "A", ["Avatar", "Avatar 2"])) === "ok,ok");
+
+  const fly = run("bugs", "A", ["Amazonian fly", "Amazonian bee"]);
+  check("Amazonian fly, Amazonian bee -> second rejected, no slot", reasons(fly) === "ok,leadWord" && fly.slots === 1);
+  check("lead-word message", fly.results[1].message === "Too similar to your earlier answer 'Amazonian fly': same first word.", fly.results[1].message);
+  check("Ant, Ant lion -> second rejected (single words count)", reasons(run("bugs", "A", ["Ant", "Ant lion"])) === "ok,leadWord");
+  check("plural stems match: Ants, Ant lion -> rejected", reasons(run("bugs", "A", ["Ants", "Ant lion"])) === "ok,leadWord");
+  check("typo on a long lead word still matches", reasons(run("bugs", "A", ["Amazonian fly", "Amazonain bee"])) === "ok,leadWord");
+  check("Horse fly, House fly both accepted", reasons(run("bugs", "H", ["Horse fly", "House fly"])) === "ok,ok");
+  check("multi-word typos still count as the same answer", server.sameAnswer("Mountain Gorila", "Mountain Gorilla") && server.sameAnswer("Brown Baer", "Brown Bear") && !server.sameAnswer("Horse fly", "House fly"));
+  check("leading article skipped: The Bear, Bear cub -> rejected", reasons(run("animals", "B", ["The Bear", "Bear cub"])) === "ok,leadWord");
+
+  {
+    // Different players may share a lead word, and both score.
+    const { game: g, t0 } = started(P3, { mode: "typed" });
+    pin(g, "bugs", "A");
+    const a = soup.submitAnswer(g, "p1", "Amazonian fly", P3, t0 + 10);
+    const b = soup.submitAnswer(g, "p2", "Amazonian bee", P3, t0 + 20);
+    check("another player's lead word doesn't block you", a.ok && b.ok);
+    for (const j of soup.takeValidationJobs(g)) soup.recordValidation(g, j.token, "valid");
+    soup.forceAdvance(g, P3);
+    soup.tick(g, P3, Date.now());
+    const cards = g.lastResult.cards;
+    check("...and both score as unique answers", cards.length === 2 && cards.every((c) => c.status === "unique"), JSON.stringify(cards.map((c) => c.status)));
+  }
+  {
+    // Scoring groups "Avatar" with "Avatar 2" across players.
+    const { game: g, t0 } = started(P3, { mode: "typed" });
+    pin(g, "movies", "A");
+    soup.submitAnswer(g, "p1", "Avatar", P3, t0 + 10);
+    soup.submitAnswer(g, "p2", "Avatar 2", P3, t0 + 20);
+    soup.submitAnswer(g, "p3", "Avatar: The Way of Water", P3, t0 + 30);
+    for (const j of soup.takeValidationJobs(g)) soup.recordValidation(g, j.token, "valid");
+    soup.forceAdvance(g, P3);
+    soup.tick(g, P3, Date.now());
+    const shared = g.lastResult.cards.find((c) => c.status === "shared");
+    check("Avatar + Avatar 2 from two players score as one SHARED answer", shared?.playerIds.sort().join() === "p1,p2");
+    check("...and Avatar: The Way of Water stays unique", g.lastResult.cards.some((c) => c.status === "unique" && c.playerIds.join() === "p3"));
+    check("shared card keeps the typed texts", shared?.answers.map((a) => a.text).sort().join("|") === "Avatar|Avatar 2");
+  }
+  {
+    // Unflagged category: nothing changes.
+    const c = run("countries", "S", ["South Africa", "South Korea", "Sudan"]);
+    check("Countries: South Africa + South Korea both accepted", reasons(c) === "ok,ok,ok");
+    const { game: g, t0 } = started(P3, { mode: "typed" });
+    pin(g, "countries", "G");
+    soup.submitAnswer(g, "p1", "Guinea", P3, t0 + 10);
+    soup.submitAnswer(g, "p2", "Guinea 2", P3, t0 + 20);
+    for (const j of soup.takeValidationJobs(g)) soup.recordValidation(g, j.token, "valid");
+    soup.forceAdvance(g, P3);
+    soup.tick(g, P3, Date.now());
+    check("Countries: no sequel folding in scoring", g.lastResult.cards.every((cd) => cd.status === "unique"));
+  }
+  {
+    const { game: g, t0 } = started(P3, { mode: "spoken" });
+    pin(g, "movies", "A");
+    const cat = soup.getPublicState(g, P3, t0).category;
+    check("public state carries the category's flags (Spoken challenge reasons)", cat.blockNumberedSequels === true && cat.blockRepeatedLeadWord === false);
+  }
 }
 
 section("(b) typed — round end, validation flow, scoring, disputes");
@@ -314,57 +413,133 @@ section("(c) spoken — deliberate timeouts never skip anyone");
   check("turn clock floors at 4s", soup.getPublicState(g, P3, t0).turnWindowMs === 4000);
 }
 
-section("(c) spoken — Said it, challenges, votes");
+section("(c) spoken — Said it passes at once; challenges, votes");
 {
   const { game: g, t0 } = started(P4, { mode: "spoken" });
   const [a, b, c, d] = g.turnOrder;
+  const win = soup.getPublicState(g, P4, t0).turnWindowMs;
   check("only the active player can tap Said it", !soup.saidIt(g, b, g.turnSeq, P4, t0 + 1).ok);
   check("stale turnSeq ignored", !soup.saidIt(g, a, g.turnSeq - 1, P4, t0 + 1).ok);
-  check("Said it opens a 5s challenge window", soup.saidIt(g, a, g.turnSeq, P4, t0 + 1000).ok && g.subPhase === "challenge" && g.deadline === t0 + 6000);
-  check("the active player can't challenge themselves", !soup.challenge(g, a, g.turnSeq, P4, t0 + 1100).ok);
-  soup.tick(g, P4, t0 + 6001);
-  check("no challenge -> accepted, no life lost, turn passes to the next player", g.lives.get(a) === 3 && soup.getPublicState(g, P4, t0 + 6001).activePlayerId === b);
+  check("first turn: nothing to challenge yet", !soup.challenge(g, b, null, P4, t0 + 2).ok && soup.getPublicState(g, P4, t0 + 2).lastAnswer === null);
 
-  // b says it; c challenges; vote 2 uphold (c + d) vs 1 (a) -> upheld.
-  let now = t0 + 7000;
-  soup.saidIt(g, b, g.turnSeq, P4, now);
-  check("challenge opens the vote with the challenger counted", soup.challenge(g, c, g.turnSeq, P4, now + 100).ok && g.subPhase === "vote");
-  check("only one challenge per answer", !soup.challenge(g, d, g.turnSeq, P4, now + 150).ok);
-  check("the active player can't vote", !soup.voteChallenge(g, b, g.turnSeq, false, P4, now + 200).ok);
-  soup.voteChallenge(g, a, g.turnSeq, false, P4, now + 200);
-  soup.voteChallenge(g, d, g.turnSeq, true, P4, now + 300);
-  check("vote resolves as soon as everyone voted; majority upholds -> life lost", g.lives.get(b) === 2 && g.lastEvent.type === "upheld" && soup.getPublicState(g, P4, now + 300).activePlayerId === c);
+  const aSeq = g.turnSeq;
+  check("Said it ok", soup.saidIt(g, a, aSeq, P4, t0 + 1000).ok);
+  const pub = soup.getPublicState(g, P4, t0 + 1000);
+  check("no window: the turn passes IMMEDIATELY to exactly the next player, clock running",
+    g.subPhase === "turn" && pub.activePlayerId === b && g.deadline === t0 + 1000 + win, `${g.subPhase} ${pub.activePlayerId === b}`);
+  check("a's answer is now the challengeable one", pub.lastAnswer?.playerId === a && pub.lastAnswer.seq === aSeq);
+  check("the answerer can't challenge their own answer", !soup.challenge(g, a, aSeq, P4, t0 + 1100).ok);
+  check("the active player can't challenge (4 still in)", !soup.challenge(g, b, aSeq, P4, t0 + 1100).ok);
 
-  // c says it; d challenges; a votes no; b doesn't vote -> 1-1 at timeout -> tie favours active.
+  // c challenges a's answer 3s into b's turn -> b's clock freezes with 7s... left.
+  let now = t0 + 4000;
+  const frozen = g.deadline - now;
+  check("challenge opens the vote, challenger counted", soup.challenge(g, c, aSeq, P4, now).ok && g.subPhase === "vote");
+  check("the vote is the only pause: b's clock is frozen", soup.getPublicState(g, P4, now).challenge.frozenMsLeft === frozen && soup.getPublicState(g, P4, now).challenge.frozenSubPhase === "turn");
+  check("only one challenge per answer", !soup.challenge(g, d, aSeq, P4, now + 50).ok);
+  check("the answerer can't vote", !soup.voteChallenge(g, a, g.turnSeq, false, P4, now + 100).ok);
+  check("the active player (not the answerer) CAN vote", soup.voteChallenge(g, b, g.turnSeq, false, P4, now + 100).ok);
+  soup.voteChallenge(g, d, g.turnSeq, true, P4, now + 200);
+  check("everyone voted -> resolves: 2-1 upheld, the ANSWERER loses a life",
+    g.lives.get(a) === 2 && g.lives.get(b) === 3 && g.lastEvent.type === "upheld" && g.lastEvent.playerId === a);
+  check("the current turn resumes with its clock exactly where it froze",
+    g.subPhase === "turn" && soup.getPublicState(g, P4, now + 200).activePlayerId === b && g.deadline === now + 200 + frozen);
+  check("a challenged answer can't be challenged again", soup.getPublicState(g, P4, now + 200).lastAnswer === null && !soup.challenge(g, d, aSeq, P4, now + 250).ok);
+
+  // b says it -> c's turn. d challenges; a votes no; nobody else -> 1-1 at timeout -> tie favours b.
   now += 1000;
-  soup.saidIt(g, c, g.turnSeq, P4, now);
-  soup.challenge(g, d, g.turnSeq, P4, now + 100);
-  soup.voteChallenge(g, a, g.turnSeq, false, P4, now + 200);
-  soup.tick(g, P4, now + 100 + soup.CHALLENGE_VOTE_MS);
-  check("tie favours the active player (no life lost)", g.lives.get(c) === 3 && g.lastEvent.type === "overruled");
-
-  // d's challenge count: 1 used. Use up the limit.
+  const bSeq = g.turnSeq;
+  soup.saidIt(g, b, bSeq, P4, now);
+  check("next Said it passes to exactly the next player again", soup.getPublicState(g, P4, now).activePlayerId === c);
+  const cFrozen = g.deadline - (now + 500);
+  soup.challenge(g, d, bSeq, P4, now + 500);
+  soup.voteChallenge(g, a, g.turnSeq, false, P4, now + 600);
+  soup.tick(g, P4, now + 500 + soup.CHALLENGE_VOTE_MS);
+  check("tie favours the answerer (no life lost), clock unchanged",
+    g.lives.get(b) === 3 && g.lastEvent.type === "overruled" && g.subPhase === "turn" && g.deadline === now + 500 + soup.CHALLENGE_VOTE_MS + cFrozen);
   check("challenge counter tracked per player", g.challengesUsed.get(d) === 1 && g.challengesUsed.get(c) === 1);
-  // d's own turn now: let it time out; then a's turn — d challenges twice more.
-  now = g.deadline + 500; soup.tick(g, P4, now); // d times out
-  soup.saidIt(g, a, g.turnSeq, P4, now + 10);
-  check("2nd challenge allowed", soup.challenge(g, d, g.turnSeq, P4, now + 20).ok);
+
+  // c says it -> d's turn; then d says it -> a's turn: c's answer can no longer be challenged.
+  now = Date.now() + 100_000;
+  g.deadline = now + 5000;
+  const cSeq = g.turnSeq;
+  soup.saidIt(g, c, cSeq, P4, now);
+  soup.saidIt(g, d, g.turnSeq, P4, now + 100);
+  const stale = soup.challenge(g, b, cSeq, P4, now + 200);
+  check("an answer is challengeable only until the next player taps Said it", !stale.ok && /any more/.test(stale.message));
+  // a times out -> d's answer is no longer challengeable either.
+  now = g.deadline + 500;
+  soup.tick(g, P4, now);
+  check("a timeout closes the previous answer to challenges", soup.getPublicState(g, P4, now).lastAnswer === null && !soup.challenge(g, c, null, P4, now + 10).ok);
+
+  // Limit: d has used 1. Use a 2nd, then a 3rd is refused.
+  const bTurn = g.turnSeq;
+  soup.saidIt(g, b, bTurn, P4, now + 20);
+  check("2nd challenge allowed", soup.challenge(g, d, bTurn, P4, now + 30).ok);
   soup.forceAdvance(g, P4); // resolve the vote: d up vs nobody -> 1-0 upheld
-  check("force proceed resolves an open vote", g.subPhase === "turn");
-  soup.saidIt(g, b, g.turnSeq, P4, Date.now());
-  const third = soup.challenge(g, d, g.turnSeq, P4, Date.now());
+  check("force proceed resolves an open vote and resumes the turn", g.subPhase === "turn" && g.lastEvent.type === "upheld");
+  // c, d and a answer, so it's b's turn and a's answer is open; d tries a 3rd.
+  for (const pid of [c, d, a]) soup.saidIt(g, pid, g.turnSeq, P4, Date.now() + 10);
+  const third = soup.challenge(g, d, g.lastAnswer?.seq, P4, Date.now() + 20);
   check("3rd challenge in a round refused", !third.ok && /out of challenges/.test(third.message));
 }
 {
-  // An eliminated player can still vote but not challenge.
+  // An upheld challenge that eliminates the answerer; the round carries on
+  // and the rotation skips them.
+  const { game: g, t0 } = started(P4, { mode: "spoken" });
+  const [a, b, c, d] = g.turnOrder;
+  g.lives.set(a, 1);
+  const aSeq = g.turnSeq;
+  soup.saidIt(g, a, aSeq, P4, t0 + 100);
+  soup.challenge(g, c, aSeq, P4, t0 + 200);
+  soup.voteChallenge(g, b, g.turnSeq, true, P4, t0 + 300);
+  soup.voteChallenge(g, d, g.turnSeq, true, P4, t0 + 300);
+  check("upheld challenge eliminates an answerer on their last life", g.lives.get(a) === 0 && g.eliminated.includes(a) && g.lastEvent.eliminated === true);
+  check("...and b's turn carries on", g.phase === "turns" && g.subPhase === "turn" && soup.getPublicState(g, P4).activePlayerId === b);
+  soup.saidIt(g, b, g.turnSeq, P4, Date.now());
+  soup.saidIt(g, c, g.turnSeq, P4, Date.now());
+  soup.saidIt(g, d, g.turnSeq, P4, Date.now());
+  check("the rotation skips the eliminated answerer (d -> b, never a)", soup.getPublicState(g, P4).activePlayerId === b);
+}
+{
+  // Eliminated players vote but can't challenge; with only two still in,
+  // the active player may challenge (otherwise nobody could).
   const { game: g, t0 } = started(P3, { mode: "spoken" });
   const [a, b, c] = g.turnOrder;
   g.lives.set(c, 0);
   g.eliminated.push(c);
-  soup.saidIt(g, a, g.turnSeq, P3, t0 + 1);
-  check("eliminated players can't challenge", !soup.challenge(g, c, g.turnSeq, P3, t0 + 2).ok);
-  soup.challenge(g, b, g.turnSeq, P3, t0 + 3);
+  const aSeq = g.turnSeq;
+  soup.saidIt(g, a, aSeq, P3, t0 + 1);
+  check("eliminated players can't challenge", !soup.challenge(g, c, aSeq, P3, t0 + 2).ok);
+  check("two left: the active player may challenge the other's answer", soup.challenge(g, b, aSeq, P3, t0 + 3).ok);
   check("eliminated players can vote", soup.voteChallenge(g, c, g.turnSeq, false, P3, t0 + 4).ok);
+  check("1-1 tie -> answer stands, round continues", g.lives.get(a) === 3 && g.phase === "turns");
+}
+{
+  // Upheld challenge on the last two: the answerer goes out, round ends.
+  const { game: g, t0 } = started(P3, { mode: "spoken" });
+  const [a, b, c] = g.turnOrder;
+  g.lives.set(c, 0);
+  g.eliminated.push(c);
+  g.lives.set(a, 1);
+  const aSeq = g.turnSeq;
+  soup.saidIt(g, a, aSeq, P3, t0 + 1);
+  soup.challenge(g, b, aSeq, P3, t0 + 2);
+  soup.voteChallenge(g, c, g.turnSeq, true, P3, t0 + 3);
+  check("upheld on the last two -> answerer out, round over, b wins", g.phase === "reveal" && g.lastResult.rows[0].playerId === b);
+}
+{
+  // Many rounds of quick "Said it": the turn always moves exactly one seat.
+  const { game: g, t0 } = started(P4, { mode: "spoken" });
+  let ok = true;
+  let now = t0;
+  for (let i = 0; i < 40; i++) {
+    const before = g.currentTurnIndex;
+    now += 50;
+    soup.saidIt(g, g.turnOrder[g.currentTurnIndex], g.turnSeq, P4, now);
+    if (g.currentTurnIndex !== (before + 1) % 4) ok = false;
+  }
+  check("40 quick Said-its: every turn moves exactly one seat", ok);
 }
 
 {
@@ -401,7 +576,6 @@ section("(c) spoken — mid-turn disconnect");
   const [a, b] = g.turnOrder;
   const without = P3.filter((p) => p !== b);
   soup.saidIt(g, a, g.turnSeq, without, t0 + 10);
-  soup.tick(g, without, t0 + 10 + soup.CHALLENGE_WINDOW_MS + 1);
   check("a disconnected next player's turn opens in 'waiting', not skipped", soup.getPublicState(g, without).activePlayerId === b && g.subPhase === "waiting");
 }
 
@@ -539,9 +713,248 @@ section("(e) tournament + mirrors");
     for (const b of samples) if (server.sameAnswer(a, b) !== client.sameAnswer(a, b)) same = false;
   }
   check("client answer checks mirror the server exactly", same);
+
+  const farm = [
+    "Avatar", "Avatar 2", "Avatar II", "Avatar: The Way of Water", "Toy Story 3", "Seven", "21 Jump Street",
+    "The Godfather Part II", "Kill Bill: Vol. 1", "Amazonian fly", "Amazonian bee", "Ant", "Ant lion", "Ants",
+    "Horse fly", "House fly", "The Bear", "Bug's Life", "Brown Baer", "Brown Bear", "Mountain Gorila", "Mountain Gorilla", "",
+  ];
+  const FLAGS = [{}, { blockNumberedSequels: true }, { blockRepeatedLeadWord: true }];
+  let farmSame = true;
+  for (const a of farm) {
+    if (server.stripSequel(a) !== client.stripSequel(a) || server.leadWord(a) !== client.leadWord(a)) farmSame = false;
+    for (const b of farm) {
+      for (const f of FLAGS) {
+        if (JSON.stringify(server.farmingConflict(a, [b], f)) !== JSON.stringify(client.farmingConflict(a, [b], f))) farmSame = false;
+      }
+    }
+  }
+  check("client anti-farming checks mirror the server exactly", farmSame);
   check("typo + spacing/hyphen + plural folding", server.sameAnswer("Sweden", "Sweeden") && server.sameAnswer("ice-cream", "Ice Cream") && server.sameAnswer("berries", "berry"));
   check("near-miss different answers stay distinct", !server.sameAnswer("Iran", "Iraq") && !server.sameAnswer("Mali", "Malta") && !server.sameAnswer("7 Up", "8 Up"));
   check("article rule: either reading", server.startsWithLetter("The Office", "T") && server.startsWithLetter("The Office", "O") && server.startsWithLetter("A Bug's Life", "B") && !server.startsWithLetter("The Office", "F"));
+}
+
+// ===================================================================
+section("(e) rare letters: bank, weighted draw, guardrails, hidden from clients");
+{
+  // --- bank ---
+  check("draw config: normal 1.0, rare 0.25, rare = Q U V X Y Z",
+    LETTER_DRAW.normalWeight === 1 && LETTER_DRAW.rareWeight === 0.25 && LETTER_DRAW.rareLetters.join("") === "QUVXYZ");
+  let pairs = 0;
+  let badPair = null;
+  for (const c of CATEGORIES) {
+    for (const l of c.letters.filter(isRareLetter)) {
+      pairs++;
+      const ex = RARE_EXAMPLES[c.key]?.[l] ?? [];
+      if (ex.length < MIN_RARE_EXAMPLES) badPair = `${c.key}+${l} has ${ex.length}`;
+    }
+  }
+  check("every drawable rare pair lists 5+ example answers", !badPair && pairs > 50, badPair ?? `${pairs} rare pairs`);
+  let badEx = null;
+  for (const [key, byLetter] of Object.entries(RARE_EXAMPLES)) {
+    for (const [l, ex] of Object.entries(byLetter)) {
+      if (new Set(ex.map((e) => server.canonicalAnswer(e))).size !== ex.length) badEx = `${key}+${l}: duplicate`;
+      for (const e of ex) {
+        if (!server.startsWithLetter(e, l) || !client.startsWithLetter(e, l)) badEx = `${key}+${l}: "${e}" fails starts-with`;
+        if (server.canonicalAnswer(e).length < 2) badEx = `${key}+${l}: "${e}" too short`;
+      }
+    }
+  }
+  check("every rare example passes the starts-with check (server + client)", !badEx, badEx ?? "");
+  const cat = (k) => CATEGORY_BY_KEY[k];
+  check("Animals gets Q / V / Y / Z", ["Q", "V", "Y", "Z"].every((l) => cat("animals").letters.includes(l)));
+  check("pairs under 5 answers stay off (Brands X, Jobs Z, Instruments X, US States U/V)",
+    !cat("brands").letters.includes("X") && !cat("jobs").letters.includes("Z") && !cat("instruments").letters.includes("X") &&
+    !cat("us-states").letters.includes("U") && !cat("us-states").letters.includes("V"));
+  check("normal letters unchanged where no rare letter fits (Kitchen Items)", !cat("kitchen").letters.some(isRareLetter));
+
+  // --- weighted draw ---
+  const counts = (letters, n, rng = Math.random) => {
+    const c = {};
+    for (let i = 0; i < n; i++) { const l = soup.drawLetter(letters, rng); c[l] = (c[l] ?? 0) + 1; }
+    return c;
+  };
+  const all = counts(LETTER_POOL, 40_000);
+  const rareShareAll = LETTER_DRAW.rareLetters.reduce((s2, l) => s2 + (all[l] ?? 0), 0) / 40_000;
+  check("all 26 eligible: rare letters land ~7% (6 x 0.25 / 21.5 = 6.98%)", rareShareAll > 0.06 && rareShareAll < 0.08, (rareShareAll * 100).toFixed(2) + "%");
+  const kitchen = counts(cat("kitchen").letters, 5000);
+  check("a category with no rare letters draws only its normal ones", Object.keys(kitchen).every((l) => cat("kitchen").letters.includes(l) && !isRareLetter(l)));
+  const animals = counts(cat("animals").letters, 40_000);
+  const aNormal = cat("animals").letters.filter((l) => !isRareLetter(l));
+  const expect = 0.25 / (aNormal.length + 4 * 0.25);
+  check("weights renormalize over the category's letters (Animals Q ≈ 0.25 / (normals + 1))",
+    Math.abs((animals.Q ?? 0) / 40_000 - expect) < 0.006, `Q ${(((animals.Q ?? 0) / 40_000) * 100).toFixed(2)}% vs ${(expect * 100).toFixed(2)}%`);
+
+  // --- 10,000-draw simulation through the real pick path ---
+  const freq = Object.fromEntries(LETTER_POOL.map((l) => [l, 0]));
+  let draws = 0;
+  let rareRounds = 0;
+  let doubleRare = 0;
+  let catMismatch = 0;
+  while (draws < 10_000) {
+    const g = soup.createGame(P3, { rounds: 20, categories: [RANDOM_CATEGORY] });
+    let prevRare = isRareLetter(g.round.letter);
+    const tally = (l) => { freq[l]++; draws++; if (isRareLetter(l)) rareRounds++; };
+    tally(g.round.letter);
+    for (let r = 1; r < 20 && draws < 10_000; r++) {
+      const pick = soup.pickRound(g);
+      if (!pick) break;
+      soup.commitPick(g, pick);
+      if (!CATEGORY_BY_KEY[pick.catKey].letters.includes(pick.letter)) catMismatch++;
+      const rare = isRareLetter(pick.letter);
+      if (rare && prevRare) doubleRare++;
+      prevRare = rare;
+      tally(pick.letter);
+    }
+  }
+  const share = rareRounds / draws;
+  const line = LETTER_POOL.map((l) => `${l}:${freq[l]}`).join(" ");
+  console.log(`      10,000 draws (random categories): ${line}`);
+  console.log(`      rare rounds: ${rareRounds} (${(share * 100).toFixed(2)}%) — ${LETTER_DRAW.rareLetters.map((l) => `${l}:${freq[l]}`).join(" ")}`);
+  check("10,000 draws: never a rare letter two rounds in a row", doubleRare === 0, `${doubleRare}`);
+  check("10,000 draws: every rare letter shows up", LETTER_DRAW.rareLetters.every((l) => freq[l] > 0));
+  check("10,000 draws: letters always from the category's own list", catMismatch === 0);
+  check("10,000 draws: rare share is low (bank-limited, under the 7% all-eligible ceiling)", share > 0.015 && share < 0.07, (share * 100).toFixed(2) + "%");
+
+  // --- Burned Letters: full-length games never strand on rare letters ---
+  let short = 0;
+  let burnDouble = 0;
+  let burnRepeat = 0;
+  let rareBurned = 0;
+  for (let i = 0; i < 400; i++) {
+    const keys = i % 2 ? ["movies", "musicians", "tv-shows"] : [RANDOM_CATEGORY];
+    const g = soup.createGame(P3, { rounds: 40, categories: keys, burnedLetters: true });
+    const letters = [g.round.letter];
+    while (letters.length < g.totalRounds) {
+      const pick = soup.pickRound(g);
+      if (!pick) break;
+      soup.commitPick(g, pick);
+      letters.push(pick.letter);
+    }
+    if (letters.length < g.totalRounds) short++;
+    if (new Set(letters).size !== letters.length) burnRepeat++;
+    for (let k = 1; k < letters.length; k++) if (isRareLetter(letters[k]) && isRareLetter(letters[k - 1])) burnDouble++;
+    rareBurned += letters.filter(isRareLetter).length;
+  }
+  check("Burned Letters: 400 max-length games all deal every round (rare letters spaced, none stranded)", short === 0, `${short} short`);
+  check("Burned Letters: no letter repeats, no back-to-back rare", burnRepeat === 0 && burnDouble === 0);
+  check("Burned Letters: rare letters get burned like any other", rareBurned > 0, `${rareBurned} rare letters dealt`);
+  const mv = soup.createGame(P3, { rounds: 40, categories: ["movies", "musicians", "tv-shows"], burnedLetters: true });
+  const mvLetters = new Set(["movies", "musicians", "tv-shows"].flatMap((k) => cat(k).letters));
+  check("Burned Letters cap counts rare letters that can be spaced out", mv.totalRounds === mvLetters.size, `${mv.totalRounds} of ${mvLetters.size}`);
+
+  // --- nothing about rarity reaches a client ---
+  let leak = null;
+  for (let i = 0; i < 200 && !leak; i++) {
+    const g = soup.createGame(P3, { rounds: 3, categories: ["movies"], burnedLetters: i % 2 === 0 });
+    const pub = JSON.stringify(soup.getPublicState(g, P3, g.introEndsAt - soup.INTRO_MS));
+    const priv = JSON.stringify(soup.getPrivateState(g, "p1") ?? {});
+    if (/rare|weight|eligibleLetters|0\.25/i.test(pub + priv)) leak = pub.slice(0, 200);
+  }
+  check("public/private state never mentions rarity, weights or a letter list", !leak, leak ?? "");
+  const pubPool = soup.getPublicState(soup.createGame(P3, { rounds: 2, burnedLetters: true }), P3).letterPool;
+  check("Burned Letters strip pool is all 26 letters", pubPool.join("") === LETTER_POOL.join(""));
+}
+
+section("(e) rare letters: forced rounds — starts-with, answers, anti-farming, burned strip");
+{
+  const forced = [
+    ["animals", "Q", ["Quokka", "quail"]],
+    ["foods", "U", ["Udon", "an Upside-down cake"]],
+    ["movies", "X", ["X-Men", "The X-Files"]],
+    ["tv-shows", "Y", ["Yellowstone", "You"]],
+    ["musicians", "Z", ["ZZ Top", "Zedd"]],
+    ["cities", "V", ["Vancouver", "Vienna"]],
+    ["brands", "Q", ["Qantas", "QVC"]],
+    ["movies", "Q", ["A Quiet Place", "Quills"]],
+    ["video-games", "X", ["XCOM", "Xenogears"]],
+    ["boys-names", "Y", ["Yusuf", "Yuri"]],
+  ];
+  for (const [catKey, letter, answers] of forced) {
+    const { game: g, t0 } = started(P3, { mode: "typed" });
+    pin(g, catKey, letter);
+    const pub = soup.getPublicState(g, P3);
+    const ok = answers.every((a, i) => soup.submitAnswer(g, "p1", a, P3, t0 + 10 + i).ok);
+    const wrong = soup.submitAnswer(g, "p2", "Banana", P3, t0 + 50);
+    check(`forced ${catKey} + ${letter}: real answers accepted, wrong letter rejected`, pub.letter === letter && ok && !wrong.ok && wrong.reason === "letter");
+  }
+  {
+    const { game: g, t0 } = started(P3, { mode: "typed" });
+    pin(g, "animals", "Z");
+    soup.submitAnswer(g, "p1", "Zebra", P3, t0 + 10);
+    const lead = soup.submitAnswer(g, "p1", "Zebra finch", P3, t0 + 20);
+    const other = soup.submitAnswer(g, "p1", "Zebu", P3, t0 + 30);
+    check("lead-word rule on Z: 'Zebra' then 'Zebra finch' rejected, 'Zebu' fine", !lead.ok && lead.reason === "leadWord" && other.ok);
+  }
+  {
+    const { game: g, t0 } = started(P3, { mode: "typed" });
+    pin(g, "animals", "Y");
+    const a = soup.submitAnswer(g, "p1", "Yak", P3, t0 + 10);
+    const b = soup.submitAnswer(g, "p1", "Yellowjacket", P3, t0 + 20);
+    const c = soup.submitAnswer(g, "p1", "Yellowfin tuna", P3, t0 + 30);
+    check("lead-word rule on Y: different first words fine ('Yak', 'Yellowjacket', 'Yellowfin tuna')", a.ok && b.ok && c.ok);
+  }
+  {
+    const { game: g, t0 } = started(P3, { mode: "typed" });
+    pin(g, "movies", "Z");
+    soup.submitAnswer(g, "p1", "Zootopia", P3, t0 + 10);
+    const seq = soup.submitAnswer(g, "p1", "Zootopia 2", P3, t0 + 20);
+    const seq2 = soup.submitAnswer(g, "p1", "Zoolander II", P3, t0 + 30);
+    const fresh = soup.submitAnswer(g, "p1", "Zodiac", P3, t0 + 40);
+    check("sequel rule on Z: 'Zootopia 2' after 'Zootopia' rejected; 'Zoolander II', 'Zodiac' fine",
+      !seq.ok && seq2.ok && fresh.ok, seq.reason);
+  }
+  {
+    const { game: g, t0 } = started(P3, { mode: "typed" });
+    pin(g, "movies", "X");
+    soup.submitAnswer(g, "p1", "X-Men", P3, t0 + 10);
+    const seq = soup.submitAnswer(g, "p1", "X-Men 2", P3, t0 + 20);
+    const other = soup.submitAnswer(g, "p1", "Xanadu", P3, t0 + 30);
+    check("sequel rule on X: 'X-Men 2' after 'X-Men' rejected; 'Xanadu' fine", !seq.ok && other.ok, seq.reason);
+  }
+  {
+    // Burned strip with a forced rare letter.
+    const g = soup.createGame(P3, { rounds: 3, categories: ["movies"], burnedLetters: true });
+    g.burned = ["A", "Q"];
+    g.round = { ...g.round, categoryKey: "movies", categoryName: "Movies", letter: "X", burnedBefore: ["A", "Q"] };
+    const pub = soup.getPublicState(g, P3);
+    check("burned strip carries rare letters like any other", pub.letterPool.includes("X") && pub.burnedLetters.join("") === "AQ" && pub.letter === "X");
+    const next = soup.pickRound(g);
+    check("a burned rare letter is never drawn again", next && next.letter !== "Q");
+  }
+  {
+    // After a rare round, the next deal is never rare.
+    let bad = 0;
+    for (let i = 0; i < 2000; i++) {
+      const g = soup.createGame(P3, { rounds: 5, categories: ["movies"] });
+      g.lastWasRare = true;
+      const pick = soup.pickRound(g);
+      if (pick && isRareLetter(pick.letter)) bad++;
+    }
+    check("after a rare round the next letter is never rare (2,000 tries)", bad === 0);
+  }
+  {
+    // A category with ONLY rare letters left isn't drawn right after a rare
+    // round: the CATEGORY is redrawn before anything is shown.
+    // Disney's only rare letter is Z; burn all its normal letters. Sports
+    // still has F, H, J, K, L, R unburned.
+    const g = soup.createGame(P3, { rounds: 5, categories: ["disney", "sports"], burnedLetters: true });
+    g.burned = CATEGORY_BY_KEY.disney.letters.filter((l) => !isRareLetter(l));
+    g.lastWasRare = true;
+    let allSports = true;
+    for (let i = 0; i < 200; i++) if (soup.pickRound(g)?.catKey !== "sports") allSports = false;
+    check("category with only rare letters left is skipped after a rare round (category redrawn)", allSports);
+    g.lastWasRare = false;
+    g.catDeck.bag = new Set(g.categories); // a fresh cycle for this check
+    let sawDisneyZ = false;
+    for (let i = 0; i < 400; i++) { const pk = soup.pickRound(g); if (pk?.catKey === "disney" && pk.letter === "Z") sawDisneyZ = true; }
+    check("...and is drawable again once the previous round wasn't rare", sawDisneyZ);
+  }
+  {
+    // The validator prompt stays lenient toward obscure-but-real answers.
+    check("validator prompt accepts obscure but real answers", /Obscure but real things count/.test(SYSTEM_PROMPT) && /Xerus/.test(SYSTEM_PROMPT));
+  }
 }
 
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}`);

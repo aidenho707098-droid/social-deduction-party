@@ -30,6 +30,9 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
   } else if (outcome === 'revealed') {
     headline = `${witchName} revealed The Curse`
     sub = `Round ended at ${mmss}`
+  } else if (outcome === 'surrendered') {
+    headline = 'Everyone gave up'
+    sub = `The Curse held — round ended at ${mmss}`
   } else {
     headline = 'Round abandoned'
     sub = 'The Witch left the game — no points this round'
@@ -81,6 +84,9 @@ export default function RoundReveal({ game, players, myId, isHost, onNext }) {
           <p className="hint hint-block">
             Ended by The Witch — no Player points awarded this round.
           </p>
+        )}
+        {outcome === 'surrendered' && (
+          <p className="hint hint-block">Every Player gave up — no Player points.</p>
         )}
         {outcome === 'unbroken' && (
           <p className="hint hint-block">No one cracked it in time — no Player points.</p>

@@ -23,7 +23,7 @@ import { classifyGuess, scoreGuess, scoreClueGiver } from "./wavelengthScoring.j
 
 export const id = "wavelength";
 export const name = "Wavelength";
-export const minPlayers = 3;
+export const minPlayers = 2;
 
 // Each Clue-Giver's own per-clue writing window (all run in parallel), and
 // the shared guessing window for each round.

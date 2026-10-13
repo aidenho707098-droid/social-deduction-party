@@ -171,6 +171,9 @@ export function hostFacingAiError(err, fallback = "built-in content") {
       return `Couldn't build a good set for that one. Try a simpler or more common name.`;
     case "bad_name":
       return "Give it a clearer name and try again.";
+    case "rejected":
+      // The model judged the request unusable; the generator says why.
+      return err.hostMessage ?? "Couldn't build a set for that one. Try a different name.";
     default:
       return `Couldn't reach the AI service. Try again, or use ${fallback}.`;
   }

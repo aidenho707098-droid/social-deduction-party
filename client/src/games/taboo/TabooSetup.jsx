@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
+import { catalogEntry } from '../catalog'
 import NumberStepper from '../NumberStepper'
 import AiCustomOption from '../AiCustomOption'
 import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
+
+const { minPlayers: MIN_PLAYERS } = catalogEntry('taboo')
 
 // Keep in sync with CATEGORIES in server/games/tabooWords.js.
 const CATEGORY_OPTIONS = [
@@ -38,7 +41,7 @@ export default function TabooSetup({
   })
   const [rounds, setRounds] = useState(() => clampRounds(saved?.rounds ?? ROUND_DEFAULT))
 
-  const notEnough = playerCount < 3
+  const notEnough = playerCount < MIN_PLAYERS
 
   function toggleCategory(key) {
     setCategories((prev) => {
@@ -136,7 +139,7 @@ export default function TabooSetup({
         hint="One player is the Describer each round; the role rotates evenly through the group."
       />
 
-      {notEnough && <p className="hint">Taboo needs at least 3 players.</p>}
+      {notEnough && <p className="hint">Taboo needs at least {MIN_PLAYERS} players.</p>}
       {error && <p className="error">{error}</p>}
 
       <button className="btn btn-start" onClick={start} disabled={notEnough}>

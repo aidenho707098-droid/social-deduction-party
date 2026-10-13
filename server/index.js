@@ -18,11 +18,18 @@ import {
   endGame,
   addAiContent,
   aiContentFor,
+  addCustomCategory,
+  publicCustomCategories,
+  MAX_CUSTOM_CATEGORIES,
   REJOIN_GRACE_MS,
 } from "./rooms.js";
 import { getLanIp } from "./network.js";
-import { AI_GENERATORS, aiContentAvailable, hostFacingAiError } from "./aiContent.js";
+import { AI_GENERATORS, aiContentAvailable, hostFacingAiError, generateCustomCategory } from "./aiContent.js";
+import { CATEGORIES as SOUP_BANK } from "./games/alphabetSoupBank.js";
+import { COMMON_LETTERS, categoryMapFor, resolveSelection } from "./games/categorySelection.js";
+import { sameAnswer } from "./games/wordMatch.js";
 import { GAMES } from "./games/registry.js";
+import { fitError, fitsSomeMode } from "./games/playerLimits.js";
 import { pumpValidation as pumpSoupValidation } from "./alphabetSoupRuntime.js";
 import {
   chaosTick,
@@ -39,6 +46,7 @@ import {
   enterIntro,
   beginGame,
   skipGame,
+  replacePendingGame,
   recordGameResult,
   getTournamentPublicState,
   finalStandingsOf,
@@ -97,14 +105,76 @@ const AI_CREATEGAME_KEY = {
   fibbage: "customTopics",
   taboo: "customCategories",
   "fake-artist": "customThemes",
+  "who-am-i": "customThemes",
 };
+
+// Basic per-room throttle for host-triggered AI calls (custom content and
+// custom categories): one call in flight at a time, and at most
+// AI_CALLS_PER_MINUTE in any rolling minute. Returns an error line, or null
+// and marks the room busy — pair every null with aiCallDone(room).
+const AI_CALLS_PER_MINUTE = 6;
+function aiCallStart(room) {
+  const now = Date.now();
+  room.aiCalls = (room.aiCalls ?? []).filter((t) => now - t < 60_000);
+  if (room.aiBusy) return "Still working on the last one — give it a moment.";
+  if (room.aiCalls.length >= AI_CALLS_PER_MINUTE) {
+    return "That's a lot of requests — wait a minute and try again.";
+  }
+  room.aiCalls.push(now);
+  room.aiBusy = true;
+  return null;
+}
+function aiCallDone(room) {
+  room.aiBusy = false;
+}
 
 // Extra createGame() options carrying this room's AI custom content for
 // `gameId` (or {} for a game with no AI content). Used by every code path
 // that starts a game — the standalone start and both tournament paths.
 function aiCreateGameExtras(gameId, room) {
+  // Alphabet Soup + Hot Potato read the room's shared custom categories.
+  if (gameId === "alphabet-soup" || gameId === "hot-potato") {
+    return { customCategories: room.customCategories ?? [] };
+  }
   const key = AI_CREATEGAME_KEY[gameId];
   return key ? { [key]: aiContentFor(room, gameId) } : {};
+}
+
+// Alphabet Soup needs letter data for every custom category it's about to
+// use. One created from Hot Potato has none yet: fetch it now (one small
+// call each, in parallel), or fall back to the 20 common letters, marked
+// unverified. Stored on the room record, so it's fetched at most once.
+async function ensureSoupLetters(room, selectedKeys) {
+  const keys = Array.isArray(selectedKeys) ? selectedKeys : [];
+  const missing = (room.customCategories ?? []).filter((c) => keys.includes(c.key) && !Array.isArray(c.letters));
+  await Promise.all(
+    missing.map(async (c) => {
+      try {
+        const res = await generateCustomCategory(c.name, { wantLetters: true });
+        // [] = checked, and no letter has 5+ answers: unusable in Alphabet
+        // Soup (the start is refused below), rather than faked with the
+        // common letters ("Planets" + W).
+        c.letters = res.letters ?? [];
+      } catch (err) {
+        console.warn(`[custom-category] letters for "${c.name}" failed (${err.code ?? "?"}): ${err.message}`);
+        c.letters = [...COMMON_LETTERS];
+        c.unverified = true;
+      }
+    }),
+  );
+  if (missing.length) broadcastRoom(room.code);
+  // Selected custom categories that turned out to have no usable letters.
+  return (room.customCategories ?? [])
+    .filter((c) => keys.includes(c.key) && Array.isArray(c.letters) && c.letters.length === 0)
+    .map((c) => c.name);
+}
+
+// A typed name that's really an existing category (bank or custom), by the
+// same fuzzy rule answers use ("Animal" = "Animals", "Fast Food Chain" =
+// "Fast Food Chains"). Returns its key, or null.
+function existingCategoryKey(room, name) {
+  const all = [...SOUP_BANK.map((c) => ({ key: c.key, name: c.name })), ...(room.customCategories ?? [])];
+  return all.find((c) => sameAnswer(c.name, name))?.key ?? null;
 }
 
 // The players a running game should actively wait on / advance through —
@@ -139,6 +209,8 @@ function buildPublicRoom(room) {
       ]),
     ),
     aiContentEnabled: aiContentAvailable(),
+    // Alphabet Soup + Hot Potato custom categories (no letter data).
+    customCategories: publicCustomCategories(room),
     // Chaos Events layer: the host's frequency dial + any live event.
     chaos: chaosPublicSlice(room),
   };
@@ -149,6 +221,18 @@ function buildPublicRoom(room) {
   }
   if (room.tournament?.active) {
     base.tournament = getTournamentPublicState(room.tournament, [...room.players.keys()]);
+    const pending = base.tournament.pendingGame;
+    if (pending && GAMES[pending.id]) {
+      const opts = tournamentGameOptions(room, pending.id, [...room.players.keys()]);
+      pending.fitError = fitError(GAMES[pending.id], room.players.size, opts);
+      // Everyone (non-hosts included) sees the up-next game's categories,
+      // read-only, as the same summary the host's selector shows.
+      if (pending.id === "alphabet-soup" || pending.id === "hot-potato") {
+        const map = categoryMapFor(room.customCategories, { game: pending.id });
+        const keys = resolveSelection(opts.categories, map);
+        pending.categories = { keys, names: keys.slice(0, 3).map((k) => map[k]?.name ?? k) };
+      }
+    }
   }
   return base;
 }
@@ -574,6 +658,23 @@ function recordDeckMemory(room, gameId, game) {
   room.itemMemory[gameId] = game.deckMemory;
 }
 
+// Settings the host chose for THIS game in the tournament flow: manual mode
+// set them per lineup slot at build time; random mode (and a replacement
+// game) sets them on the "up next" screen right before starting. Either way
+// they win over the room's last-used settings and the game's tournament
+// defaults.
+function tournamentHostOptions(t) {
+  return (t.mode === "manual" ? t.lineupSettings?.[t.currentIndex] : t.pendingGameOptions) ?? {};
+}
+
+function tournamentGameOptions(room, gameId, playerIds) {
+  return {
+    ...tournamentOptionsFor(gameId, playerIds),
+    ...(room.gameSettings?.[gameId] ?? {}),
+    ...tournamentHostOptions(room.tournament),
+  };
+}
+
 // Actually start the next game a tournament wants to run (manual pick or a
 // resolved wheel spin). Skips the game gracefully if it can no longer run.
 function startTournamentGameNow(room, gameId) {
@@ -581,20 +682,13 @@ function startTournamentGameNow(room, gameId) {
   const t = room.tournament;
   const playerIds = [...room.players.keys()];
 
-  // Settings the host chose for THIS game in the tournament flow: manual mode
-  // set them per lineup slot at build time; random mode sets them on the
-  // "up next" screen right before starting. Either way they win over the
-  // room's last-used settings and the game's tournament defaults.
-  const hostOptions =
-    (t.mode === "manual" ? t.lineupSettings?.[t.currentIndex] : t.pendingGameOptions) ?? {};
+  const hostOptions = tournamentHostOptions(t);
   const hasHostOptions = Object.keys(hostOptions).length > 0;
 
   let game;
   try {
     game = mod.createGame(playerIds, {
-      ...tournamentOptionsFor(gameId, playerIds),
-      ...(room.gameSettings?.[gameId] ?? {}),
-      ...hostOptions,
+      ...tournamentGameOptions(room, gameId, playerIds),
       memory: room.itemMemory?.[gameId],
       // So a tournament round can resolve an AI custom category / theme /
       // topic the host picked in the lineup / "up next" config (same as
@@ -715,7 +809,7 @@ io.on("connection", (socket) => {
     broadcastRoom(code);
   });
 
-  socket.on("start_game", ({ code, gameId, options }, callback) => {
+  socket.on("start_game", async ({ code, gameId, options }, callback) => {
     const room = getRoom(code);
     if (!room) return callback?.({ error: "Room not found." });
     if (!isRoomHost(room, socket)) {
@@ -726,15 +820,16 @@ io.on("connection", (socket) => {
     if (!gameModule) return callback?.({ error: "Unknown game." });
 
     const playerIds = [...room.players.keys()];
-    if (playerIds.length < gameModule.minPlayers) {
-      return callback?.({
-        error: `${gameModule.name} needs at least ${gameModule.minPlayers} players.`,
-      });
-    }
-    if (gameModule.maxPlayers && playerIds.length > gameModule.maxPlayers) {
-      return callback?.({
-        error: `${gameModule.name} supports at most ${gameModule.maxPlayers} players.`,
-      });
+    const notFit = fitError(gameModule, playerIds.length, options ?? {});
+    if (notFit) return callback?.({ error: notFit });
+    // Custom categories made in Hot Potato get their letter data now.
+    if (gameId === "alphabet-soup") {
+      const statusBefore = room.status;
+      const unusable = await ensureSoupLetters(room, options?.categories);
+      if (room.status !== statusBefore || getRoom(code) !== room) return callback?.({ error: "The room changed — try again." });
+      if (unusable.length) {
+        return callback?.({ error: `${unusable.join(", ")} is too narrow for Alphabet Soup (no letter has 5+ answers). Deselect it to start.` });
+      }
     }
 
     let game;
@@ -852,15 +947,60 @@ io.on("connection", (socket) => {
   // Host proceeds from the "up next" intro screen — now the game starts.
   // In random mode the host may pass `options` configured on that screen for
   // the just-revealed game; manual mode's settings were fixed at lineup time.
-  socket.on("tournament_intro_start", ({ code, options }) => {
+  socket.on("tournament_intro_start", async ({ code, options }, cb) => {
     const room = getRoom(code);
-    if (!room || !isRoomHost(room, socket)) return;
+    if (!room || !isRoomHost(room, socket)) return cb?.({ error: "Only the host can do that." });
     const t = room.tournament;
-    if (t?.phase !== "intro" || !t.pendingGameId) return;
-    if (t.mode === "random" && options && typeof options === "object") {
-      t.pendingGameOptions = options;
+    if (t?.phase !== "intro" || !t.pendingGameId) return cb?.({ error: "Nothing to start." });
+    if (options && typeof options === "object") {
+      if (t.mode === "random") t.pendingGameOptions = options;
+      else if (t.pendingReplaced) t.lineupSettings[t.currentIndex] = options;
+    }
+    // Players may have left since the lineup was built / the wheel spun.
+    const playerIds = [...room.players.keys()];
+    const err = fitError(GAMES[t.pendingGameId], playerIds.length, tournamentGameOptions(room, t.pendingGameId, playerIds));
+    if (err) {
+      broadcastRoom(room.code);
+      return cb?.({ error: err });
+    }
+    if (t.pendingGameId === "alphabet-soup") {
+      const gameId = t.pendingGameId;
+      const unusable = await ensureSoupLetters(room, tournamentGameOptions(room, gameId, playerIds).categories);
+      if (room.tournament !== t || t.phase !== "intro" || t.pendingGameId !== gameId) return cb?.({ error: "The tournament moved on." });
+      if (unusable.length) {
+        return cb?.({ error: `${unusable.join(", ")} is too narrow for Alphabet Soup (no letter has 5+ answers). Change this game's categories.` });
+      }
     }
     startTournamentGameNow(room, t.pendingGameId);
+    cb?.({ ok: true });
+  });
+
+  // The "up next" game doesn't fit the room any more — the host skips it
+  // (recorded as skipped, no points) ...
+  socket.on("tournament_skip", ({ code }, cb) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket)) return cb?.({ error: "Only the host can do that." });
+    const t = room.tournament;
+    if (t?.phase !== "intro" || !t.pendingGameId) return cb?.({ error: "Nothing to skip." });
+    skipGame(t, t.pendingGameId);
+    runTournamentStep(room);
+    cb?.({ ok: true });
+  });
+
+  // ... or swaps in a game that fits the current player count.
+  socket.on("tournament_replace", ({ code, gameId }, cb) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket)) return cb?.({ error: "Only the host can do that." });
+    const t = room.tournament;
+    if (t?.phase !== "intro" || !t.pendingGameId) return cb?.({ error: "Nothing to replace." });
+    const mod = GAMES[gameId];
+    if (!mod) return cb?.({ error: "Unknown game." });
+    if (!fitsSomeMode(mod, room.players.size)) {
+      return cb?.({ error: fitError(mod, room.players.size) ?? "That game doesn't fit." });
+    }
+    replacePendingGame(t, gameId);
+    broadcastRoom(room.code);
+    cb?.({ ok: true });
   });
 
   socket.on("tournament_end", ({ code }) => {
@@ -905,6 +1045,15 @@ io.on("connection", (socket) => {
       return cb?.({ error: `"${raw}" is already a built-in option.` });
     }
 
+    // Per-game cap (e.g. 5 Who Am I? themes), checked before spending a call.
+    const existing = aiContentFor(room, gameId);
+    if (spec.maxPerRoom && existing.length >= spec.maxPerRoom &&
+        !existing.some((c) => c.name.toLowerCase() === raw.toLowerCase())) {
+      return cb?.({ error: `This room already has the maximum of ${spec.maxPerRoom} custom sets for this game.` });
+    }
+    const busy = aiCallStart(room);
+    if (busy) return cb?.({ error: busy });
+
     let result;
     try {
       result = await spec.generate(raw);
@@ -913,15 +1062,74 @@ io.on("connection", (socket) => {
         `[ai-content] room ${code} ${gameId} — "${raw}" failed (${err.code ?? "?"}): ${err.message}`,
       );
       return cb?.({ error: hostFacingAiError(err, spec.fallbackNoun) });
+    } finally {
+      aiCallDone(room);
     }
 
-    const added = addAiContent(room, gameId, result);
+    const added = addAiContent(room, gameId, result, spec.maxPerRoom ? { max: spec.maxPerRoom } : undefined);
     if (added.error) return cb?.({ error: added.error });
 
     // Broadcast first so the host's setup screen already has the new option
     // in room.aiContent by the time the ack callback (which selects it) runs.
     broadcastRoom(room.code);
     cb?.({ ok: true, name: result.name });
+  });
+
+  // --- Custom categories (Alphabet Soup + Hot Potato) -------------------
+  // The shared selector's "Create category". One small AI call vets and
+  // describes the name ({ ok, name, tags, broad, letters? }); letters are
+  // only asked for when it's created from Alphabet Soup. Acks:
+  //   { ok, key }                         created (or an existing match)
+  //   { error, kind: "invalid" }          bad input / cap / throttle
+  //   { error, kind: "rejected" }         the AI judged it unusable — edit + retry
+  //   { error, kind: "failed" }           AI unreachable — retry, or Add anyway
+  // `force: true` is "Add anyway": no AI call; the 20 common letters, marked
+  // unverified, counted as broad.
+  socket.on("category_create", async ({ code, gameId, name, force }, cb) => {
+    const room = getRoom(code);
+    if (!room) return cb?.({ error: "Room not found.", kind: "invalid" });
+    if (!isRoomHost(room, socket)) return cb?.({ error: "Only the host can add categories.", kind: "invalid" });
+    if (gameId !== "alphabet-soup" && gameId !== "hot-potato") {
+      return cb?.({ error: "That game doesn't use custom categories.", kind: "invalid" });
+    }
+    const raw = String(name ?? "").replace(/\s+/g, " ").trim();
+    if (raw.length < 2) return cb?.({ error: "Type a category name first.", kind: "invalid" });
+    if (raw.length > 40) return cb?.({ error: "Keep it to 40 characters.", kind: "invalid" });
+
+    const dupe = existingCategoryKey(room, raw);
+    if (dupe) return cb?.({ ok: true, key: dupe, existing: true });
+    if ((room.customCategories ?? []).length >= MAX_CUSTOM_CATEGORIES) {
+      return cb?.({ error: `This room already has the maximum of ${MAX_CUSTOM_CATEGORIES} custom categories.`, kind: "invalid" });
+    }
+
+    let record;
+    if (force === true) {
+      record = { name: raw, tags: [], broad: true, letters: [...COMMON_LETTERS], unverified: true };
+    } else {
+      const busy = aiCallStart(room);
+      if (busy) return cb?.({ error: busy, kind: "invalid" });
+      try {
+        const res = await generateCustomCategory(raw, { wantLetters: gameId === "alphabet-soup" });
+        if (gameId === "alphabet-soup" && !res.letters?.length) {
+          return cb?.({ error: "Too narrow for Alphabet Soup — no letter has at least 5 answers. Try something broader.", kind: "rejected" });
+        }
+        record = { name: res.name, tags: res.tags, broad: res.broad, letters: res.letters, unverified: false };
+      } catch (err) {
+        console.warn(`[custom-category] room ${code} "${raw}" failed (${err.code ?? "?"}): ${err.message}`);
+        if (err.code === "rejected") return cb?.({ error: err.hostMessage, kind: "rejected" });
+        return cb?.({ error: hostFacingAiError(err, "Add anyway"), kind: "failed" });
+      } finally {
+        aiCallDone(room);
+      }
+      // The cleaned name may itself match something that already exists.
+      const cleanedDupe = existingCategoryKey(room, record.name);
+      if (cleanedDupe) return cb?.({ ok: true, key: cleanedDupe, existing: true });
+    }
+
+    const added = addCustomCategory(room, { ...record, createdIn: gameId });
+    if (added.error) return cb?.({ error: added.error, kind: "invalid" });
+    broadcastRoom(room.code); // the selector already lists it when the ack selects it
+    cb?.({ ok: true, key: added.category.key, broad: added.category.broad !== false });
   });
 
   // --- Imposter-specific actions -------------------------------------
@@ -1180,8 +1388,11 @@ io.on("connection", (socket) => {
     if (!room || room.game?.id !== "black-magic") return cb?.({ ok: false });
     const playerId = playerIdOf(socket);
     if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
-    const res = GAMES["black-magic"].giveUp(room.game, playerId);
-    if (res?.ok) broadcastRoom(room.code);
+    const res = GAMES["black-magic"].giveUp(room.game, playerId, connectedPlayerIds(room));
+    if (res?.ok) {
+      broadcastRoom(room.code);
+      syncBlackMagicTicker(room); // everyone giving up ends the round
+    }
     cb?.(res ?? { ok: false });
   });
 
@@ -1529,10 +1740,12 @@ io.on("connection", (socket) => {
     if (res.ok) afterSoupAction(ctx.room, { everyone: true });
   });
 
-  socket.on("alphabet_soup_challenge", ({ code, turnSeq }, cb) => {
+  // Targets the most recent answer: `answerSeq` is that answer's turnSeq
+  // (public lastAnswer.seq), so a stale tap can't hit a newer answer.
+  socket.on("alphabet_soup_challenge", ({ code, answerSeq }, cb) => {
     const ctx = soupContext(socket, code);
     if (!ctx) return cb?.({ ok: false });
-    const res = GAMES["alphabet-soup"].challenge(ctx.room.game, ctx.playerId, turnSeq, ctx.present);
+    const res = GAMES["alphabet-soup"].challenge(ctx.room.game, ctx.playerId, answerSeq, ctx.present);
     cb?.(res);
     if (res.ok) afterSoupAction(ctx.room, { everyone: true });
   });
@@ -1552,6 +1765,55 @@ io.on("connection", (socket) => {
     if (!room || !isRoomHost(room, socket) || room.game?.id !== "alphabet-soup") return;
     GAMES["alphabet-soup"].nextRound(room.game, connectedPlayerIds(room));
     afterSoupAction(room, { everyone: true });
+  });
+
+  // --- Hot Potato actions -----------------------------------------------
+  // Every turn action carries the server's `turnId` (Pass) or the pass's
+  // `passSeq` (Challenge), so a tap that raced a turn change can never act
+  // on the NEXT turn. Clocks run in the hot-potato sweep below.
+
+  function potatoContext(socket, code) {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "hot-potato") return null;
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return null;
+    return { room, playerId, present: connectedPlayerIds(room) };
+  }
+
+  function afterPotatoAction(room) {
+    broadcastRoom(room.code);
+    sendPrivateRoles(room); // the holder's private turn cap / everyone's vote
+  }
+
+  socket.on("hot_potato_pass", ({ code, turnId }, cb) => {
+    const ctx = potatoContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = GAMES["hot-potato"].pass(ctx.room.game, ctx.playerId, turnId, ctx.present);
+    cb?.(res);
+    if (res.ok) afterPotatoAction(ctx.room);
+  });
+
+  socket.on("hot_potato_challenge", ({ code, passSeq }, cb) => {
+    const ctx = potatoContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = GAMES["hot-potato"].challenge(ctx.room.game, ctx.playerId, passSeq, ctx.present);
+    cb?.(res);
+    if (res.ok) afterPotatoAction(ctx.room);
+  });
+
+  socket.on("hot_potato_vote", ({ code, valid }, cb) => {
+    const ctx = potatoContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = GAMES["hot-potato"].vote(ctx.room.game, ctx.playerId, valid === true, ctx.present);
+    cb?.(res);
+    if (res.ok) afterPotatoAction(ctx.room);
+  });
+
+  socket.on("hot_potato_next_match", ({ code }) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "hot-potato") return;
+    const res = GAMES["hot-potato"].nextMatch(room.game, connectedPlayerIds(room));
+    if (res.ok) afterPotatoAction(room);
   });
 
   socket.on("back_to_lobby", ({ code }) => {
@@ -1756,6 +2018,36 @@ const mpCollectTimer = setInterval(() => {
   }
 }, 1000);
 mpCollectTimer.unref?.();
+
+// --- Hot Potato: turn windows, fuses, votes, intro + explosion beats --
+// Sprint windows get down to 2s and a Pass has 300ms of grace, so this
+// sweep runs every 100ms (a 1s tick would visibly lag every explosion). It
+// broadcasts the moment something changes, plus once a second so the
+// countdowns stay honest. Self-managed like the sweeps above: no per-
+// handler start/stop wiring, and a no-op for any other game.
+const HOT_POTATO_TICK_MS = 100;
+const hotPotatoLastBroadcast = new Map(); // roomCode -> ms
+const hotPotatoTimer = setInterval(() => {
+  const now = Date.now();
+  for (const room of allRooms()) {
+    const game = room.game;
+    if (room.status !== "in-game" || game?.id !== "hot-potato" || game.phase === "final") {
+      hotPotatoLastBroadcast.delete(room.code);
+      continue;
+    }
+    try {
+      const changed = GAMES["hot-potato"].tick(game, connectedPlayerIds(room), now);
+      if (changed || now - (hotPotatoLastBroadcast.get(room.code) ?? 0) >= 1000) {
+        hotPotatoLastBroadcast.set(room.code, now);
+        broadcastRoom(room.code);
+        sendPrivateRoles(room);
+      }
+    } catch (err) {
+      console.warn(`[hot-potato] tick error for ${room.code}:`, err);
+    }
+  }
+}, HOT_POTATO_TICK_MS);
+hotPotatoTimer.unref?.();
 
 // --- Fact or Fake: Personal Mode "truth"-phase clock --------------
 // Each player has their own ~25s to pick a prompt then ~45s to answer it.

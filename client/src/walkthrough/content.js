@@ -182,7 +182,7 @@ export const WALKTHROUGHS = {
       {
         icon: '⌨️',
         title: 'Then, send answers one at a time',
-        text: 'Up to 5. Each locks in the moment you hit Enter (no take-backs) and gets a ✓ or ✕ a moment later. Wrong letters and your own repeats bounce back for free.',
+        text: 'Up to 5. Each locks in the moment you hit Enter (no take-backs) and gets a ✓ or ✕ a moment later. Wrong letters and your own repeats bounce back for free. A numbered sequel of a title you already used counts as a repeat, and in everyday categories don’t reuse the first word of an earlier answer.',
       },
       {
         icon: '🗳️',
@@ -214,7 +214,7 @@ export const WALKTHROUGHS = {
       {
         icon: '✋',
         title: 'Anyone can challenge',
-        text: 'Wrong letter, doesn’t fit, or a repeat? Challenge it (twice a round). The room votes — a majority costs a life, a tie doesn’t.',
+        text: 'Wrong letter, doesn’t fit, or a repeat? A numbered sequel of a title already said counts as a repeat, and in everyday categories so does reusing the first word of an earlier answer. Challenge the latest answer any time before the next one is said (twice a round). The clock pauses while the room votes — a majority costs a life, a tie doesn’t.',
       },
       {
         icon: '🏆',
@@ -223,6 +223,33 @@ export const WALKTHROUGHS = {
       },
     ],
     phaseSteps: { intro: 0, turns: 1, reveal: 3 },
+  },
+
+  'hot-potato': {
+    title: 'How Hot Potato works',
+    steps: [
+      {
+        icon: '🥔',
+        title: 'First, a category and a 3-2-1',
+        text: 'Everyone sits in a fixed order (the strip of avatars). Each potato brings a new category, and the first turn starts after the countdown.',
+      },
+      {
+        icon: '🗣️',
+        title: 'Then, say one and pass it on',
+        text: 'Holding it? Shout something that fits, then tap Pass. Sprint turns get shorter with every pass. A Hidden Fuse goes off at a secret moment, and you get 5s per turn.',
+      },
+      {
+        icon: '✋',
+        title: 'Bad answer? Challenge it',
+        text: 'Before the next pass, anyone still in can challenge the last answer (twice per potato). The room votes, and if most say No, the potato explodes on whoever said it.',
+      },
+      {
+        icon: '💥',
+        title: 'Finally, someone explodes',
+        text: 'Short Rounds: the exploder scores 0 and everyone else +2. Elimination: they lose a life, and the last one standing wins the match.',
+      },
+    ],
+    phaseSteps: { intro: 0, live: 1, explode: 3 },
   },
 
   tournament: {

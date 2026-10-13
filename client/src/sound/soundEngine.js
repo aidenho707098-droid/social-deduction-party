@@ -53,6 +53,16 @@ export const SOUND_MANIFEST = {
   // Tournament grand finale — a short, crisp rising achievement chime.
   // Triumphant and clean, not a long sting or a crowd.
   'grand-finale': { src: 'grand-finale.mp3', gain: 0.7 },
+  // Hot Potato (synthesised by client/scripts/make-potato-sounds.mjs, in
+  // the same bell / beep / arcade family — no whooshes):
+  //   tick — a dry arcade blip; the holder's phone repeats it faster as
+  //          their turn window runs down (gain set per play).
+  //   pass — a short rising "plip" on every pass.
+  //   pop  — a soft, rounded cartoon pop for the explosion: a pitch drop
+  //          with a little body, no noise crack.
+  'potato-tick': { src: 'potato-tick.wav', gain: 0.35 },
+  'potato-pass': { src: 'potato-pass.wav', gain: 0.45 },
+  'potato-pop': { src: 'potato-pop.wav', gain: 0.7 },
 }
 
 // Vite serves /public at BASE_URL (normally "/").

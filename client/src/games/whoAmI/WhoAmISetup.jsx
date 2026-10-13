@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import HowToPlay from '../HowToPlay'
+import { catalogEntry } from '../catalog'
 import NumberStepper from '../NumberStepper'
+import AiCustomOption from '../AiCustomOption'
 import { ROUND_MIN, ROUND_MAX, ROUND_DEFAULT, clampRounds } from '../roundConfig'
 
 // Keep in sync with CATEGORIES in server/games/whoAmIBank.js.
@@ -15,8 +17,7 @@ const CATEGORY_OPTIONS = [
 const RANDOM = '__random__'
 const ALL_KEYS = CATEGORY_OPTIONS.map((c) => c.key)
 
-const MIN_PLAYERS = 3
-const MAX_PLAYERS = 10
+const { minPlayers: MIN_PLAYERS, maxPlayers: MAX_PLAYERS } = catalogEntry('who-am-i')
 
 export default function WhoAmISetup({
   gameId,
@@ -26,11 +27,17 @@ export default function WhoAmISetup({
   onCancel,
   error,
   submitLabel,
+  aiContent = {},
+  aiEnabled = false,
+  onGenerateContent,
 }) {
+  // This room's AI "Custom Theme" names (the identities stay server-side).
+  const customThemes = aiContent[gameId] ?? []
   const savedCats = Array.isArray(saved?.categories) ? saved.categories : []
   const [randomEach, setRandomEach] = useState(() => savedCats.includes(RANDOM))
   const [categories, setCategories] = useState(() => {
-    const fromSaved = savedCats.filter((k) => ALL_KEYS.includes(k))
+    const valid = new Set([...ALL_KEYS, ...customThemes])
+    const fromSaved = savedCats.filter((k) => valid.has(k))
     return fromSaved.length ? fromSaved : ALL_KEYS
   })
   const [rounds, setRounds] = useState(() => clampRounds(saved?.rounds ?? ROUND_DEFAULT))
@@ -92,12 +99,36 @@ export default function WhoAmISetup({
               {opt.label}
             </button>
           ))}
+          {customThemes.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className={`pill ${!randomEach && categories.includes(name) ? 'pill-active' : ''}`}
+              onClick={() => !randomEach && toggleCategory(name)}
+              disabled={randomEach}
+            >
+              {name} <span className="pill-custom-badge">Custom</span>
+            </button>
+          ))}
         </div>
         <p className="hint hint-block">
           {randomEach
-            ? 'Every round pools identities from all six categories.'
+            ? `Every round pools identities from all ${ALL_KEYS.length + customThemes.length} categories.`
             : 'Identities are drawn from the categories you turn on.'}
         </p>
+        {aiEnabled && (
+          <AiCustomOption
+            label="Custom Theme"
+            placeholder="e.g. 90s cartoon characters"
+            noun="identities"
+            hint="Name a theme. The app builds 30–40 identities for it and keeps them in this room for the session (up to 5 themes)."
+            onGenerate={(name, cb) => onGenerateContent(gameId, name, cb)}
+            onGenerated={(name) => {
+              setRandomEach(false)
+              setCategories((prev) => (prev.includes(name) ? prev : [...prev, name]))
+            }}
+          />
+        )}
       </div>
 
       <NumberStepper

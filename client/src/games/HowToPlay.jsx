@@ -12,17 +12,14 @@ import { getGame } from './registry'
 //
 // variant:
 //   'link' (default) — a small underlined text button, for setup screens
-//   'menu'           — a compact "?" badge that sits in the corner of a
-//                      game card on the "Choose a Game" screen
 //   'fab'            — a floating "?" button, for use during a live game
 export default function HowToPlay({ gameId, variant = 'link', label = 'How to Play' }) {
   const [open, setOpen] = useState(false)
   const game = getGame(gameId)
   if (!game?.rules) return null
 
-  const iconOnly = variant === 'fab' || variant === 'menu'
-  const triggerClass =
-    variant === 'fab' ? 'htp-fab' : variant === 'menu' ? 'htp-trigger htp-trigger-menu' : 'htp-trigger'
+  const iconOnly = variant === 'fab'
+  const triggerClass = variant === 'fab' ? 'htp-fab' : 'htp-trigger'
 
   return (
     <>
@@ -43,10 +40,25 @@ export default function HowToPlay({ gameId, variant = 'link', label = 'How to Pl
   )
 }
 
-// The rules popup itself, also reused by the Game Catalogue so the rules
-// text lives in exactly one place (each game's rules.js).
+// The rules text itself (summary + bullets from the game's rules.js), shared
+// by this popup and the game menu's sheet so it lives in exactly one place.
+export function RulesBody({ rules }) {
+  const { summary, bullets = [] } = rules
+  return (
+    <>
+      <p className="modal-summary">{summary}</p>
+      {bullets.length > 0 && (
+        <ul className="modal-bullets">
+          {bullets.map((point, i) => (
+            <li key={i}>{point}</li>
+          ))}
+        </ul>
+      )}
+    </>
+  )
+}
+
 export function RulesModal({ game, onClose }) {
-  const { summary, bullets = [] } = game.rules
 
   // Close on Escape, like a normal dialog.
   useEffect(() => {
@@ -78,15 +90,7 @@ export function RulesModal({ game, onClose }) {
           </button>
         </div>
 
-        <p className="modal-summary">{summary}</p>
-
-        {bullets.length > 0 && (
-          <ul className="modal-bullets">
-            {bullets.map((point, i) => (
-              <li key={i}>{point}</li>
-            ))}
-          </ul>
-        )}
+        <RulesBody rules={game.rules} />
 
         <button type="button" className="btn btn-secondary" onClick={onClose}>
           Got it

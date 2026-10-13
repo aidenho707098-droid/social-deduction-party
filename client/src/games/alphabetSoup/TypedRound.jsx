@@ -5,7 +5,7 @@ import { useSound } from '../../sound/SoundContext'
 import { RoundPrompt } from './LetterTile'
 import AlphabetStrip from './AlphabetStrip'
 import { useCountdown } from './useCountdown'
-import { cleanAnswer, sameAnswer, startsWithLetter } from './answerChecks'
+import { cleanAnswer, farmingConflict, sameAnswer, startsWithLetter } from './answerChecks'
 
 // Typed mode: answers go in ONE AT A TIME. Each one is locked the moment
 // it's sent (no editing, no removing), lands in your own list with an
@@ -23,12 +23,15 @@ const CLIENT_REJECT = {
 }
 
 // The instant checks, mirrored from the server so a bounce is immediate.
-function localCheck(text, letter, mine) {
+// `rules` is the category's anti-farming flags (from the public state).
+function localCheck(text, letter, mine, rules) {
   const clean = cleanAnswer(text)
   if (!clean) return { ok: false }
   if (clean.replace(/[^a-z0-9]/gi, '').length < 2) return { ok: false, message: CLIENT_REJECT.short() }
   if (!startsWithLetter(clean, letter)) return { ok: false, message: CLIENT_REJECT.letter(letter) }
   if (mine.some((a) => sameAnswer(a.text, clean))) return { ok: false, message: CLIENT_REJECT.duplicate() }
+  const farmed = farmingConflict(clean, mine.map((a) => a.text), rules)
+  if (farmed) return { ok: false, message: farmed.message }
   return { ok: true, text: clean }
 }
 
@@ -72,7 +75,7 @@ export default function TypedRound({ game, players, myId, myRole, actions }) {
   function send(raw, { auto = false } = {}) {
     const pending = inFlightRef.current
     if (acked.length + pending.length >= cap) return
-    const check = localCheck(raw, game.letter, [...acked, ...pending])
+    const check = localCheck(raw, game.letter, [...acked, ...pending], game.category ?? {})
     if (!check.ok) {
       if (!auto && check.message) setMessage(check.message)
       return

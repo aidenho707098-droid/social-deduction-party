@@ -35,8 +35,11 @@ for (const c of CATEGORIES) {
   check("phase starts at 'turns'", g.phase === "turns");
   check("totalRounds honours the request", g.totalRounds === 3);
   check("everyone starts at 0", [...g.scores.values()].every((v) => v === 0));
-  check("rejects <3 players", (() => {
-    try { wai.createGame(["a", "b"], { rounds: 1 }); return false; } catch { return true; }
+  check("rejects <2 players", (() => {
+    try { wai.createGame(["a"], { rounds: 1 }); return false; } catch { return true; }
+  })());
+  check("accepts 2 players", (() => {
+    try { return wai.createGame(["a", "b"], { rounds: 1 }).phase === "turns"; } catch { return false; }
   })());
   check("rejects >10 players", (() => {
     try { wai.createGame(Array.from({ length: 11 }, (_, i) => `x${i}`), { rounds: 1 }); return false; }
@@ -297,7 +300,7 @@ for (const c of CATEGORIES) {
 {
   const opts = wai.tournamentOptions();
   check("tournamentOptions returns rounds + categories", opts.rounds > 0 && Array.isArray(opts.categories));
-  check("minPlayers / maxPlayers exported", wai.minPlayers === 3 && wai.maxPlayers === 10);
+  check("minPlayers / maxPlayers exported", wai.minPlayers === 2 && wai.maxPlayers === 10);
 }
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);

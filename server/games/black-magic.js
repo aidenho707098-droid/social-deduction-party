@@ -155,7 +155,7 @@ const PHYSICAL = CURSES.filter((c) => c.category === "physical");
 
 export const id = "black-magic";
 export const name = "Black Magic";
-export const minPlayers = 3;
+export const minPlayers = 2; // The Witch plus one guesser
 
 // Hard per-round limit. When the clock reaches this with no correct
 // guess, the round auto-reveals as "Curse Unbroken". Overridable via env
@@ -300,6 +300,8 @@ export function chooseCurse(game, pick) {
 // The single place a round ends. `outcome`:
 //   "lifted"   — a Player said The Curse; guesser + Witch score by time
 //   "revealed" — The Witch ended it manually; only The Witch scores
+//   "surrendered" — every Player still in the round gave up; scored like
+//                   "revealed" (only The Witch, by time)
 //   "unbroken" — hit the 5-minute limit; Witch gets the full 4
 //   "aborted"  — The Witch left mid-round; nobody scores
 export function endRound(game, outcome, guesserId = null) {
@@ -315,7 +317,7 @@ export function endRound(game, outcome, guesserId = null) {
   if (outcome === "lifted") {
     witchPts = witchPointsFor(elapsedMs);
     playerPts = playerPointsFor(elapsedMs);
-  } else if (outcome === "revealed") {
+  } else if (outcome === "revealed" || outcome === "surrendered") {
     witchPts = witchPointsFor(elapsedMs);
   } else if (outcome === "unbroken") {
     witchPts = 4;
@@ -356,11 +358,24 @@ export function awardGuess(game, guesserId, presentPlayerIds) {
 // list (so they can't score this round) and out of the pressure of
 // pretending to keep guessing, same as everyone else's normal spot in the
 // round otherwise. Cleared automatically at the top of every new round.
-export function giveUp(game, playerId) {
+//
+// Once every present Player has given up there's nobody left to lift The
+// Curse, so the round ends on the spot instead of idling to the 5-minute
+// limit — with a single guesser (2-player game) that's their one tap.
+export function giveUp(game, playerId, presentPlayerIds = null) {
   if (game.phase !== "active") return { ok: false };
   if (playerId === game.witchId) return { ok: false, isWitch: true };
   game.gaveUpPlayerIds.add(playerId);
+  if (presentPlayerIds) endIfEveryoneGaveUp(game, presentPlayerIds);
   return { ok: true };
+}
+
+function endIfEveryoneGaveUp(game, presentPlayerIds) {
+  if (game.phase !== "active") return;
+  const guessers = presentPlayerIds.filter((pid) => pid !== game.witchId);
+  if (guessers.length > 0 && guessers.every((pid) => game.gaveUpPlayerIds.has(pid))) {
+    endRound(game, "surrendered");
+  }
 }
 
 // The Witch (or host, as a fallback) ended the round manually.
@@ -385,7 +400,10 @@ export function reconcilePresence(game, presentPlayerIds, { final = true } = {})
     !presentPlayerIds.includes(game.witchId)
   ) {
     endRound(game, "aborted");
+    return;
   }
+  // The last Player who hadn't given up left for good.
+  if (final) endIfEveryoneGaveUp(game, presentPlayerIds);
 }
 
 // Host "Force proceed": the round is stuck on The Witch. If they never

@@ -3,7 +3,8 @@
 /* ============================================================
    Design system
    - Palette: lavender-white ground, deep-violet brand, warm coral
-     + mustard-gold accents, deep plum-black ink & dark surface.
+     + mustard-gold accents (+ light violet as a fourth game-accent),
+     deep plum-black ink & dark surface.
    - Type: Bricolage Grotesque (display / headers / buttons),
      Space Grotesk (body / labels / supporting text).
    - Signature: cards, buttons and key containers use an ASYMMETRIC
@@ -32,6 +33,16 @@
   --gold-tint: rgba(240, 180, 41, 0.18);
   --gold-tint-2: rgba(240, 180, 41, 0.28);
   --gold-ink: #946611;
+  --lilac: #9a82db;       /* accent 4 — light violet, game accents only */
+  --lilac-tint: rgba(154, 130, 219, 0.16);
+  --lilac-tint-2: rgba(154, 130, 219, 0.28);
+  --lilac-ink: #5a4596;
+  /* Line art on a game's badge: near-white on the two purples, dark on
+     coral / mustard so it stays legible. */
+  --on-violet: #f7f4fb;
+  --on-coral: #2b1008;
+  --on-gold: #3a2a00;
+  --on-lilac: #f7f4fb;
   --border: #e8e1f4;      /* soft lavender hairline */
   --border-2: #d9cfec;
 
@@ -121,7 +132,7 @@ img.emoji {
 .wyr-award-winner,
 .role-card h2,
 .role-word,
-.game-card-name {
+.gb-name {
   font-family: var(--font-display);
 }
 
@@ -578,119 +589,529 @@ img.emoji {
 }
 
 /* ============================================================
-   Game menu — one accent-coloured card per game
+   Game menu / catalogue / lineup builder — a single column of
+   compact rows (GameList.jsx) under a sticky header, with a
+   bottom sheet per game.
    ============================================================ */
 
-.game-menu-list {
+.gb-screen {
+  padding-top: 0;
+  /* Room to scroll the last tiles clear of the floating Host / ? buttons. */
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  gap: 14px;
+}
+
+/* Sticky header: bleeds to the screen edges so rows scroll cleanly
+   under it, and clears the notch / status bar on phones. The top row
+   keeps the right corner free for the fixed sound toggle (.snd). */
+.gb-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: 0 -20px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 20px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
-.game-menu-row {
-  position: relative; /* anchors the in-card "How to Play" badge */
-}
-
-.game-card {
+.gb-header-top {
   display: flex;
   align-items: center;
-  gap: 16px;
-  width: 100%;
-  text-align: left;
-  padding: 18px;
-  background: var(--surface);
-  border: 2px solid var(--border);
-  border-radius: var(--r-lg);
+  gap: 6px;
+  padding-right: 40px;
+}
+
+/* The chevron's stroke starts 8px into its 24px box, so pulling the
+   button 8px left puts the visible arrow on the 20px content edge. */
+.gb-back {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-left: -8px;
+  padding: 0 10px 0 0;
+  border: none;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink);
   cursor: pointer;
+}
+.gb-back svg { width: 24px; height: 24px; }
+.gb-back:hover { background: var(--violet-tint); }
+
+.gb-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.gb-header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gb-room {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.gb-room strong {
+  font-family: var(--font-display);
+  color: var(--ink);
+  letter-spacing: 1px;
+}
+
+.gb-surprise {
+  margin-left: auto;
+  border: 2px solid var(--violet);
+  background: var(--surface);
+  color: var(--violet-ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.gb-surprise:hover:not(:disabled) { background: var(--violet-tint); }
+.gb-surprise:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* "Fits N players" switch */
+.gb-fits {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.gb-fits input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.gb-switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: var(--r-pill);
+  background: var(--border-2);
+  transition: background var(--dur-2) ease;
+}
+.gb-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(36, 31, 51, 0.25);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.gb-fits input:checked + .gb-switch { background: var(--violet); }
+.gb-fits input:checked + .gb-switch::after { transform: translateX(14px); }
+.gb-fits input:focus-visible + .gb-switch { outline: 2px solid var(--violet); outline-offset: 2px; }
+
+/* Filter chips — one non-wrapping, horizontally scrolling line. Every chip
+   is the same fixed height with the same 1.5px border (only its colour
+   changes when selected), so selecting one never shifts anything. The
+   strip bleeds to the screen edges; its 20px inline padding puts the
+   first chip's left edge exactly on the grid's left edge. */
+.gb-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 -20px;
+  padding: 2px 20px;
+  scroll-padding-inline: 20px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.gb-chips::-webkit-scrollbar { display: none; }
+
+.gb-chip {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  margin: 0;
+  padding: 0 14px;
+  border: 1.5px solid var(--border-2);
+  border-radius: var(--r-pill);
+  background: var(--surface);
   color: var(--ink);
   font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.gb-chip-on {
+  background: var(--violet);
+  border-color: var(--violet);
+  color: #fff;
+}
+
+/* Inline (non-sticky) filter bar — the tournament lineup builder */
+.gb-inline-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.gb-browse-hint { margin: 0; }
+
+/* The grid: two equal columns; tiles in a row stretch to equal height. */
+.gb-lists {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.gb-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.gb-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px 11px 12px 12px;
+  text-align: left;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 20px 8px 20px 8px;
   box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  font-family: var(--font-body);
+  cursor: pointer;
   transition: transform 0.06s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
+.gb-tile-alt { border-radius: 8px 20px 8px 20px; }
+.gb-tile:hover { border-color: var(--border-2); box-shadow: var(--shadow-md); }
+.gb-tile:active { transform: scale(0.98); }
 
-.game-card-alt {
-  border-radius: var(--r-lg-alt);
-}
+.gb-tile-unfit { box-shadow: none; background: transparent; }
+.gb-tile-unfit .gb-badge,
+.gb-tile-unfit .gb-name,
+.gb-tile-unfit .gb-meta { opacity: 0.45; filter: saturate(0.4); }
 
-.game-card:hover:not(:disabled) {
-  box-shadow: var(--shadow-md);
-}
-
-.game-card:active:not(:disabled) {
-  transform: scale(0.99);
-}
-
-.game-card:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.game-card-violet:hover:not(:disabled) {
+/* Surprise me's pick: a short, restrained double pulse of the accent ring. */
+.gb-tile-picked {
   border-color: var(--violet);
+  animation: gb-picked 650ms var(--ease-out) both;
 }
-.game-card-coral:hover:not(:disabled) {
-  border-color: var(--coral);
-}
-.game-card-gold:hover:not(:disabled) {
-  border-color: var(--gold);
+@keyframes gb-picked {
+  0%   { box-shadow: 0 0 0 0 var(--violet-tint-2); }
+  35%  { box-shadow: 0 0 0 6px var(--violet-tint-2); }
+  60%  { box-shadow: 0 0 0 2px var(--violet-tint-2); }
+  85%  { box-shadow: 0 0 0 6px var(--violet-tint-2); }
+  100% { box-shadow: 0 0 0 0 var(--violet-tint-2); }
 }
 
-.game-card-badge {
+/* Badge row: icon badge on the left, NEW / lineup count top-right. */
+.gb-tile-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 30px;
+}
+
+.gb-badge-wrap {
+  position: relative;
   flex-shrink: 0;
-  width: 52px;
-  height: 52px;
+}
+
+.gb-badge {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   display: grid;
   place-items: center;
 }
+.gb-badge svg { width: 17px; height: 17px; }
+.gb-badge-violet { background: var(--violet); color: var(--on-violet); }
+.gb-badge-coral { background: var(--coral); color: var(--on-coral); }
+.gb-badge-gold { background: var(--gold); color: var(--on-gold); }
+.gb-badge-lilac { background: var(--lilac); color: var(--on-lilac); }
+/* A touch heavier so the near-white line art holds up on the light violet. */
+.gb-badge-lilac svg,
+.tour-pick-badge-lilac svg,
+.tour-intro-badge-lilac svg { stroke-width: 2.3; }
 
-.game-card-badge svg {
-  width: 26px;
-  height: 26px;
+.gb-flags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -1px -1px 0 0;
 }
 
-.game-card-badge-violet {
-  background: var(--violet);
-  color: #fff;
+/* Name: never truncated, and always given two lines' worth of height so
+   the meta line below starts level across a row. */
+.gb-name {
+  display: block;
+  min-height: calc(2 * 1.2em);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15.5px;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+  hyphens: none;
 }
-.game-card-badge-coral {
-  background: var(--coral);
-  color: #fff;
+
+.gb-meta {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted);
 }
-.game-card-badge-gold {
+
+.gb-new {
+  flex-shrink: 0;
   background: var(--gold);
-  color: var(--ink);
+  color: var(--on-gold);
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: var(--r-pill);
+  line-height: 1.2;
 }
 
-.game-card-body {
+/* "Played in this room": a small check tucked on the badge's corner. */
+.gb-played {
+  position: absolute;
+  right: -5px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #e6dff2; /* violet-tint-2 flattened onto white, so the badge can't show through */
+  color: var(--violet-ink);
+  box-shadow: 0 0 0 2px var(--surface);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Lineup builder: how many times this game is already in the lineup. */
+.gb-extra {
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--violet-ink);
+  background: var(--violet-tint);
+  padding: 3px 7px;
+  border-radius: var(--r-pill);
+}
+
+.gb-chevron {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.gb-empty { margin: 8px 0; }
+
+/* "Doesn't fit your group (N)" — collapsed by default */
+.gb-unfit {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 8px;
+}
+.gb-unfit-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 1.5px dashed var(--border-2);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 11px 12px 11px 14px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.gb-unfit-toggle .gb-chevron { transform: rotate(90deg); transition: transform var(--dur-2) ease; }
+.gb-unfit-toggle[aria-expanded='true'] .gb-chevron { transform: rotate(-90deg); }
+
+/* Bottom sheet */
+.gb-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(36, 31, 51, 0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: gb-fade-in var(--dur-2) ease both;
+}
+
+.gb-sheet {
+  width: 100%;
+  max-width: 480px;
+  max-height: 88svh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border-radius: 28px 12px 0 0;
+  padding: 10px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--shadow-lg);
+  outline: none;
+  animation: gb-sheet-up var(--dur-3) var(--ease-out) both;
+}
+
+@keyframes gb-sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: none; }
+}
+@keyframes gb-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.gb-sheet-grab {
+  align-self: center;
+  width: 38px;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--border-2);
+}
+
+.gb-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.gb-sheet-head .gb-badge { width: 48px; height: 48px; }
+.gb-sheet-head .gb-badge svg { width: 25px; height: 25px; }
+
+.gb-sheet-titles {
+  flex: 1;
   min-width: 0;
 }
 
-.game-card-name {
+.gb-sheet-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 22px;
   font-weight: 700;
-  font-size: 19px;
   line-height: 1.15;
-  color: var(--ink);
 }
 
-.game-card-meta {
+.gb-sheet-meta {
+  margin: 2px 0 0;
   font-size: 13px;
   color: var(--muted);
 }
 
-/* Right-aligned "View rules" hint on Game Catalogue cards. */
-.game-card-cta {
-  margin-left: auto;
-  flex-shrink: 0;
+.gb-sheet-desc {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.gb-sheet-warn,
+.gb-sheet-note {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+}
+.gb-sheet-warn { background: var(--coral-tint); color: var(--coral-ink); }
+.gb-sheet-note { background: var(--bg); color: var(--muted); }
+
+.gb-htp {
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0 14px;
+}
+.gb-htp summary {
+  cursor: pointer;
+  padding: 11px 0;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--violet);
+  font-size: 15px;
+  color: var(--violet-ink);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.gb-htp summary::-webkit-details-marker { display: none; }
+.gb-htp summary::after {
+  content: '+';
+  font-size: 20px;
+  line-height: 1;
+  color: var(--muted);
+}
+.gb-htp[open] summary::after { content: '−'; }
+/* The sheet's action stays reachable while How to Play is expanded. */
+.gb-sheet > .btn {
+  position: sticky;
+  bottom: 0;
+  flex-shrink: 0;
+  box-shadow: 0 -10px 18px 2px var(--surface), 0 24px 0 8px var(--surface);
+}
+
+.gb-htp-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-tile-picked { animation: none; box-shadow: 0 0 0 3px var(--violet-tint-2); }
+  .gb-sheet { animation: gb-fade-in var(--dur-2) ease both; }
+  .gb-switch,
+  .gb-switch::after,
+  .gb-unfit-toggle .gb-chevron { transition: none; }
 }
 
 /* ============================================================
@@ -715,38 +1136,11 @@ img.emoji {
   color: var(--violet);
 }
 
-/* "How to Play" as a small "?" badge tucked inside the game card's
-   top-right corner, so it's clearly part of that card. */
-.htp-trigger-menu {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 1;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  place-items: center;
-  border: 1.5px solid var(--border-2);
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--muted);
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
-  text-decoration: none;
-}
-.htp-trigger-menu:hover {
-  border-color: var(--violet);
-  color: var(--violet);
-}
 
 .htp-fab {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
   width: 46px;
   height: 46px;
   border-radius: 50%;
@@ -764,8 +1158,8 @@ img.emoji {
 /* ---- Sound control: small faded speaker icon, top-right corner ---- */
 .snd {
   position: fixed;
-  top: 8px;
-  right: 8px;
+  top: max(8px, env(safe-area-inset-top, 0px));
+  right: max(8px, env(safe-area-inset-right, 0px));
   z-index: 930;
   display: flex;
   flex-direction: column;
@@ -819,8 +1213,8 @@ img.emoji {
 /* ---- Host controls panel (host-only, bottom-left, all screens) ---- */
 .host-panel {
   position: fixed;
-  left: 16px;
-  bottom: 16px;
+  left: max(16px, env(safe-area-inset-left, 0px));
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
   z-index: 950;
 }
 
@@ -1092,8 +1486,8 @@ img.emoji {
 
 .wt-badge {
   position: fixed;
-  top: 12px;
-  left: 12px;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  left: max(12px, env(safe-area-inset-left, 0px));
   z-index: 40;
   background: var(--violet-tint-2);
   color: var(--violet-ink);
@@ -1115,6 +1509,12 @@ img.emoji {
 
 .pill-group-wrap {
   flex-wrap: wrap;
+}
+
+/* A two-way toggle whose buttons must not crowd each other (e.g. Majority
+   Pick's Question bank / Custom Mode). */
+.pill-group-spaced {
+  gap: 14px;
 }
 
 .pill-group-wrap .pill {
@@ -2539,6 +2939,11 @@ img.emoji {
   background: var(--violet-tint);
 }
 
+.tour-mode-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .tour-mode-name {
   font-family: var(--font-display);
   font-weight: 700;
@@ -2552,46 +2957,6 @@ img.emoji {
 }
 
 /* --- Setup: manual builder --- */
-.tour-pick-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.tour-pick-btn {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  text-align: left;
-  padding: 12px 14px;
-  border: 2px solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--ink);
-  font-family: var(--font-body);
-  font-size: 16px;
-  font-weight: 500;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-}
-
-.tour-pick-list .tour-pick-btn:nth-child(even) {
-  border-radius: var(--r-sm-alt);
-}
-
-.tour-pick-violet:hover { border-color: var(--violet); }
-.tour-pick-coral:hover { border-color: var(--coral); }
-.tour-pick-gold:hover { border-color: var(--gold); }
-
-.tour-pick-add {
-  margin-left: auto;
-  font-size: 22px;
-  font-weight: 700;
-  font-family: var(--font-display);
-  color: var(--muted);
-}
-
 .tour-pick-badge {
   flex-shrink: 0;
   width: 38px;
@@ -2606,9 +2971,10 @@ img.emoji {
   height: 20px;
 }
 
-.tour-pick-badge-violet { background: var(--violet); color: #fff; }
-.tour-pick-badge-coral { background: var(--coral); color: #fff; }
-.tour-pick-badge-gold { background: var(--gold); color: var(--ink); }
+.tour-pick-badge-violet { background: var(--violet); color: var(--on-violet); }
+.tour-pick-badge-coral { background: var(--coral); color: var(--on-coral); }
+.tour-pick-badge-gold { background: var(--gold); color: var(--on-gold); }
+.tour-pick-badge-lilac { background: var(--lilac); color: var(--on-lilac); }
 
 .tour-lineup-edit,
 .tour-lineup {
@@ -2693,6 +3059,13 @@ img.emoji {
 
 .tour-lineup-edit-main .tour-lineup-edit-name {
   flex: 0 0 auto;
+}
+
+/* A lineup game that stopped fitting the room while the host built it. */
+.tour-lineup-unfit {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--coral-ink);
 }
 
 .tour-lineup-config {
@@ -2926,6 +3299,7 @@ img.emoji {
 .tour-break-pill-violet { background: var(--violet-tint-2); color: var(--violet-ink); }
 .tour-break-pill-coral { background: var(--coral-tint-2); color: var(--coral-ink); }
 .tour-break-pill-gold { background: var(--gold-tint-2); color: var(--gold-ink); }
+.tour-break-pill-lilac { background: var(--lilac-tint-2); color: var(--lilac-ink); }
 
 .tour-break-pill-zero {
   background: var(--bg);
@@ -2967,6 +3341,17 @@ img.emoji {
 .tour-intro-hero-violet { border-color: var(--violet); background: var(--violet-tint); }
 .tour-intro-hero-coral { border-color: var(--coral); background: var(--coral-tint); }
 .tour-intro-hero-gold { border-color: var(--gold); background: var(--gold-tint); }
+.tour-intro-hero-lilac { border-color: var(--lilac); background: var(--lilac-tint); }
+
+/* The "up next" game stopped fitting the room. */
+.tour-intro-unfit {
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--coral-tint);
+  color: var(--coral-ink);
+  font-size: 14px;
+  line-height: 1.45;
+}
 
 .tour-intro-badge {
   width: 64px;
@@ -2981,9 +3366,10 @@ img.emoji {
   height: 32px;
 }
 
-.tour-intro-badge-violet { background: var(--violet); color: #fff; }
-.tour-intro-badge-coral { background: var(--coral); color: #fff; }
-.tour-intro-badge-gold { background: var(--gold); color: var(--ink); }
+.tour-intro-badge-violet { background: var(--violet); color: var(--on-violet); }
+.tour-intro-badge-coral { background: var(--coral); color: var(--on-coral); }
+.tour-intro-badge-gold { background: var(--gold); color: var(--on-gold); }
+.tour-intro-badge-lilac { background: var(--lilac); color: var(--on-lilac); }
 
 .tour-intro-name {
   font-family: var(--font-display);
@@ -4621,13 +5007,39 @@ img.emoji {
    .pill-group-wrap (Imposter's radio row) and standalone (the multi-select
    games render it below their toggle grid); the higher-specificity form
    also beats the .pill:nth-child(even) radius flip. */
+/* The "✨ Custom …" generator (AiCustomOption.jsx) — shared by every
+   game's setup screen. It always sits in its OWN full-width block with an
+   equal 16px above and below, so it never crowds the preset options next
+   to it, whatever layout the screen puts it in. */
+.ai-custom-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 100%;
+  width: 100%;
+  margin: 16px 0;
+}
+/* Last thing in its section: the screen's own 22px row gap already sits
+   below, so trim the margin to keep the space below at 16px too. */
+.ai-custom-slot:last-child {
+  margin-bottom: -6px;
+}
+.ai-custom-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .pill.pill-custom-feature,
 .pill-group-wrap .pill.pill-custom-feature {
   display: block;
   flex: 1 1 100%;
   width: 100%;
-  margin-top: 4px;
-  padding: 18px 16px;
+  min-height: 48px;
+  margin: 0;
+  padding: 16px;
   font-size: 18px;
   font-weight: 700;
   border-radius: var(--r-md-alt);
@@ -4649,7 +5061,6 @@ img.emoji {
 }
 
 .ai-custom {
-  margin-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -5000,9 +5411,7 @@ img.emoji {
 /* Sized from the viewport but capped, inside normal page flow — no fixed /
    100vh layer for a phone's collapsing toolbar to clip. */
 .as-bowl-stage {
-  --bowl: min(74vw, 290px);
-  --r-outer: calc(var(--bowl) * 0.34);
-  --r-inner: calc(var(--bowl) * 0.18);
+  --bowl: min(74vw, 290px); /* SoupReveal.jsx expectedBowlPx() mirrors this */
   position: relative;
   width: var(--bowl);
   height: var(--bowl);
@@ -5040,114 +5449,89 @@ img.emoji {
   background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.35), transparent 45%);
 }
 
-.as-ring {
-  position: absolute;
-  inset: 0;
-  will-change: transform;
-}
-
-.as-stage-swirl .as-ring-outer,
-.as-stage-land .as-ring-outer,
-.as-stage-landed .as-ring-outer {
-  animation: as-stir-outer var(--stir-ms, 2000ms) cubic-bezier(0.55, 0, 0.25, 1) forwards;
-}
-
-.as-stage-swirl .as-ring-inner,
-.as-stage-land .as-ring-inner,
-.as-stage-landed .as-ring-inner {
-  animation: as-stir-inner var(--stir-ms, 2000ms) cubic-bezier(0.55, 0, 0.25, 1) forwards;
-}
-
-@keyframes as-stir-outer {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@keyframes as-stir-inner {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(540deg); }
-}
-
-.as-soup-slot {
+/* Scattered soup tiles. Each sits at the bowl's centre and is moved every
+   frame by SoupReveal.jsx (transform + opacity only) — see soupMotion.js. */
+.as-soup-tile {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 0;
-  height: 0;
-  transition: opacity 260ms ease;
-}
-
-.as-soup-tile {
-  position: absolute;
-  width: 34px;
-  height: 34px;
-  margin: -17px 0 0 -17px;
+  /* 30px keeps 14–20 tiles from crowding the bowl (SOUP_TILE_PX mirrors it). */
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
   display: grid;
   place-items: center;
-  border-radius: 10px 4px 10px 4px;
+  border-radius: 9px 4px 9px 4px;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 19px;
+  font-size: 17px;
   line-height: 1;
+  box-shadow: 0 1px 2px rgba(36, 31, 51, 0.18);
+  will-change: transform, opacity;
 }
 
-.as-soup-violet { background: var(--violet); color: #fff; }
-.as-soup-coral { background: var(--coral); color: #fff; }
-.as-soup-gold { background: var(--gold); color: var(--ink); }
+.as-soup-violet { background: var(--violet); color: var(--on-violet); }
+.as-soup-coral { background: var(--coral); color: var(--on-coral); }
+.as-soup-gold { background: var(--gold); color: var(--on-gold); }
+.as-soup-lilac { background: var(--lilac); color: var(--on-lilac); }
 
-.as-stage-land .as-soup-slot,
-.as-stage-landed .as-soup-slot {
-  opacity: 0.3;
-}
-
-.as-stage-land .as-ring-inner .as-soup-slot,
-.as-stage-landed .as-ring-inner .as-soup-slot,
-.as-stage-land .as-soup-chosen,
-.as-stage-landed .as-soup-chosen {
+/* The chosen tile's lift: rides above the rest with a soft glow (an
+   opacity fade on a pre-drawn shadow, so nothing repaints per frame). */
+.as-soup-tile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 16px 5px rgba(255, 244, 214, 0.9);
   opacity: 0;
-  transition-duration: 120ms;
+  transition: opacity 220ms ease;
 }
+.as-soup-lift { z-index: 2; }
+.as-soup-lift::after { opacity: 1; }
 
-/* The chosen tile leaves the ring where the stir left it and grows into
-   the round's big tile at the centre. */
+/* The big tile the chosen one turns into: moved along its curved path by
+   SoupReveal.jsx, then pinned dead-centre by class once landed. */
 .as-hero {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
-  animation: as-hero-land var(--land-ms, 700ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  will-change: transform;
+  z-index: 3;
+  transform: translate(-50%, -50%) scale(0.3);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
 }
-
-@keyframes as-hero-land {
-  from {
-    transform: translate(-50%, -50%)
-      translate(calc(var(--bowl) * var(--fx)), calc(var(--bowl) * var(--fy))) scale(0.3);
-  }
-  to {
-    transform: translate(-50%, -50%) scale(1);
-  }
+.as-hero-landed {
+  transform: translate(-50%, -50%) !important;
+  opacity: 1 !important;
 }
 
 /* --- Burned Letters strip --- */
 
+/* All 26 letters in a fixed 13 x 2 grid of square cells, so the layout
+   never changes and never splits into uneven rows; the letter size follows
+   the cell (container query units), never below 10px. */
 .as-strip {
   display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(13, minmax(0, 1fr));
+  gap: 3px;
   width: 100%;
+  container-type: inline-size;
 }
 
 .as-strip-tile {
-  aspect-ratio: 1;
+  aspect-ratio: 1 / 1;
+  min-width: 0;
   display: grid;
   place-items: center;
-  border-radius: 7px 3px 7px 3px;
+  border-radius: 5px 2px 5px 2px;
   background: var(--surface);
   border: 1px solid var(--border-2);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 14px;
+  font-size: max(10px, 3.3vw); /* fallback without container units */
+  font-size: max(10px, calc((100cqi - 36px) / 13 * 0.52));
+  line-height: 1;
   color: var(--violet-ink);
   transition: background 450ms ease, color 450ms ease, opacity 450ms ease;
 }
@@ -5160,9 +5544,13 @@ img.emoji {
   opacity: 0.8;
 }
 
+/* This round's letter: violet, whether or not it's burned yet. */
 .as-strip-current {
-  outline: 2px solid var(--coral);
-  outline-offset: 1px;
+  background: var(--violet);
+  border-color: var(--violet-ink);
+  color: #fff;
+  text-decoration: none;
+  opacity: 1;
 }
 
 /* --- Typed round --- */
@@ -5721,4 +6109,956 @@ img.emoji {
   .as-mark-pending {
     animation: none;
   }
+}
+
+/* ============================================================
+   Hot Potato
+   ============================================================ */
+
+/* --- the potato --- */
+.hp-potato {
+  --hp-size: 120px;
+  --hp-fill: var(--coral);
+  --hp-beat: 1.1s;
+  display: inline-block;
+  width: var(--hp-size);
+  height: var(--hp-size);
+  line-height: 0;
+}
+
+.hp-potato-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform-origin: 50% 60%;
+}
+
+.hp-potato-pulse .hp-potato-svg {
+  animation: hp-beat var(--hp-beat) ease-in-out infinite;
+}
+
+@keyframes hp-beat {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
+}
+
+.hp-body {
+  fill: var(--hp-fill);
+  stroke: var(--coral-ink);
+  stroke-width: 2.5;
+  transition: fill 160ms linear;
+}
+
+.hp-shine { fill: rgba(255, 255, 255, 0.45); }
+.hp-eye { fill: var(--ink); }
+.hp-spot { fill: rgba(36, 31, 51, 0.22); }
+
+.hp-fuse {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.hp-spark circle { fill: var(--gold); }
+.hp-spark path {
+  stroke: var(--gold);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.hp-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hp-spark 0.32s ease-in-out infinite alternate;
+}
+
+@keyframes hp-spark {
+  from { transform: scale(0.8) rotate(0deg); opacity: 0.85; }
+  to { transform: scale(1.15) rotate(20deg); opacity: 1; }
+}
+
+/* --- the cycle strip --- */
+.hp-strip {
+  display: flex;
+  gap: 4px;
+  padding: 28px 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.hp-slot {
+  --hp-av: clamp(26px, 8.4vw, 40px);
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.hp-token-dock {
+  position: absolute;
+  top: -26px;
+  left: 50%;
+  width: 0;
+  height: 0;
+}
+
+.hp-token {
+  position: absolute;
+  left: -15px;
+  top: 0;
+  will-change: transform, opacity;
+}
+
+.hp-token-arc {
+  display: block;
+  will-change: transform;
+}
+
+.hp-avatar {
+  width: var(--hp-av);
+  height: var(--hp-av);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--hp-color);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--hp-av) * 0.45);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--border-2);
+  transition: box-shadow 160ms ease, opacity 160ms ease;
+}
+
+.hp-slot-holder .hp-avatar {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 5px var(--coral);
+}
+
+.hp-slot-me .hp-avatar {
+  outline: 2px dashed var(--violet);
+  outline-offset: 4px;
+}
+
+.hp-slot-out .hp-avatar {
+  opacity: 0.35;
+  filter: grayscale(0.6);
+}
+
+.hp-slot-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 4px;
+}
+
+.hp-slot-out .hp-slot-name {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.hp-slot-tag {
+  min-height: 14px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--violet);
+  white-space: nowrap;
+}
+
+.hp-slot-tag-next { color: var(--coral-ink); }
+
+.hp-slot-lives {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  color: var(--coral);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hp-slot-out .hp-slot-lives {
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.hp-life-lost { color: var(--border-2); }
+
+.hp-slot-pop .hp-avatar { animation: hp-shake 420ms ease both; }
+
+@keyframes hp-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+
+/* --- live round --- */
+.hp-live,
+.hp-intro,
+.hp-explode {
+  align-items: stretch;
+}
+
+.hp-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.hp-say,
+.hp-up {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1.1;
+  text-align: center;
+  color: var(--ink);
+}
+
+.hp-say {
+  color: var(--coral-ink);
+  font-size: 36px;
+}
+
+.hp-up-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: 2px;
+}
+
+.hp-ring-wrap {
+  --ring: min(64vw, 240px);
+  position: relative;
+  width: var(--ring);
+  height: var(--ring);
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.hp-ring-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.hp-ring-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 8;
+}
+
+.hp-ring-progress {
+  fill: none;
+  stroke: var(--coral);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 60ms linear;
+}
+
+.hp-potato.hp-ring-potato {
+  --hp-size: calc(var(--ring) * 0.62);
+}
+
+.hp-ring-count {
+  position: absolute;
+  top: 57%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--ring) * 0.17);
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(36, 31, 51, 0.35);
+  pointer-events: none;
+}
+
+.hp-ring-low .hp-ring-progress { stroke: var(--coral-ink); }
+
+.hp-caption {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.btn.hp-pass-btn {
+  width: 100%;
+  background: var(--dark);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  padding: 22px 18px;
+  border-radius: var(--r-lg-alt);
+  box-shadow: 0 12px 28px rgba(36, 31, 51, 0.28);
+  touch-action: manipulation;
+}
+
+.btn.hp-pass-btn:hover:not(:disabled) { background: #362e4d; }
+
+.hp-away {
+  margin: 0;
+  text-align: center;
+  font-weight: 600;
+  color: var(--violet-ink);
+}
+
+.hp-away-next {
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  background: var(--coral-tint);
+  color: var(--coral-ink);
+}
+
+.wyr-timer.hp-bar { height: 6px; }
+
+.hp-challenge {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hp-last-pass { margin: 0; }
+
+.btn.hp-challenge-btn {
+  background: transparent;
+  border-color: var(--coral);
+  color: var(--coral-ink);
+  border-radius: var(--r-md-alt);
+  touch-action: manipulation;
+}
+
+.btn.hp-challenge-btn:hover:not(:disabled) { background: var(--coral-tint); }
+
+/* --- the vote overlay (every screen) --- */
+.hp-vote-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(36, 31, 51, 0.55);
+  animation: hp-fade-in 160ms ease both;
+}
+
+.hp-vote-card {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 20px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: hp-card-in 200ms cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+}
+
+.hp-vote-kicker {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--coral-ink);
+}
+
+.hp-vote-q {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.hp-vote-time {
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--border);
+  overflow: hidden;
+}
+
+.hp-vote-time-fill {
+  height: 100%;
+  background: var(--coral);
+  transition: width 60ms linear;
+}
+
+.hp-vote-secs {
+  margin: -4px 0 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--coral-ink);
+}
+
+.hp-vote-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@keyframes hp-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes hp-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes hp-card-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+/* --- intro --- */
+.hp-intro-stage {
+  min-height: 230px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.hp-intro-chip { animation: hp-card-in 320ms cubic-bezier(0.2, 0.8, 0.3, 1.2) both; }
+
+.hp-intro-kind {
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  background: var(--gold-tint);
+  color: var(--gold-ink);
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+  animation: hp-fade-in 300ms 200ms ease both;
+}
+
+.hp-intro-starter {
+  margin: 0;
+  font-weight: 600;
+  color: var(--muted);
+  animation: hp-fade-in 300ms 400ms ease both;
+}
+
+.hp-count {
+  font-family: var(--font-display);
+  font-size: 96px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--coral);
+  animation: hp-count 0.9s ease-out both;
+}
+
+@keyframes hp-count {
+  0% { transform: scale(1.6); opacity: 0; }
+  25% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.85; }
+}
+
+/* --- explosion --- */
+.hp-boom {
+  position: relative;
+  width: 180px;
+  height: 160px;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.hp-boom > * { grid-area: 1 / 1; }
+
+.hp-boom-potato { animation: hp-boom-pop 520ms ease-in both; }
+
+@keyframes hp-boom-pop {
+  0% { transform: scale(1); opacity: 1; }
+  45% { transform: scale(1.3); opacity: 1; }
+  70% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+.hp-boom-burst {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--gold) 0 30%, var(--coral) 31% 58%, transparent 60%);
+  animation: hp-burst 640ms 220ms ease-out both;
+}
+
+@keyframes hp-burst {
+  0% { transform: scale(0.2); opacity: 0; }
+  30% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.15); opacity: 0.18; }
+}
+
+.hp-boom-bit {
+  --angle: calc(var(--i) * 45deg);
+  width: 14px;
+  height: 14px;
+  border-radius: 6px 2px 6px 2px;
+  background: var(--coral);
+  opacity: 0;
+  animation: hp-bit 700ms 240ms ease-out both;
+}
+
+.hp-boom-bit:nth-child(odd) { background: var(--gold); }
+
+@keyframes hp-bit {
+  0% { transform: rotate(var(--angle)) translateY(0) scale(0.6); opacity: 1; }
+  100% { transform: rotate(var(--angle)) translateY(-78px) scale(1); opacity: 0; }
+}
+
+.hp-explode-text { text-align: center; }
+
+.hp-explode-title {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 32px;
+  color: var(--coral-ink);
+}
+
+.hp-explode-result {
+  margin: 6px auto 0;
+  padding: 10px 16px;
+  border-radius: var(--r-sm-alt);
+  background: var(--violet-tint);
+  color: var(--violet-ink);
+  font-weight: 700;
+  max-width: 340px;
+}
+
+.hp-explode-out {
+  background: var(--coral-tint);
+  color: var(--coral-ink);
+}
+
+/* Countdown Chaos hides the turn ring + number (the thin bar is a
+   .wyr-timer, already hidden by the shared rule). */
+[data-chaos-blind] .hp-ring-progress,
+[data-chaos-blind] .hp-ring-count {
+  visibility: hidden !important;
+}
+
+/* Reduced motion: no pulse, spark flicker, shake or flying bits; pops and
+   cards fade instead. The hop is swapped for a fade in CycleStrip.jsx. */
+@media (prefers-reduced-motion: reduce) {
+  .hp-potato-pulse .hp-potato-svg,
+  .hp-spark,
+  .hp-slot-pop .hp-avatar,
+  .hp-boom-bit {
+    animation: none;
+  }
+  .hp-count,
+  .hp-intro-chip,
+  .hp-vote-card,
+  .hp-boom-burst {
+    animation: hp-fade-in 200ms ease both;
+  }
+  .hp-boom-potato { animation: hp-fade-out 400ms ease both; }
+  .hp-ring-progress,
+  .hp-vote-time-fill,
+  .hp-body {
+    transition: none;
+  }
+}
+
+/* ============================================================
+   Shared category selector (Alphabet Soup + Hot Potato) —
+   CategorySelector.jsx. Summary row on the settings screen, bottom
+   sheet with search / actions / selection / results / pinned footer.
+   Sized to the VISUAL viewport (set inline), so the search field and
+   footer stay above an on-screen keyboard. Every tap target >= 44px.
+   ============================================================ */
+
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 12px 10px 16px;
+  text-align: left;
+  background: var(--surface);
+  border: 1.5px solid var(--border-2);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.cat-row:hover { border-color: var(--violet); }
+.cat-row-readonly { cursor: default; }
+.cat-row-readonly:hover { border-color: var(--border-2); }
+
+.cat-row-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.cat-row-summary {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cat-row-chevron {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.cat-backdrop {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(36, 31, 51, 0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: gb-fade-in var(--dur-2) ease both;
+}
+
+.cat-sheet {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: 28px 12px 0 0;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: gb-sheet-up var(--dur-3) var(--ease-out) both;
+}
+
+.cat-sheet-head {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cat-sheet-grab {
+  align-self: center;
+  width: 38px;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--border-2);
+}
+
+.cat-search {
+  min-height: 44px;
+  font-size: 16px; /* 16px stops iOS Safari zooming the page on focus */
+}
+
+/* Select all / Clear / Create category: three equal columns, evenly
+   spaced, never wrapping into a cramped second row. */
+.cat-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.cat-action {
+  min-height: 48px;
+  padding: 6px 10px;
+  line-height: 1.2;
+  text-align: center;
+  border: 1.5px solid var(--border-2);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.cat-action-create {
+  border-color: var(--violet);
+  color: var(--violet-ink);
+  background: var(--violet-tint);
+}
+
+.cat-create {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+.cat-create-row {
+  display: flex;
+  gap: 8px;
+}
+.cat-create-row .input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  font-size: 16px;
+}
+.cat-create-add {
+  min-height: 44px;
+  min-width: 72px;
+  padding: 0 14px;
+}
+.cat-create-msg {
+  margin: 0;
+  font-size: 13.5px;
+}
+.cat-create-fallback {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+.cat-create-fallback .btn,
+.cat-create-close {
+  min-height: 44px;
+  padding: 0 10px;
+}
+.cat-create-close { align-self: flex-start; }
+
+.cat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 36px;
+  align-items: center;
+}
+
+.cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 36px;
+  padding: 0 4px 0 12px;
+  border-radius: var(--r-pill);
+  background: var(--violet-tint);
+  color: var(--violet-ink);
+  font-weight: 700;
+  font-size: 13px;
+  border: none;
+  font-family: var(--font-body);
+}
+.cat-chip-summary {
+  padding: 0 14px;
+  min-height: 44px;
+  cursor: pointer;
+  gap: 8px;
+}
+.cat-chip-x {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cat-expanded {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 120px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.cat-expanded li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 0 4px 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* The middle of the sheet: actions, create, selection strip and results
+   scroll together between the pinned search and the pinned footer. */
+.cat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 8px;
+}
+
+.cat-results {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+/* While searching, matches come first — with the keyboard up there may be
+   room for little else. */
+.cat-scroll-searching .cat-results {
+  order: -1;
+  border-top: none;
+  padding-top: 0;
+}
+
+.cat-results-label {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cat-nomatch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 0 12px;
+}
+.cat-nomatch p { margin: 0; font-weight: 600; }
+
+.cat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 10px 6px 12px;
+  text-align: left;
+  border: 1.5px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.cat-item:hover { background: var(--bg); }
+.cat-item-on { background: var(--violet-tint); }
+.cat-item-on:hover { background: var(--violet-tint-2); }
+.cat-item-off { opacity: 0.5; cursor: not-allowed; }
+
+.cat-item-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cat-item-name {
+  font-weight: 700;
+  font-size: 15px;
+}
+.cat-item-tags {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cat-check {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--border-2);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+.cat-item-on .cat-check {
+  background: var(--violet);
+  border-color: var(--violet);
+}
+
+.cat-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.cat-count {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+}
+.cat-count-warn { color: var(--coral-ink); }
+.cat-done {
+  flex: 1;
+  min-height: 48px;
+  min-width: 120px;
+  margin: 0;
+}
+
+/* "Custom" — a room-made category (selector rows) or theme (Who Am I?). */
+.custom-badge,
+.pill-custom-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--lilac-tint-2);
+  color: var(--lilac-ink);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  vertical-align: middle;
+  line-height: 1.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cat-sheet { animation: gb-fade-in var(--dur-2) ease both; }
 }

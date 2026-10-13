@@ -24,7 +24,7 @@ import { RANDOM_CATEGORY, CATEGORIES, CATEGORY_NAME, CATEGORY_KEYS, BANKS } from
 
 export const id = "who-am-i";
 export const name = "Who Am I?";
-export const minPlayers = 3;
+export const minPlayers = 2;
 export const maxPlayers = 10;
 
 export { CATEGORIES, CATEGORY_NAME, RANDOM_CATEGORY };
@@ -78,7 +78,7 @@ function editDistance(a, b) {
   return prev[b.length];
 }
 
-function isCorrectGuess(rawGuess, entry) {
+export function isCorrectGuess(rawGuess, entry) {
   const guess = normalize(rawGuess);
   if (guess.length < 2) return false;
 
@@ -165,7 +165,10 @@ function setupRound(game, roundIndex, presentPlayerIds) {
 
 // ---------- lifecycle ----------
 
-export function createGame(playerIds, { rounds, categories, memory } = {}) {
+// `customThemes` = this room's AI "Custom Theme" batches (aiContent.js):
+// [{ name, identities: [{ name, alts }] }]. A theme's name is its category
+// key; it's selectable like a built-in category and labelled with its name.
+export function createGame(playerIds, { rounds, categories, memory, customThemes = [] } = {}) {
   if (playerIds.length < minPlayers) {
     throw new Error(`Who Am I? needs at least ${minPlayers} players.`);
   }
@@ -177,24 +180,35 @@ export function createGame(playerIds, { rounds, categories, memory } = {}) {
     throw new Error("Choose how many rounds to play.");
   }
 
+  const banks = { ...BANKS };
+  const categoryNames = { ...CATEGORY_NAME };
+  for (const t of customThemes) {
+    if (!t?.name || !Array.isArray(t.identities) || t.identities.length === 0) continue;
+    banks[t.name] = t.identities.map((e) => ({ name: e.name, alts: e.alts ?? [] }));
+    categoryNames[t.name] = t.name;
+  }
+  const allKeys = Object.keys(banks);
+
   const asked = Array.isArray(categories) ? categories : [];
   const randomMode = asked.includes(RANDOM_CATEGORY);
-  let catKeys = randomMode ? CATEGORY_KEYS : asked.filter((c) => c in BANKS);
+  let catKeys = randomMode ? allKeys : asked.filter((c) => c in banks);
   if (catKeys.length === 0) catKeys = CATEGORY_KEYS;
 
-  const pool = catKeys.flatMap((k) => BANKS[k].map((e) => ({ ...e, category: k })));
+  const pool = catKeys.flatMap((k) => banks[k].map((e) => ({ ...e, category: k })));
   if (pool.length < playerIds.length) {
     throw new Error("Pick more categories — not enough identities for this many players.");
   }
 
-  const maxRoundsPossible = Math.floor(pool.length / playerIds.length);
-  const totalRounds = Math.min(requested, maxRoundsPossible);
-  const totalNeeded = totalRounds * playerIds.length;
-  const { items, seenKeys } = drawWithoutRepeats(pool, totalNeeded, memory?.seen ?? [], entryKey);
-
+  // Each round's identities are unique within the round. Rounds draw one
+  // after another without repeats, so an identity only comes back in a
+  // later round once the enabled pool has been used up.
+  const totalRounds = requested;
   const roundEntries = [];
+  let seenKeys = memory?.seen ?? [];
   for (let i = 0; i < totalRounds; i++) {
-    roundEntries.push(items.slice(i * playerIds.length, (i + 1) * playerIds.length));
+    const draw = drawWithoutRepeats(pool, playerIds.length, seenKeys, entryKey);
+    roundEntries.push(draw.items);
+    seenKeys = draw.seenKeys;
   }
 
   const game = {
@@ -203,6 +217,7 @@ export function createGame(playerIds, { rounds, categories, memory } = {}) {
     totalRounds,
     roundIndex: 0,
     categories: catKeys,
+    categoryNames, // key -> display name, custom themes included
     randomMode,
     roundEntries,
     deckMemory: { seen: seenKeys }, // server-only; harvested by index.js
@@ -464,7 +479,7 @@ export function getPrivateState(game, playerId) {
   return {
     whoAmI: {
       identities,
-      myCategory: mine ? CATEGORY_NAME[mine.category] ?? mine.category : null,
+      myCategory: mine ? game.categoryNames?.[mine.category] ?? CATEGORY_NAME[mine.category] ?? mine.category : null,
       myIdentity: revealedToSelf ? { name: mine.name, category: mine.category } : null,
     },
   };

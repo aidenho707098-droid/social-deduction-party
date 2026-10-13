@@ -4,7 +4,8 @@ import CountUp from '../CountUp'
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
-export default function FinalStandings({ game, players, myId, isHost, onBackToLobby }) {
+// Also used by Hot Potato (same scores / winnerIds shape), with its own icon.
+export default function FinalStandings({ game, players, myId, isHost, onBackToLobby, icon = '🥣' }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
   const colorById = playerColorMap(players)
   const winnerIds = game.winnerIds ?? []
@@ -19,7 +20,7 @@ export default function FinalStandings({ game, players, myId, isHost, onBackToLo
   return (
     <div className="screen">
       <div className={`outcome-banner ${iWon ? 'outcome-win' : 'outcome-lose'}`}>
-        <div className="outcome-icon">🥣</div>
+        <div className="outcome-icon">{icon}</div>
         <div className="outcome-title">{iWon ? 'You Win!' : 'Game Over'}</div>
         <div className="outcome-subtitle">{headline}</div>
       </div>

@@ -4,7 +4,6 @@ import { socket, SERVER_URL, loadSession, clearSession } from '../socket'
 import LobbyView from './LobbyView'
 import HostControls from '../HostControls'
 import GameMenu from '../games/GameMenu'
-import GameCatalogue from '../games/GameCatalogue'
 import HowToPlay from '../games/HowToPlay'
 import { getGame } from '../games/registry'
 import TournamentSetup from '../tournament/TournamentSetup'
@@ -200,6 +199,8 @@ export default function Lobby() {
     // Shared by every game's "Custom Category / Theme / Topic" setup option.
     aiGenerateContent: (gameId, name, cb) =>
       socket.emit('ai_generate_content', { code, gameId, name }, cb),
+    createCategory: (gameId, name, force, cb) =>
+      socket.emit('category_create', { code, gameId, name, force }, cb),
     wyrAnswer: (choice) => socket.emit('wyr_answer', { code, choice }),
     wyrReveal: () => socket.emit('wyr_reveal', { code }),
     wyrNextRound: () => socket.emit('wyr_next_round', { code }),
@@ -251,10 +252,14 @@ export default function Lobby() {
       socket.emit('alphabet_soup_dispute_vote', { code, disputeId, overturn }, cb),
     alphabetSoupSettle: (cb) => socket.emit('alphabet_soup_settle', { code }, cb),
     alphabetSoupSaidIt: (turnSeq, cb) => socket.emit('alphabet_soup_said_it', { code, turnSeq }, cb),
-    alphabetSoupChallenge: (turnSeq, cb) => socket.emit('alphabet_soup_challenge', { code, turnSeq }, cb),
+    alphabetSoupChallenge: (answerSeq, cb) => socket.emit('alphabet_soup_challenge', { code, answerSeq }, cb),
     alphabetSoupChallengeVote: (uphold, turnSeq, cb) =>
       socket.emit('alphabet_soup_challenge_vote', { code, turnSeq, uphold }, cb),
     alphabetSoupNextRound: () => socket.emit('alphabet_soup_next_round', { code }),
+    hotPotatoPass: (turnId, cb) => socket.emit('hot_potato_pass', { code, turnId }, cb),
+    hotPotatoChallenge: (passSeq, cb) => socket.emit('hot_potato_challenge', { code, passSeq }, cb),
+    hotPotatoVote: (valid, cb) => socket.emit('hot_potato_vote', { code, valid }, cb),
+    hotPotatoNextMatch: () => socket.emit('hot_potato_next_match', { code }),
     backToLobby: () => socket.emit('back_to_lobby', { code }),
     setPlayerColor: (color) => socket.emit('set_player_color', { code, color }),
     kickPlayer: (playerId) => socket.emit('kick_player', { code, playerId }),
@@ -262,7 +267,9 @@ export default function Lobby() {
     tournamentStart: () => socket.emit('tournament_start', { code }),
     tournamentNext: () => socket.emit('tournament_next', { code }),
     tournamentWheelReady: () => socket.emit('tournament_wheel_ready', { code }),
-    tournamentIntroStart: (options) => socket.emit('tournament_intro_start', { code, options }),
+    tournamentIntroStart: (options, cb) => socket.emit('tournament_intro_start', { code, options }, cb),
+    tournamentSkip: (cb) => socket.emit('tournament_skip', { code }, cb),
+    tournamentReplace: (gameId, cb) => socket.emit('tournament_replace', { code, gameId }, cb),
     tournamentEnd: () => socket.emit('tournament_end', { code }),
     setChaosFrequency: (frequency) => socket.emit('chaos_set_frequency', { code, frequency }),
     chaosWager: (cb) => socket.emit('chaos_wager', { code }, cb),
@@ -278,6 +285,10 @@ export default function Lobby() {
     aiContent: room?.aiContent ?? {},
     aiEnabled: room?.aiContentEnabled ?? false,
     onGenerateContent: gameActions.aiGenerateContent,
+    // Alphabet Soup + Hot Potato's shared category selector: the room's
+    // custom categories and its "Create category".
+    customCategories: room?.customCategories ?? [],
+    onCreateCategory: gameActions.createCategory,
   }
 
   function handleTournamentConfigure(cfg) {
@@ -367,8 +378,11 @@ export default function Lobby() {
           t={tour}
           isHost={isHost}
           playerCount={room.players.length}
+          playedGameIds={room.playedGameIds ?? []}
           savedByGame={room.gameSettings ?? {}}
           onStart={gameActions.tournamentIntroStart}
+          onSkip={gameActions.tournamentSkip}
+          onReplace={gameActions.tournamentReplace}
           {...aiProps}
         />
       )
@@ -425,7 +439,15 @@ export default function Lobby() {
 
   // Any player opened the browse-only Game Catalogue from the lobby.
   if (showCatalogue) {
-    return <GameCatalogue onClose={() => setShowCatalogue(false)} />
+    return (
+      <GameMenu
+        isHost={false}
+        roomCode={code}
+        playerCount={room.players.length}
+        playedGameIds={room.playedGameIds ?? []}
+        onBack={() => setShowCatalogue(false)}
+      />
+    )
   }
 
   // Host chose "Tournament Mode" from the lobby — configure it.
@@ -433,6 +455,7 @@ export default function Lobby() {
     return (
       <TournamentSetup
         playerCount={room.players.length}
+        playedGameIds={room.playedGameIds ?? []}
         savedByGame={room.gameSettings ?? {}}
         onConfigure={handleTournamentConfigure}
         onCancel={() => setHostFlow('idle')}
@@ -445,12 +468,16 @@ export default function Lobby() {
   if (isHost && hostFlow === 'menu') {
     return (
       <GameMenu
+        isHost
+        roomCode={code}
         playerCount={room.players.length}
-        onPick={(gameId) => {
+        playedGameIds={room.playedGameIds ?? []}
+        onContinue={(gameId) => {
+          setStartError('')
           setSelectedGameId(gameId)
           setHostFlow('configure')
         }}
-        onCancel={() => setHostFlow('idle')}
+        onBack={() => setHostFlow('idle')}
       />
     )
   }
