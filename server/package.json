@@ -15,6 +15,7 @@
     "test:who-am-i": "node who-am-i.selftest.mjs",
     "test:alphabet-soup": "node alphabet-soup.selftest.mjs && node ../client/src/games/alphabetSoup/soupMotion.selftest.mjs",
     "test:hot-potato": "node hot-potato.selftest.mjs",
+    "test:memory-imposter": "node memory-imposter.selftest.mjs",
     "test:tournament": "node tournament.selftest.mjs",
     "test:catalog": "node catalog.selftest.mjs",
     "test:categories": "node categories.selftest.mjs"

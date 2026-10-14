@@ -19,6 +19,7 @@ const TICK_MS = 250
 // A phase's full time budget — games name this window differently.
 function fullBudget(game) {
   return (
+    game?.windowMs ?? // Memory Imposter: one field for every phase clock
     game?.answerMs ??
     game?.guessMs ??
     game?.startMs ??

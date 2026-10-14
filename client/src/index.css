@@ -7062,3 +7062,374 @@ img.emoji {
 @media (prefers-reduced-motion: reduce) {
   .cat-sheet { animation: gb-fade-in var(--dur-2) ease both; }
 }
+
+/* ============================================================
+   Memory Imposter
+   The sequence strip (cells keep the same size whether they hold an
+   item or are blank, so the Imposter's placeholders match exactly),
+   the memorize ring, statements, answer pickers, the evidence table.
+   ============================================================ */
+
+.mi-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.mi-headline {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.mi-speed { color: var(--coral-ink); }
+
+/* --- items --- */
+.mi-token {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.mi-token-digit,
+.mi-token-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.mi-token-none { color: var(--muted); font-weight: 700; }
+.mi-token-emoji img.emoji { margin: 0; vertical-align: 0; }
+
+/* --- the strip --- */
+.mi-strip {
+  --mi-cell: min(52px, calc((100vw - 40px - (var(--mi-cols) - 1) * 8px) / var(--mi-cols)));
+  display: grid;
+  grid-template-columns: repeat(var(--mi-cols), var(--mi-cell));
+  justify-content: center;
+  gap: 8px;
+}
+.mi-strip-sm {
+  --mi-cell: min(34px, calc((100vw - 60px - (var(--mi-cols) - 1) * 6px) / var(--mi-cols)));
+  gap: 6px;
+}
+.mi-cell {
+  width: var(--mi-cell);
+  height: var(--mi-cell);
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  border: 2px solid var(--border-2);
+  border-radius: var(--r-sm);
+}
+.mi-cell:nth-child(even) { border-radius: var(--r-sm-alt); }
+.mi-strip-sm .mi-cell { border-width: 1.5px; }
+.mi-strip-blank .mi-cell {
+  background: var(--violet-tint);
+  border-style: dashed;
+}
+.mi-strip-lg .mi-cell { animation: mi-cell-in var(--dur-3) var(--ease-out) both; }
+@keyframes mi-cell-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+
+.mi-mine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px 8px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+}
+.mi-mine-label,
+.mi-private-note {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: center;
+}
+.mi-private-note { font-size: 14px; }
+
+/* --- role + memorize --- */
+.mi-role-card { padding: 36px 22px; }
+
+.mi-ring {
+  --ring: min(40vw, 150px);
+  position: relative;
+  width: var(--ring);
+  height: var(--ring);
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+}
+.mi-ring-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.mi-ring-track { fill: none; stroke: var(--border); stroke-width: 8; }
+.mi-ring-progress {
+  fill: none;
+  stroke: var(--violet);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 60ms linear;
+}
+.mi-ring-count {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--ring) * 0.3);
+  color: var(--violet-ink);
+  line-height: 1;
+}
+[data-chaos-blind] .mi-ring-progress,
+[data-chaos-blind] .mi-ring-count { visibility: hidden; }
+
+/* --- statements --- */
+.mi-speaker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 16px;
+  border-radius: var(--r-lg);
+  background: var(--violet-tint);
+}
+.mi-speaker-me { background: var(--gold-tint); }
+.mi-speaker-kicker,
+.mi-question-kicker {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.mi-ideas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.mi-idea {
+  padding: 7px 12px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  border: 1.5px solid var(--border-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--violet-ink);
+}
+.mi-order {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.mi-order-item {
+  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+}
+.mi-order-now { border-color: var(--violet); background: var(--violet-tint); color: var(--violet-ink); }
+.mi-order-done { opacity: 0.5; }
+.mi-timer-text { margin-top: -14px; }
+
+/* --- proof questions --- */
+.mi-question {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: row-in var(--dur-3) var(--ease-out) both;
+}
+.mi-prompt {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.mi-prompt-item {
+  display: inline-flex;
+  vertical-align: middle;
+  margin: 0 4px;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  background: var(--violet-tint);
+}
+.mi-picker {
+  display: grid;
+  gap: 10px;
+}
+.mi-keypad { grid-template-columns: repeat(3, 1fr); }
+.mi-key-zero { grid-column: 2; }
+.mi-options { grid-template-columns: repeat(4, 1fr); }
+.mi-picker-count { grid-template-columns: repeat(6, 1fr); }
+.mi-key {
+  min-height: 52px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color var(--dur-1) ease, background var(--dur-1) ease, transform var(--dur-1) var(--ease-out);
+}
+.mi-key:nth-child(even) { border-radius: var(--r-sm-alt); }
+.mi-key:active:not(:disabled) { transform: scale(0.96); }
+.mi-key-on { border-color: var(--violet); background: var(--violet-tint); color: var(--violet-ink); }
+.mi-key:disabled:not(.mi-key-on) { opacity: 0.45; cursor: default; }
+
+/* --- discussion / vote --- */
+.mi-host-row { display: flex; gap: 10px; }
+.mi-host-row .btn { justify-content: center; }
+.mi-vote-list .vote-btn { display: flex; align-items: center; }
+
+/* --- evidence table --- */
+.mi-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mi-evidence-scroll {
+  overflow-x: auto;
+  padding: 10px 6px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+}
+.mi-table {
+  border-collapse: separate;
+  border-spacing: 4px;
+  margin: 0 auto;
+}
+.mi-th-q {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+.mi-th-name {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding-right: 4px;
+}
+.mi-name {
+  display: inline-block;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+.mi-tr-answer .mi-th-name { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+.mi-td {
+  width: 36px;
+  height: 36px;
+  text-align: center;
+  border-radius: var(--r-sm);
+  font-size: 15px;
+}
+.mi-td-answer { background: var(--gold-tint); box-shadow: inset 0 0 0 1.5px var(--gold); }
+.mi-td-ok { background: var(--violet-tint-2); box-shadow: inset 0 0 0 1.5px var(--violet); }
+.mi-td-miss { background: var(--coral-tint-2); box-shadow: inset 0 0 0 1.5px var(--coral); }
+.mi-td .mi-token { vertical-align: middle; }
+.mi-tr-me .mi-th-name { color: var(--violet-ink); }
+.mi-evidence-animate .mi-td-ok,
+.mi-evidence-animate .mi-td-miss {
+  animation: mi-cell-in var(--dur-3) var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
+}
+.mi-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mi-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mi-legend .mi-prompt {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  color: var(--ink);
+}
+.mi-legend .mi-prompt-item { padding: 0 4px; }
+.mi-legend-n {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* --- final reveal --- */
+.mi-outcome .player-cdot-inline { vertical-align: -1px; }
+.mi-row-imposter { box-shadow: inset 3px 0 0 var(--coral); }
+.mi-tag {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: var(--coral-tint-2);
+  color: var(--coral-ink);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+/* --- setup --- */
+.mi-type-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  font-size: 15px;
+}
+.mi-type-sample { display: inline-flex; gap: 2px; }
+.mi-diff .pill { flex: 1 1 calc(25% - 8px); padding: 12px 4px; font-size: 15px; }
+.mi-setup-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mi-strip-lg .mi-cell,
+  .mi-evidence-animate .mi-td-ok,
+  .mi-evidence-animate .mi-td-miss,
+  .mi-question { animation: none; }
+}

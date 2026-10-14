@@ -20,6 +20,8 @@ export function walkthroughKeyForGame(game) {
       return game.mode === 'spoken' ? 'alphabet-soup-spoken' : 'alphabet-soup-typed'
     case 'hot-potato':
       return 'hot-potato'
+    case 'memory-imposter':
+      return 'memory-imposter'
     case 'fibbage':
       return game.personal ? 'fibbage-personal' : null
     case 'would-you-rather':

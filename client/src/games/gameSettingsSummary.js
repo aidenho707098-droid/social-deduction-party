@@ -28,6 +28,11 @@ export function describeGameOptions(options) {
   else if (o.timerMode === 'hidden') parts.push('Hidden Fuse')
   else if (o.timerMode === 'mixed') parts.push('mixed timers')
   if (o.burnedLetters) parts.push('burned letters')
+  // Memory Imposter
+  if (o.sequenceType) parts.push({ digits: 'Digits', colors: 'Colors', emoji: 'Emoji' }[o.sequenceType] ?? o.sequenceType)
+  if (o.sequenceType && o.difficulty === 'custom') parts.push(`${o.customLength ?? 8} items, ${o.customViewSec ?? 6}s look`)
+  if (o.questions) parts.push(`${o.questions} questions`)
+  if (o.statements === false) parts.push('no statements')
   if (o.promptsPerPlayer) {
     parts.push(`${o.promptsPerPlayer} prompt${o.promptsPerPlayer === 1 ? '' : 's'}/player`)
   }

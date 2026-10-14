@@ -252,6 +252,38 @@ export const WALKTHROUGHS = {
     phaseSteps: { intro: 0, live: 1, explode: 3 },
   },
 
+  'memory-imposter': {
+    title: 'How Memory Imposter works',
+    steps: [
+      {
+        icon: '🧠',
+        title: 'First, a secret sequence',
+        text: 'Witnesses see it all round. The Imposter gets one quick look before it disappears. Keep yours private, and don\'t read it out loud.',
+      },
+      {
+        icon: '🗣️',
+        title: 'Then, one true statement each',
+        text: 'In turn, say ONE true thing about the sequence out loud and tap Done. The Imposter bluffs and listens.',
+      },
+      {
+        icon: '❓',
+        title: 'Next, private proof questions',
+        text: 'Everyone answers against the clock. Whatever you\'ve picked when time runs out counts. No results until the end.',
+      },
+      {
+        icon: '🔍',
+        title: 'Then, study the evidence',
+        text: 'A table shows everyone\'s answers next to the right ones. Some questions are tricky, so one slip isn\'t proof.',
+      },
+      {
+        icon: '🗳️',
+        title: 'Finally, vote out the Imposter',
+        text: 'Most votes is out, and a tie means nobody is. Caught: Witnesses who voted right +3, others +1. Got away: the Imposter +4.',
+      },
+    ],
+    phaseSteps: { roles: 0, memorize: 0, statements: 1, questions: 2, evidence: 3, discussion: 3, vote: 4, reveal: 4 },
+  },
+
   tournament: {
     title: 'How Tournament Mode works',
     steps: [

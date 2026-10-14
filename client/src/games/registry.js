@@ -31,6 +31,9 @@ import { rules as alphabetSoupRules } from './alphabetSoup/rules'
 import HotPotatoSetup from './hotPotato/HotPotatoSetup'
 import HotPotatoGame from './hotPotato/HotPotatoGame'
 import { rules as hotPotatoRules } from './hotPotato/rules'
+import MemoryImposterSetup from './memoryImposter/MemoryImposterSetup'
+import MemoryImposterGame from './memoryImposter/MemoryImposterGame'
+import { rules as memoryImposterRules } from './memoryImposter/rules'
 
 import { CATALOG } from './catalog'
 
@@ -50,6 +53,7 @@ const PARTS = {
   'who-am-i': { Setup: WhoAmISetup, Game: WhoAmIGame, rules: whoAmIRules },
   'alphabet-soup': { Setup: AlphabetSoupSetup, Game: AlphabetSoupGame, rules: alphabetSoupRules },
   'hot-potato': { Setup: HotPotatoSetup, Game: HotPotatoGame, rules: hotPotatoRules },
+  'memory-imposter': { Setup: MemoryImposterSetup, Game: MemoryImposterGame, rules: memoryImposterRules },
 }
 
 export const GAMES = CATALOG.map((entry) => ({ ...entry, ...PARTS[entry.id] }))

@@ -61,6 +61,14 @@ const PHASE_CUES = {
   // every new potato (one potato = one roundIndex), and the countdown
   // beeps, pass pops, holder ticks and explosion pop are all timed inside
   // PotatoIntro / LiveRound / ExplosionScreen.
+  // Memory Imposter: the memorize countdown ticks, the "your turn" blip
+  // and the lock-in confirm are timed inside the game's own screens.
+  'memory-imposter': {
+    questions: 'confirm',
+    evidence: REVEAL,
+    vote: 'confirm',
+    reveal: (c) => (c.memoryWon == null ? REVEAL : c.memoryWon ? 'correct' : 'wrong'),
+  },
   'who-am-i': {
     reveal: REVEAL,
     // correct/wrong-guess blips fire inside AskScreen (play('correct' |
@@ -81,6 +89,10 @@ function buildCtx(game, myRole, myId) {
       ctx.personalWin =
         myRole.role === 'imposter' ? !game.detectivesWin : game.detectivesWin
     }
+  }
+  if (game.id === 'memory-imposter' && game.phase === 'reveal' && game.result) {
+    const imposter = game.result.imposterId === myId
+    ctx.memoryWon = imposter ? !game.result.caught : game.result.caught
   }
   if (game.id === 'black-magic' && game.phase === 'reveal') {
     ctx.bmGuesserIsMe =

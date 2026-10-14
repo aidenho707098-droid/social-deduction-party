@@ -1,9 +1,9 @@
 // A compact −/+ counter for a numeric setup option (round count, etc.) —
 // replaces a long row of individual number buttons. Shared across every
 // game's Setup screen.
-export default function NumberStepper({ label, value, min, max, onChange, hint }) {
+export default function NumberStepper({ label, value, min, max, onChange, hint, step: by = 1, suffix = '' }) {
   const clamp = (n) => Math.min(max, Math.max(min, n))
-  const step = (delta) => onChange(clamp(value + delta))
+  const step = (delta) => onChange(clamp(value + delta * by))
 
   return (
     <div className="stepper-block">
@@ -20,6 +20,7 @@ export default function NumberStepper({ label, value, min, max, onChange, hint }
         </button>
         <span className="stepper-value" aria-live="polite">
           {value}
+          {suffix}
         </span>
         <button
           type="button"

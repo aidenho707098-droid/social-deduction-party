@@ -9,6 +9,7 @@ import * as fakeArtist from "./fake-artist.js";
 import * as whoAmI from "./who-am-i.js";
 import * as alphabetSoup from "./alphabet-soup.js";
 import * as hotPotato from "./hot-potato.js";
+import * as memoryImposter from "./memory-imposter.js";
 
 // Every game module exports the same shape: id, name, minPlayers,
 // createGame(), getPublicState(), getPrivateState(). index.js and rooms.js
@@ -26,4 +27,5 @@ export const GAMES = {
   [whoAmI.id]: whoAmI,
   [alphabetSoup.id]: alphabetSoup,
   [hotPotato.id]: hotPotato,
+  [memoryImposter.id]: memoryImposter,
 };

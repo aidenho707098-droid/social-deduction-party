@@ -27,6 +27,7 @@ export const FILTERS = [
   { key: 'draw-act', label: 'Draw & Act' },
   { key: 'guessing', label: 'Guessing' },
   { key: 'quick', label: 'Quick' },
+  { key: 'memory', label: 'Memory' },
 ]
 
 export const CATALOG = [
@@ -131,6 +132,18 @@ export const CATALOG = [
     minPlayers: 3,
     maxPlayers: 10,
     tags: ['word', 'quick'],
+    isNew: true,
+  },
+  {
+    id: 'memory-imposter',
+    // Working title: every screen reads the name from here (and the server
+    // module's `name`, which server/catalog.selftest.mjs keeps in sync).
+    name: 'Memory Imposter',
+    genre: 'memory & bluff',
+    description: 'Everyone can see a secret sequence except the Imposter, who only gets a quick look. Prove you can see it, and vote out whoever is bluffing.',
+    minPlayers: 4,
+    maxPlayers: 10,
+    tags: ['deduction', 'memory'],
     isNew: true,
   },
 ]

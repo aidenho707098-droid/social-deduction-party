@@ -129,6 +129,31 @@ export const CHAOS_GAMES = {
         ? (m) => m.id !== "speed-round" && m.id !== "countdown-chaos"
         : (m) => ["all-or-nothing", "tax-collector", "the-tyrant", "rival", "risk-it", "point-reversal"].includes(m.id),
   },
+  "memory-imposter": {
+    // One roll per round, on the 3s role reveal, which waits out the
+    // takeover (onChaosAnnounced) like Hot Potato's intro. A round the
+    // Imposter abandons is redealt under the SAME roundIndex, so its Chaos
+    // Event carries over to the redo instead of rolling twice.
+    //
+    // FLAGGED:
+    //   * Speed Round — handled by the GAME, not the generic 10s clamp (the
+    //     answer window is already 6–12s): answers 5s, statements 8s,
+    //     discussion 20s, vote 10s. No `timer` entry, so the glue never
+    //     touches the deadline. The Imposter's view window is NOT shortened
+    //     (that would change difficulty, not pace).
+    //   * Countdown Chaos — hides every timer bar AND the Imposter's view
+    //     ring ([data-chaos-blind]), so they don't know how long the look
+    //     lasts. Intended.
+    //   * Risk It — the wager beat lengthens the takeover; the role reveal
+    //     waits for it too.
+    //   * Point Reversal — excluded. It hands a caught Imposter the
+    //     Witnesses' +3 and zeroes the players who found them, which
+    //     rewards the exact play the round punishes.
+    rollPhases: ["roles"],
+    scoredPhases: ["reveal", "final"],
+    speedRound: true,
+    exclude: () => (m) => m.id === "point-reversal",
+  },
 };
 
 export function chaosGameConfig(gameId) {

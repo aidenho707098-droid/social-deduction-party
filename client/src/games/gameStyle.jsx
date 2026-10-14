@@ -103,6 +103,15 @@ const ICONS = {
       <path d="M9.6 13.4h.01M14.2 13.4h.01" />
     </>
   ),
+  // Memory Imposter — a brain: two lobes split down the middle, a fold in each.
+  'memory-imposter': (
+    <>
+      <path d="M12 5.2a3 3 0 0 0-5.4-1.2A3 3 0 0 0 4 7.8a3.2 3.2 0 0 0-.6 5.4A3.4 3.4 0 0 0 6.6 18a3 3 0 0 0 5.4 1.4Z" />
+      <path d="M12 5.2a3 3 0 0 1 5.4-1.2A3 3 0 0 1 20 7.8a3.2 3.2 0 0 1 .6 5.4 3.4 3.4 0 0 1-3.2 4.8 3 3 0 0 1-5.4 1.4" />
+      <path d="M12 5.2v14.2" />
+      <path d="M7.4 9.4c1 .1 1.8.8 2 1.8M16.6 9.4c-1 .1-1.8.8-2 1.8M8 14.6c.9-.5 1.9-.4 2.6.3M16 14.6c-.9-.5-1.9-.4-2.6.3" />
+    </>
+  ),
 }
 
 export function GameIcon({ id }) {

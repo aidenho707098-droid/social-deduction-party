@@ -1816,6 +1816,69 @@ io.on("connection", (socket) => {
     if (res.ok) afterPotatoAction(room);
   });
 
+  // --- Memory Imposter actions -----------------------------------------
+  // Every clock runs in the memory-imposter sweep below. Turn / question
+  // actions carry the server's turnId / question index, so a tap that raced
+  // a change can never act on the NEXT turn or question. Private state is
+  // re-pushed after every change: it's how the Imposter's view window
+  // closes on their phone.
+
+  function memoryContext(socket, code) {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "memory-imposter") return null;
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return null;
+    return { room, playerId, present: connectedPlayerIds(room) };
+  }
+
+  function afterMemoryAction(room) {
+    broadcastRoom(room.code);
+    sendPrivateRoles(room);
+  }
+
+  socket.on("memory_statement_done", ({ code, turnId }, cb) => {
+    const ctx = memoryContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = GAMES["memory-imposter"].statementDone(ctx.room.game, ctx.playerId, turnId, {
+      asHost: isRoomHost(ctx.room, socket),
+    });
+    cb?.(res);
+    if (res.ok) afterMemoryAction(ctx.room);
+  });
+
+  socket.on("memory_answer", ({ code, qIndex, value, final }, cb) => {
+    const ctx = memoryContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = GAMES["memory-imposter"].submitAnswer(ctx.room.game, ctx.playerId, qIndex, value, final === true, ctx.present);
+    cb?.(res);
+    if (res.ok) afterMemoryAction(ctx.room);
+  });
+
+  socket.on("memory_vote", ({ code, targetId }, cb) => {
+    const ctx = memoryContext(socket, code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = GAMES["memory-imposter"].submitVote(ctx.room.game, ctx.playerId, targetId, ctx.present);
+    cb?.(res);
+    if (res.ok) afterMemoryAction(ctx.room);
+  });
+
+  // Host: discussion +30s / skip to the vote / next round from the reveal.
+  socket.on("memory_host", ({ code, action }, cb) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "memory-imposter") return cb?.({ ok: false });
+    const mod = GAMES["memory-imposter"];
+    const res =
+      action === "extend"
+        ? mod.extendDiscussion(room.game)
+        : action === "skip"
+          ? mod.skipDiscussion(room.game)
+          : action === "next"
+            ? mod.nextRound(room.game, connectedPlayerIds(room))
+            : { ok: false };
+    cb?.(res);
+    if (res.ok) afterMemoryAction(room);
+  });
+
   socket.on("back_to_lobby", ({ code }) => {
     const room = getRoom(code);
     if (!room || !isRoomHost(room, socket)) return;
@@ -2048,6 +2111,36 @@ const hotPotatoTimer = setInterval(() => {
   }
 }, HOT_POTATO_TICK_MS);
 hotPotatoTimer.unref?.();
+
+// --- Memory Imposter: every phase clock ---------------------------------
+// Role reveal, the Imposter's view window, statement turns, answer windows,
+// evidence, discussion, vote and reveal all run here. A 200ms beat keeps
+// the view window from overrunning visibly; it broadcasts (and re-pushes
+// private state — the view window closing is a private-state change) the
+// moment something changes, plus once a second for the countdowns.
+const MEMORY_TICK_MS = 200;
+const memoryLastBroadcast = new Map(); // roomCode -> ms
+const memoryTimer = setInterval(() => {
+  const now = Date.now();
+  for (const room of allRooms()) {
+    const game = room.game;
+    if (room.status !== "in-game" || game?.id !== "memory-imposter" || game.phase === "final") {
+      memoryLastBroadcast.delete(room.code);
+      continue;
+    }
+    try {
+      const changed = GAMES["memory-imposter"].tick(game, connectedPlayerIds(room), now);
+      if (changed || now - (memoryLastBroadcast.get(room.code) ?? 0) >= 1000) {
+        memoryLastBroadcast.set(room.code, now);
+        broadcastRoom(room.code);
+        if (changed) sendPrivateRoles(room);
+      }
+    } catch (err) {
+      console.warn(`[memory-imposter] tick error for ${room.code}:`, err);
+    }
+  }
+}, MEMORY_TICK_MS);
+memoryTimer.unref?.();
 
 // --- Fact or Fake: Personal Mode "truth"-phase clock --------------
 // Each player has their own ~25s to pick a prompt then ~45s to answer it.
