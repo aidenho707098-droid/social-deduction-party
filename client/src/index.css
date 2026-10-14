@@ -7065,19 +7065,10 @@ img.emoji {
 
 /* ============================================================
    Memory Imposter
-   The sequence strip (cells keep the same size whether they hold an
-   item or are blank, so the Imposter's placeholders match exactly),
-   the memorize ring, statements, answer pickers, the evidence table.
+   Uniform tiles for every item kind (digits, plain swatches, neutral
+   shapes) — blank placeholders keep exactly the same size, so the
+   Imposter's strip matches everyone else's.
    ============================================================ */
-
-.mi-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
 
 .mi-headline {
   margin: 0;
@@ -7090,25 +7081,16 @@ img.emoji {
 }
 
 .mi-speed { color: var(--coral-ink); }
-
-/* --- items --- */
-.mi-token {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
+.mi-round-detail {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  letter-spacing: 0.4px;
+  text-transform: none;
+  color: var(--violet-ink);
 }
-.mi-token-digit,
-.mi-token-num {
-  font-family: var(--font-display);
-  font-weight: 700;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-.mi-token-none { color: var(--muted); font-weight: 700; }
-.mi-token-emoji img.emoji { margin: 0; vertical-align: 0; }
 
-/* --- the strip --- */
+/* --- the strip + its tiles --- */
 .mi-strip {
   --mi-cell: min(52px, calc((100vw - 40px - (var(--mi-cols) - 1) * 8px) / var(--mi-cols)));
   display: grid;
@@ -7120,11 +7102,13 @@ img.emoji {
   --mi-cell: min(34px, calc((100vw - 60px - (var(--mi-cols) - 1) * 6px) / var(--mi-cols)));
   gap: 6px;
 }
-.mi-cell {
+.mi-cell,
+.mi-chip-tile {
   width: var(--mi-cell);
   height: var(--mi-cell);
   display: grid;
   place-items: center;
+  overflow: hidden;
   background: var(--surface);
   border: 2px solid var(--border-2);
   border-radius: var(--r-sm);
@@ -7139,6 +7123,29 @@ img.emoji {
 @keyframes mi-cell-in {
   from { opacity: 0; transform: scale(0.9); }
   to { opacity: 1; transform: none; }
+}
+
+/* digits: large neutral numerals */
+.mi-digit {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--mi-cell) * 0.62);
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+/* colors: the swatch IS the tile (a hairline keeps White visible) */
+.mi-cell-swatch { border-color: rgba(36, 31, 51, 0.28); }
+.mi-swatch {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* shapes: one neutral colour */
+.mi-shape {
+  width: 72%;
+  height: 72%;
+  fill: #4a4458;
 }
 
 .mi-mine {
@@ -7161,9 +7168,7 @@ img.emoji {
 }
 .mi-private-note { font-size: 14px; }
 
-/* --- role + memorize --- */
-.mi-role-card { padding: 36px 22px; }
-
+/* --- memorize ring --- */
 .mi-ring {
   --ring: min(40vw, 150px);
   position: relative;
@@ -7198,203 +7203,41 @@ img.emoji {
 [data-chaos-blind] .mi-ring-progress,
 [data-chaos-blind] .mi-ring-count { visibility: hidden; }
 
-/* --- statements --- */
-.mi-speaker {
+/* --- role reveal --- */
+.mi-role-card { padding: 30px 22px; }
+
+/* --- discussion --- */
+.mi-timer-text { margin-top: -14px; }
+.mi-hint-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 18px 16px;
-  border-radius: var(--r-lg);
-  background: var(--violet-tint);
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: var(--r-md-alt);
+  background: var(--gold-tint);
 }
-.mi-speaker-me { background: var(--gold-tint); }
-.mi-speaker-kicker,
-.mi-question-kicker {
+.mi-hint-title {
   margin: 0;
-  text-align: center;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 1.2px;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--gold-ink);
 }
-.mi-ideas {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-}
-.mi-idea {
-  padding: 7px 12px;
-  border-radius: var(--r-pill);
-  background: var(--surface);
-  border: 1.5px solid var(--border-2);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--violet-ink);
-}
-.mi-order {
-  list-style: none;
+.mi-hint-line {
   margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-}
-.mi-order-item {
-  padding: 5px 10px;
-  border-radius: var(--r-pill);
-  border: 1.5px solid var(--border);
-  background: var(--surface);
-  font-size: 13px;
-  font-weight: 600;
-}
-.mi-order-now { border-color: var(--violet); background: var(--violet-tint); color: var(--violet-ink); }
-.mi-order-done { opacity: 0.5; }
-.mi-timer-text { margin-top: -14px; }
-
-/* --- proof questions --- */
-.mi-question {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  animation: row-in var(--dur-3) var(--ease-out) both;
-}
-.mi-prompt {
-  margin: 0;
-  text-align: center;
   font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.3;
-}
-.mi-prompt-item {
-  display: inline-flex;
-  vertical-align: middle;
-  margin: 0 4px;
-  padding: 2px 6px;
-  border-radius: var(--r-sm);
-  background: var(--violet-tint);
-}
-.mi-picker {
-  display: grid;
-  gap: 10px;
-}
-.mi-keypad { grid-template-columns: repeat(3, 1fr); }
-.mi-key-zero { grid-column: 2; }
-.mi-options { grid-template-columns: repeat(4, 1fr); }
-.mi-picker-count { grid-template-columns: repeat(6, 1fr); }
-.mi-key {
-  min-height: 52px;
-  display: grid;
-  place-items: center;
-  border: 2px solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--surface);
+  font-size: 17px;
+  font-weight: 600;
   color: var(--ink);
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: border-color var(--dur-1) ease, background var(--dur-1) ease, transform var(--dur-1) var(--ease-out);
 }
-.mi-key:nth-child(even) { border-radius: var(--r-sm-alt); }
-.mi-key:active:not(:disabled) { transform: scale(0.96); }
-.mi-key-on { border-color: var(--violet); background: var(--violet-tint); color: var(--violet-ink); }
-.mi-key:disabled:not(.mi-key-on) { opacity: 0.45; cursor: default; }
 
-/* --- discussion / vote --- */
-.mi-host-row { display: flex; gap: 10px; }
-.mi-host-row .btn { justify-content: center; }
+/* --- vote --- */
 .mi-vote-list .vote-btn { display: flex; align-items: center; }
 
-/* --- evidence table --- */
-.mi-evidence {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.mi-evidence-scroll {
-  overflow-x: auto;
-  padding: 10px 6px;
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: var(--r-md);
-}
-.mi-table {
-  border-collapse: separate;
-  border-spacing: 4px;
-  margin: 0 auto;
-}
-.mi-th-q {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  letter-spacing: 0.5px;
-}
-.mi-th-name {
-  text-align: left;
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  padding-right: 4px;
-}
-.mi-name {
-  display: inline-block;
-  max-width: 72px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: bottom;
-}
-.mi-tr-answer .mi-th-name { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
-.mi-td {
-  width: 36px;
-  height: 36px;
-  text-align: center;
-  border-radius: var(--r-sm);
-  font-size: 15px;
-}
-.mi-td-answer { background: var(--gold-tint); box-shadow: inset 0 0 0 1.5px var(--gold); }
-.mi-td-ok { background: var(--violet-tint-2); box-shadow: inset 0 0 0 1.5px var(--violet); }
-.mi-td-miss { background: var(--coral-tint-2); box-shadow: inset 0 0 0 1.5px var(--coral); }
-.mi-td .mi-token { vertical-align: middle; }
-.mi-tr-me .mi-th-name { color: var(--violet-ink); }
-.mi-evidence-animate .mi-td-ok,
-.mi-evidence-animate .mi-td-miss {
-  animation: mi-cell-in var(--dur-3) var(--ease-out) both;
-  animation-delay: var(--d, 0ms);
-}
-.mi-legend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.mi-legend li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.mi-legend .mi-prompt {
-  font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-  color: var(--ink);
-}
-.mi-legend .mi-prompt-item { padding: 0 4px; }
-.mi-legend-n {
-  flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-/* --- final reveal --- */
+/* --- reveal --- */
 .mi-outcome .player-cdot-inline { vertical-align: -1px; }
+.mi-difficulty { margin-top: 10px; }
 .mi-row-imposter { box-shadow: inset 3px 0 0 var(--coral); }
 .mi-tag {
   margin-left: 8px;
@@ -7408,17 +7251,35 @@ img.emoji {
   text-transform: uppercase;
   vertical-align: 1px;
 }
+.mi-final-icon svg {
+  width: 56px;
+  height: 56px;
+  fill: none;
+  stroke: currentColor;
+}
 
 /* --- setup --- */
-.mi-type-pill {
+.mi-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.mi-chip {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 10px 6px;
-  font-size: 15px;
+  gap: 6px;
+  padding: 10px 4px;
+  font-size: 14px;
 }
-.mi-type-sample { display: inline-flex; gap: 2px; }
+.mi-chip[aria-disabled='true'] { cursor: not-allowed; }
+.mi-chip-sample {
+  --mi-cell: 18px;
+  display: inline-flex;
+  gap: 2px;
+}
+.mi-chip-tile { border-width: 1px; border-radius: 4px; }
+.mi-chip-tile .mi-digit { font-size: 12px; }
 .mi-diff .pill { flex: 1 1 calc(25% - 8px); padding: 12px 4px; font-size: 15px; }
 .mi-setup-pair {
   display: grid;
@@ -7426,10 +7287,364 @@ img.emoji {
   gap: 12px;
   align-items: start;
 }
+/* Two steppers side by side fit a 360px phone only when compact. */
+.mi-setup-pair .stepper { gap: 6px; align-self: center; }
+.mi-setup-pair .stepper-btn { width: 40px; }
+.mi-setup-pair .stepper-value { min-width: 56px; padding: 0 4px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .mi-strip-lg .mi-cell,
-  .mi-evidence-animate .mi-td-ok,
-  .mi-evidence-animate .mi-td-miss,
-  .mi-question { animation: none; }
+  .mi-strip-lg .mi-cell { animation: none; }
+}
+
+/* =====================================================================
+   Echo Chain
+   ===================================================================== */
+
+.ec-play {
+  gap: 12px;
+  padding-top: 46px; /* clears the fixed "Step X of Y" badge */
+  padding-bottom: 20px;
+}
+
+.ec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+}
+
+.ec-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.ec-round {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ec-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+}
+
+.ec-status {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.ec-status-me {
+  color: var(--violet);
+  font-weight: 700;
+}
+
+.ec-out-pill {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--violet-tint);
+  color: var(--violet-ink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* The board fills the screen width (6px gaps): tiles ~89 / 65 / 51px at
+   320px wide. Capped at 360px, and by the screen height so the turn order
+   strip stays on screen (never below 260px: Hard keeps 48px tiles). */
+.ec-board-wrap {
+  position: relative;
+  width: 100%;
+  max-width: min(360px, max(260px, 100dvh - 350px));
+  margin: 0 auto;
+}
+
+.ec-board {
+  display: grid;
+  grid-template-columns: repeat(var(--ec-size), 1fr);
+  gap: 6px;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.ec-tile {
+  position: relative;
+  aspect-ratio: 1;
+  min-width: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  pointer-events: none;
+}
+
+.ec-board-s5 .ec-tile { border-radius: 11px; }
+
+.ec-board-live .ec-tile {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.ec-board-live .ec-tile:focus-visible {
+  outline: 3px solid var(--violet);
+  outline-offset: 2px;
+}
+
+.ec-face {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--ec-color);
+  box-shadow: inset 0 -3px 0 rgba(36, 31, 51, 0.12);
+}
+
+/* A flash: the tile lights up brightly (its own hue, near white) with a
+   slight scale-up, held for most of the flash, then settles back. */
+.ec-lit {
+  z-index: 1;
+  animation: ec-flash var(--ec-flash-ms, 280ms) ease-out both;
+}
+
+@keyframes ec-flash {
+  0% {
+    background: color-mix(in srgb, var(--ec-color) 22%, #fffdf6);
+    box-shadow: 0 0 0 3px #fff, 0 0 24px 6px color-mix(in srgb, var(--ec-color) 70%, #fff);
+    transform: scale(1.08);
+  }
+  70% {
+    background: color-mix(in srgb, var(--ec-color) 30%, #fffdf6);
+    box-shadow: 0 0 0 3px #fff, 0 0 18px 4px color-mix(in srgb, var(--ec-color) 60%, #fff);
+    transform: scale(1.05);
+  }
+  100% {
+    background: var(--ec-color);
+    box-shadow: inset 0 -3px 0 rgba(36, 31, 51, 0.12);
+    transform: scale(1);
+  }
+}
+
+/* A wrong tap: the same flash, ringed in ink so it reads as "that one". */
+.ec-lit-wrong {
+  animation-name: ec-flash-wrong;
+}
+
+@keyframes ec-flash-wrong {
+  0%, 70% {
+    background: color-mix(in srgb, var(--ec-color) 30%, #fffdf6);
+    box-shadow: 0 0 0 3px var(--ink);
+    transform: scale(1.06);
+  }
+  100% {
+    background: var(--ec-color);
+    transform: scale(1);
+  }
+}
+
+/* Reduced motion: a plain colour change, no scale, no glow. */
+@media (prefers-reduced-motion: reduce) {
+  .ec-lit,
+  .ec-lit-wrong {
+    animation: ec-flash-plain var(--ec-flash-ms, 280ms) step-end both;
+  }
+  .ec-lit-wrong { box-shadow: 0 0 0 3px var(--ink); }
+}
+
+@keyframes ec-flash-plain {
+  0% { background: color-mix(in srgb, var(--ec-color) 25%, #fffdf6); }
+  100% { background: var(--ec-color); }
+}
+
+/* Overlays on the board: 3-2-1, "Missed!", a paused turn. */
+.ec-over {
+  position: absolute;
+  inset: -4px;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  padding: 16px;
+  border-radius: 18px;
+  overflow: hidden; /* the 3-2-1 lands from 1.6x: keep it from scrolling the page */
+  text-align: center;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(2px);
+}
+
+.ec-over-count { background: rgba(255, 255, 255, 0.55); }
+
+.ec-miss-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--coral-ink);
+  animation: hp-count 0.9s ease-out both;
+}
+
+.ec-miss-line {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.ec-miss-why {
+  margin: 0;
+  color: var(--muted);
+}
+
+.ec-over-wait p {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ec-replay-label {
+  margin: 0;
+  text-align: left;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--violet);
+}
+
+.ec-replay-count {
+  margin-left: 8px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The turn timer: a small ring next to the header. */
+.ec-ring {
+  position: relative;
+  flex: none;
+  width: 52px;
+  height: 52px;
+}
+
+.ec-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.ec-ring circle {
+  fill: none;
+  stroke-width: 5;
+}
+
+.ec-ring-track { stroke: var(--border); }
+
+.ec-ring-fill {
+  stroke: var(--violet);
+  stroke-linecap: round;
+}
+
+.ec-ring-low .ec-ring-fill { stroke: var(--coral-ink); }
+
+.ec-ring-num {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hot Potato's strip, without the potato. */
+.ec-strip .hp-strip { padding-top: 10px; }
+.ec-strip .hp-token-dock { display: none; }
+
+.ec-end {
+  align-self: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.ec-end-armed {
+  color: var(--coral-ink);
+  font-weight: 700;
+}
+
+/* --- results --- */
+.ec-final-icon svg {
+  width: 56px;
+  height: 56px;
+  fill: none;
+  stroke: currentColor;
+}
+
+.ec-final-stats {
+  display: flex;
+  gap: 10px;
+}
+
+.ec-final-stats > div {
+  flex: 1;
+  display: grid;
+  justify-items: center;
+  padding: 12px 8px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.ec-final-num {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--violet);
+  line-height: 1.1;
+}
+
+.ec-final-cap {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ec-row-detail {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* --- setup --- */
+.ec-diff-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ec-mini {
+  display: inline-grid;
+  grid-template-columns: repeat(var(--ec-size), 1fr);
+  gap: 1.5px;
+  width: 22px;
+}
+
+.ec-mini span {
+  aspect-ratio: 1;
+  border-radius: 2px;
+}
+
+.ec-setup-lives {
+  max-width: 220px;
 }

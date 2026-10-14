@@ -2,12 +2,12 @@ import { PlayerDot } from '../../PlayerDot'
 import { playerColorMap } from '../../playerColors'
 import Leaderboard from '../alphabetSoup/Leaderboard'
 import { SequenceStrip } from './items'
+import { TYPE_LABELS, usePhaseClock } from './memoryData'
 import { RoundLine } from './shared'
-import { usePhaseClock } from './memoryData'
 
-// FINAL REVEAL: who the Imposter was, the full sequence, the tally, the
-// result and this round's points. The next round deals automatically; the
-// host can go early.
+// REVEAL: the Imposter, the full sequence, the round's type and
+// difficulty, the vote tally and this round's points. The next round deals
+// automatically; the host can go early.
 export default function RoundReveal({ game, players, myId, isHost, actions }) {
   const r = game.result
   const msLeft = usePhaseClock(game)
@@ -30,10 +30,9 @@ export default function RoundReveal({ game, players, myId, isHost, actions }) {
 
   return (
     <div className="screen mi-reveal">
-      <RoundLine game={game} />
+      <RoundLine game={game} detail={false} />
 
       <div className={`outcome-banner ${won ? 'outcome-win' : 'outcome-lose'} mi-outcome`}>
-        <div className="outcome-icon">{r.caught ? '🔎' : '🎭'}</div>
         <div className="outcome-title">{r.caught ? 'Imposter caught!' : 'The Imposter got away!'}</div>
         <div className="outcome-subtitle">
           <PlayerDot color={colorById[r.imposterId]} className="player-cdot-inline" onColor />
@@ -42,8 +41,14 @@ export default function RoundReveal({ game, players, myId, isHost, actions }) {
       </div>
 
       <div>
-        <span className="label">The sequence</span>
-        <SequenceStrip type={game.sequenceType} items={r.sequence} />
+        <span className="label">
+          The sequence · {TYPE_LABELS[r.type]} · {r.length} items, {r.viewSec}s
+        </span>
+        <SequenceStrip items={r.sequence} />
+        <p className="hint center-text mi-difficulty">
+          Difficulty {r.difficultyScore}
+          {r.caught ? ` · getting away was worth +${r.evadeWorth}` : ` · +${r.evadeWorth} to the Imposter`}
+        </p>
       </div>
 
       <div>
@@ -68,14 +73,15 @@ export default function RoundReveal({ game, players, myId, isHost, actions }) {
 
       <Leaderboard scores={game.scores} players={players} myId={myId} label="Scores" />
 
-      {isHost ? (
+      {isHost && (
         <button type="button" className="btn btn-primary" onClick={() => actions.memoryHost('next')}>
           {last ? 'Final scores →' : 'Next round →'}
         </button>
-      ) : null}
+      )}
       <p className="hint center-text">
         {last ? 'Final scores' : 'Next round'} in {Math.ceil(msLeft / 1000)}s…
       </p>
     </div>
   )
 }
+

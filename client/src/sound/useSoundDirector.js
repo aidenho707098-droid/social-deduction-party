@@ -61,14 +61,16 @@ const PHASE_CUES = {
   // every new potato (one potato = one roundIndex), and the countdown
   // beeps, pass pops, holder ticks and explosion pop are all timed inside
   // PotatoIntro / LiveRound / ExplosionScreen.
-  // Memory Imposter: the memorize countdown ticks, the "your turn" blip
-  // and the lock-in confirm are timed inside the game's own screens.
+  // Memory Imposter: the memorize countdown ticks (the same on every phone)
+  // and the vote confirm are timed inside the game's own screens.
   'memory-imposter': {
-    questions: 'confirm',
-    evidence: REVEAL,
+    roles: REVEAL,
     vote: 'confirm',
     reveal: (c) => (c.memoryWon == null ? REVEAL : c.memoryWon ? 'correct' : 'wrong'),
   },
+  // Echo Chain: tile notes, the 3-2-1 beeps and the replay's notes are
+  // timed inside EchoPlay; the director only sounds the miss.
+  'echo-chain': { miss: 'wrong' },
   'who-am-i': {
     reveal: REVEAL,
     // correct/wrong-guess blips fire inside AskScreen (play('correct' |

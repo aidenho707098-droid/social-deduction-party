@@ -4,8 +4,10 @@ import CountUp from '../CountUp'
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
-// Also used by Hot Potato (same scores / winnerIds shape), with its own icon.
-export default function FinalStandings({ game, players, myId, isHost, onBackToLobby, icon = '🥣' }) {
+// Also used by Hot Potato and Memory Imposter (same scores / winnerIds
+// shape), with their own icon. `plainRanks` shows 1, 2, 3 instead of the
+// medal emoji (Memory Imposter uses no emoji).
+export default function FinalStandings({ game, players, myId, isHost, onBackToLobby, icon = '🥣', plainRanks = false }) {
   const nameById = Object.fromEntries(players.map((p) => [p.id, p.name]))
   const colorById = playerColorMap(players)
   const winnerIds = game.winnerIds ?? []
@@ -30,7 +32,7 @@ export default function FinalStandings({ game, players, myId, isHost, onBackToLo
         <div className="wyr-board">
           {game.scores.map((s, i) => (
             <div key={s.playerId} className={`wyr-board-row ${s.playerId === myId ? 'wyr-me' : ''}`}>
-              <span className="wyr-board-rank">{MEDALS[i] ?? i + 1}</span>
+              <span className="wyr-board-rank">{plainRanks ? i + 1 : MEDALS[i] ?? i + 1}</span>
               <span>
                 <PlayerDot color={colorById[s.playerId]} className="player-cdot-inline" />
                 {nameById[s.playerId] ?? 'Unknown'}

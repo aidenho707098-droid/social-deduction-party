@@ -112,6 +112,16 @@ const ICONS = {
       <path d="M7.4 9.4c1 .1 1.8.8 2 1.8M16.6 9.4c-1 .1-1.8.8-2 1.8M8 14.6c.9-.5 1.9-.4 2.6.3M16 14.6c-.9-.5-1.9-.4-2.6.3" />
     </>
   ),
+  // Echo Chain — a 2x2 grid of rounded tiles, the top-right one lit.
+  'echo-chain': (
+    <>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.8" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1.8" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1.8" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1.8" />
+      <path d="M17 7h.01" strokeWidth="3.4" />
+    </>
+  ),
 }
 
 export function GameIcon({ id }) {

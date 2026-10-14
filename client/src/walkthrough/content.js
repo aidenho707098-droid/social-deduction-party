@@ -255,33 +255,66 @@ export const WALKTHROUGHS = {
   'memory-imposter': {
     title: 'How Memory Imposter works',
     steps: [
+      // Plain typographic symbols, not emoji: this game uses no Twemoji.
       {
-        icon: '🧠',
-        title: 'First, a secret sequence',
-        text: 'Witnesses see it all round. The Imposter gets one quick look before it disappears. Keep yours private, and don\'t read it out loud.',
+        icon: '◎',
+        title: 'First, everyone memorizes',
+        text: 'The same sequence on every phone, for a few seconds. Keep it private, and don\'t read it out loud.',
       },
       {
-        icon: '🗣️',
-        title: 'Then, one true statement each',
-        text: 'In turn, say ONE true thing about the sequence out loud and tap Done. The Imposter bluffs and listens.',
+        icon: '◐',
+        title: 'Then, roles are dealt',
+        text: 'One player is the Imposter, and their sequence disappears. Everyone else keeps theirs on screen.',
       },
       {
-        icon: '❓',
-        title: 'Next, private proof questions',
-        text: 'Everyone answers against the clock. Whatever you\'ve picked when time runs out counts. No results until the end.',
+        icon: '❝',
+        title: 'Next, talk it out',
+        text: 'One shared timer. Make claims or ask about positions out loud: "the third digit is 7", "is the second one blue?".',
       },
       {
-        icon: '🔍',
-        title: 'Then, study the evidence',
-        text: 'A table shows everyone\'s answers next to the right ones. Some questions are tricky, so one slip isn\'t proof.',
+        icon: '✓',
+        title: 'Then, vote',
+        text: 'Most votes is out, and a tie means nobody is. Not for yourself.',
       },
       {
-        icon: '🗳️',
-        title: 'Finally, vote out the Imposter',
-        text: 'Most votes is out, and a tie means nobody is. Caught: Witnesses who voted right +3, others +1. Got away: the Imposter +4.',
+        icon: '★',
+        title: 'Finally, the reveal',
+        text: 'Caught: everyone who voted for the Imposter +2. Got away: the Imposter scores more the harder the round was.',
       },
     ],
-    phaseSteps: { roles: 0, memorize: 0, statements: 1, questions: 2, evidence: 3, discussion: 3, vote: 4, reveal: 4 },
+    phaseSteps: { memorize: 0, roles: 1, discussion: 2, vote: 3, reveal: 4 },
+  },
+
+  'echo-chain': {
+    title: 'How Echo Chain works',
+    steps: [
+      {
+        icon: '⏱️',
+        title: 'First, a 3-2-1',
+        text: 'Everyone plays in a fixed order (the strip of avatars). The chain starts empty, so the first player just adds a tile.',
+      },
+      {
+        icon: '🔁',
+        title: 'Then, echo the chain',
+        text: 'On your turn, tap the whole chain from memory, in order. Everyone sees and hears your taps live. You get 5s for the first tap and 4s between taps.',
+      },
+      {
+        icon: '➕',
+        title: 'Next, add one tile',
+        text: 'Tap any tile to add it to the end (5s). The chain grows by one, and the next player has to echo all of it.',
+      },
+      {
+        icon: '💔',
+        title: 'Miss, and you lose a life',
+        text: "A wrong tile or running out of time costs a life, and the chain is replayed once for everyone. That's the only time anyone sees it again. At 0 lives you're out and watch.",
+      },
+      {
+        icon: '🏆',
+        title: 'Finally, last one standing wins',
+        text: 'Points are rounds survived. The last player left scores the round the game ended in.',
+      },
+    ],
+    phaseSteps: { countdown: 0, echo: 1, add: 2, miss: 3, replay: 3 },
   },
 
   tournament: {

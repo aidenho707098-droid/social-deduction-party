@@ -18,7 +18,7 @@ import ChaosStatusBar from '../chaos/ChaosStatusBar'
 import ChaosVignette from '../chaos/ChaosVignette'
 import FirstTimeWalkthrough from '../walkthrough/FirstTimeWalkthrough'
 import StepBadge from '../walkthrough/StepBadge'
-import { walkthroughKeyForGame } from '../walkthrough/keyFor'
+import { walkthroughDeferred, walkthroughKeyForGame } from '../walkthrough/keyFor'
 
 export default function Lobby() {
   const { code } = useParams()
@@ -260,10 +260,16 @@ export default function Lobby() {
     hotPotatoChallenge: (passSeq, cb) => socket.emit('hot_potato_challenge', { code, passSeq }, cb),
     hotPotatoVote: (valid, cb) => socket.emit('hot_potato_vote', { code, valid }, cb),
     hotPotatoNextMatch: () => socket.emit('hot_potato_next_match', { code }),
-    memoryStatementDone: (turnId, cb) => socket.emit('memory_statement_done', { code, turnId }, cb),
-    memoryAnswer: (qIndex, value, final, cb) => socket.emit('memory_answer', { code, qIndex, value, final }, cb),
     memoryVote: (targetId, cb) => socket.emit('memory_vote', { code, targetId }, cb),
     memoryHost: (action, cb) => socket.emit('memory_host', { code, action }, cb),
+    echoTap: (tile, turnId, cb) => socket.emit('echo_chain_tap', { code, tile, turnId }, cb),
+    echoEnd: (cb) => socket.emit('echo_chain_end', { code }, cb),
+    // Live taps arrive as their own event (never in the room state).
+    // Returns the unsubscribe.
+    onEchoTap: (handler) => {
+      socket.on('echo_chain_tap', handler)
+      return () => socket.off('echo_chain_tap', handler)
+    },
     backToLobby: () => socket.emit('back_to_lobby', { code }),
     setPlayerColor: (color) => socket.emit('set_player_color', { code, color }),
     kickPlayer: (playerId) => socket.emit('kick_player', { code, playerId }),
@@ -426,7 +432,7 @@ export default function Lobby() {
           connected={connected}
           disconnectedPlayers={disconnectedPlayers}
         />
-        <FirstTimeWalkthrough walkthroughKey={wtKey} />
+        <FirstTimeWalkthrough walkthroughKey={wtKey} deferred={walkthroughDeferred(room.game, myPlayerId)} />
         <StepBadge walkthroughKey={wtKey} phase={room.game.phase} />
         <activeGame.Game
           game={room.game}

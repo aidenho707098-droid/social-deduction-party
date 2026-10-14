@@ -1,28 +1,31 @@
-// Memory Imposter selftest, one section per separately testable piece:
-//   (a) sequence + question generation — unambiguous, no trivial patterns,
-//       no format twice in a row, tricky formats present
-//   (b) role + view-window privacy — the sequence and the correct answers
-//       never leave the server when they shouldn't
-//   (c) the phase engine + timers — turn passing (never skips), auto-submit
-//       on expiry, holds and cancellations, host controls
-//   (d) the evidence table + voting + scoring
-//   (e) integrations — Chaos wiring, tournament defaults
+// Memory Imposter (v2: look, bluff, vote) selftest.
+//   (a) sequences — every type, every length: a repeat, nothing trivial,
+//       pure types stay pure, Mixed always has all three kinds
+//   (b) difficulty progression + scoring examples
+//   (c) round types — the shuffle bag over the selected chips
+//   (d) Imposter selection — never twice in a row, CAN repeat later
+//   (e) privacy — no role before the look ends; the Imposter's sequence
+//       never comes back; Witnesses get theirs back on reload
+//   (f) the phase engine — discussion timer / skip, tied vote at 3,
+//       disconnects during the look, cancelled + redone rounds
+//   (g) integrations — Chaos audit, tournament, settings migration
+//   (h) whole games: 3 / 4 / 6 players × chip sets × presets
 // Run:  node server/memory-imposter.selftest.mjs   (or npm run test:memory-imposter)
 
 import {
   SEQUENCE_TYPES,
-  DIFFICULTIES,
-  COLOR_ITEMS,
-  EMOJI_POOL,
-  COUNT_MAX,
-  alphabetFor,
-  countsOf,
+  KINDS,
+  PRESETS,
+  DIFFICULTY,
+  kindOf,
+  hasRepeat,
   isTrivial,
+  isValidSequence,
   generateSequence,
-  generateQuestions,
-  generateRound,
-  answerOf,
-  satisfies,
+  progressFor,
+  difficultyScore,
+  evadePoints,
+  nextRoundType,
 } from "./games/memorySequence.js";
 import * as mi from "./games/memory-imposter.js";
 import { MODIFIERS } from "./chaos.js";
@@ -37,8 +40,8 @@ function check(name, cond, detail = "") {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  — ${detail}` : ""}`);
 }
 const section = (t) => console.log(`\n── ${t} ──`);
+const json = (x) => JSON.stringify(x);
 
-// Small seeded RNG so failures reproduce.
 function seeded(seed) {
   let s = seed >>> 0;
   return () => {
@@ -50,488 +53,430 @@ function seeded(seed) {
   };
 }
 
+const P3 = ["a", "b", "c"];
 const P4 = ["a", "b", "c", "d"];
 const P6 = ["a", "b", "c", "d", "e", "f"];
+const T0 = 1_000_000;
 
 // ===================================================================
-section("(a) sequence + question generation");
+section("(a) sequences");
 {
-  let bad = { repeat: 0, trivial: 0, run3: 0, twice: 0, absent: 0, singles: 0, length: 0, alpha: 0 };
-  let qBad = { ambiguous: 0, sameFamily: 0, noTricky: 0, dup: 0, count: 0 };
-  const lengths = [5, 6, 8, 10, 12];
-  let rounds = 0;
+  const bad = { len: 0, repeat: 0, trivial: 0, pure: 0, mixedKinds: 0, items: 0 };
+  let n = 0;
   for (const type of SEQUENCE_TYPES) {
-    for (const length of lengths) {
-      for (let seed = 1; seed <= 150; seed++) {
-        const rng = seeded(seed * 97 + length);
-        for (const questionCount of [3, 4, 5, 6]) {
-          const r = generateRound({ type, length, questionCount }, rng);
-          rounds++;
-          const seq = r.sequence;
-          const counts = countsOf(seq);
-          if (seq.length !== length) bad.length++;
-          if (!seq.every((x) => r.alphabet.includes(x))) bad.alpha++;
-          if (![...counts.values()].some((c) => c > 1)) bad.repeat++;
-          if (isTrivial(seq)) bad.trivial++;
-          if (seq.some((x, i) => i >= 2 && x === seq[i - 1] && x === seq[i - 2])) bad.run3++;
-          if ([...counts.values()].filter((c) => c === 2).length !== 1) bad.twice++;
-          if (!r.alphabet.some((x) => !counts.has(x))) bad.absent++;
-          if ([...counts.values()].filter((c) => c === 1).length < 2) bad.singles++;
-
-          const qs = r.questions;
-          if (qs.length !== questionCount) qBad.count++;
-          for (let i = 0; i < qs.length; i++) {
-            const q = qs[i];
-            // Exactly one possible input satisfies the question.
-            const space = q.input === "count" ? Array.from({ length: COUNT_MAX + 1 }, (_, k) => k) : r.alphabet;
-            const hits = space.filter((v) => satisfies(seq, q, v));
-            if (hits.length !== 1 || hits[0] !== q.answer || answerOf(seq, q) !== q.answer) qBad.ambiguous++;
-            if (i > 0 && qs[i - 1].family === q.family) qBad.sameFamily++;
-            if (qs.slice(0, i).some((p) => p.kind === q.kind && p.n === q.n && p.item === q.item)) qBad.dup++;
-          }
-          if (questionCount >= 4 && !qs.some((q) => q.tricky)) qBad.noTricky++;
-        }
+    for (let length = 4; length <= 12; length++) {
+      for (let seed = 1; seed <= 300; seed++) {
+        const seq = generateSequence(type, length, seeded(seed * 31 + length));
+        n++;
+        if (seq.length !== length) bad.len++;
+        if (!hasRepeat(seq)) bad.repeat++;
+        if (isTrivial(seq)) bad.trivial++;
+        if (!seq.every((x) => KINDS[kindOf(x)]?.includes(x.slice(2)))) bad.items++;
+        if (type !== "mixed" && new Set(seq.map(kindOf)).size !== 1) bad.pure++;
+        if (type === "mixed" && new Set(seq.map(kindOf)).size !== 3) bad.mixedKinds++;
       }
     }
   }
-  check(`${rounds} rounds: every sequence has the asked length`, bad.length === 0, JSON.stringify(bad));
-  check("every item comes from the round's alphabet", bad.alpha === 0);
-  check("every sequence has at least one repeated item", bad.repeat === 0);
-  check("no trivial pattern (all same / monotone / 2-period)", bad.trivial === 0);
-  check("no run of three identical items", bad.run3 === 0);
-  check("exactly one item appears exactly twice", bad.twice === 0);
-  check("at least one alphabet item is absent (decoy)", bad.absent === 0);
-  check("at least two singletons", bad.singles === 0);
-  check("every question has exactly one correct answer", qBad.ambiguous === 0, JSON.stringify(qBad));
-  check("never the same format twice in a row", qBad.sameFamily === 0);
-  check("no duplicate question in a round", qBad.dup === 0);
-  check("4+ questions always include a tricky one", qBad.noTricky === 0);
-  check("question count honoured", qBad.count === 0);
+  check(`${n} sequences: right length`, bad.len === 0, json(bad));
+  check("every item is a real item", bad.items === 0);
+  check("every sequence repeats an item (same kind + value)", bad.repeat === 0);
+  check("nothing trivially patterned", bad.trivial === 0);
+  check("Digits / Colors / Shapes rounds are pure", bad.pure === 0);
+  check("every Mixed sequence has all three kinds", bad.mixedKinds === 0);
+  check("Digits only use d:, Colors c:, Shapes s:", ["digits", "colors", "shapes"].every((t, i) => generateSequence(t, 8).every((x) => kindOf(x) === "dcs"[i])));
+  check("6 colors, 6 shapes, 10 digits", KINDS.c.length === 6 && KINDS.s.length === 6 && KINDS.d.length === 10);
 
-  // Format coverage + the tricky mix across many rounds.
-  const kinds = new Set();
-  let tricky = 0;
-  let total = 0;
-  for (let seed = 1; seed <= 300; seed++) {
-    const r = generateRound({ type: "digits", length: 8, questionCount: 4 }, seeded(seed));
-    for (const q of r.questions) {
-      kinds.add(q.kind);
-      total++;
-      if (q.tricky) tricky++;
-    }
-  }
-  check("all six formats appear", ["position", "fromEnd", "last", "count", "twice", "after"].every((k) => kinds.has(k)), [...kinds].join());
-  check("tricky questions are a minority mix (15–60%)", tricky / total > 0.15 && tricky / total < 0.6, `${Math.round((100 * tricky) / total)}%`);
+  // Mixed: each position's KIND is uniform (digits don't dominate).
+  const counts = { d: 0, c: 0, s: 0 };
+  const rng = seeded(99);
+  for (let i = 0; i < 4000; i++) for (const x of generateSequence("mixed", 12, rng)) counts[kindOf(x)]++;
+  const total = counts.d + counts.c + counts.s;
+  check("Mixed: each kind ~1/3 of items", Object.values(counts).every((c) => Math.abs(c / total - 1 / 3) < 0.02), json(counts));
 
-  check("isTrivial catches the obvious ones", isTrivial(["1", "2", "3", "4", "5", "6"]) && isTrivial(["4", "4", "4", "4"]) && isTrivial(["1", "2", "1", "2", "1", "2"]) && isTrivial(["9", "7", "7", "5", "3", "1"]));
-  check("isTrivial leaves a real one alone", !isTrivial(["3", "8", "1", "8", "5", "0"]));
-  check("Colors alphabet = the 8 shapes", alphabetFor("colors").length === 8 && alphabetFor("colors").every((x) => COLOR_ITEMS.includes(x)));
-  check("Emoji alphabet = 8 distinct from the pool", new Set(alphabetFor("emoji")).size === 8 && alphabetFor("emoji").every((x) => EMOJI_POOL.includes(x)));
-  check("difficulty presets", DIFFICULTIES.easy.length === 6 && DIFFICULTIES.easy.viewMs === 8000 && DIFFICULTIES.medium.length === 8 && DIFFICULTIES.medium.viewMs === 6000 && DIFFICULTIES.hard.length === 10 && DIFFICULTIES.hard.viewMs === 5000);
-  const qs = generateQuestions(generateSequence(10, alphabetFor("digits")), alphabetFor("digits"), 6);
-  check("6 questions over 5 formats still never repeat back to back", qs.every((q, i) => i === 0 || qs[i - 1].family !== q.family));
+  check("isTrivial: ascending / all same / ABAB", isTrivial(["d:1", "d:2", "d:2", "d:5"]) && isTrivial(["c:blue", "c:blue", "c:blue", "c:blue"]) && isTrivial(["s:star", "s:heart", "s:star", "s:heart"]));
+  check("isValidSequence: a mixed one missing a kind fails", !isValidSequence("mixed", ["d:1", "d:1", "c:blue", "d:4"]));
 }
 
 // ===================================================================
-// Helpers to drive a game through its phases with fake time.
-function newGame(ids = P4, options = {}, seed = 7) {
-  return mi.createGame(ids, { difficulty: "medium", sequenceType: "digits", questions: 4, answerSec: 8, rounds: 3, ...options }, seeded(seed));
-}
-function tickTo(game, present, at) {
-  return mi.tick(game, present, at);
-}
-// Run the clock forward until the phase changes (or a cap).
-function runPhase(game, present, from) {
-  let t = from;
-  const phase = game.phase;
-  const serial = game.roundSerial;
-  for (let i = 0; i < 400 && game.phase === phase && game.roundSerial === serial; i++) {
-    t += 500;
-    mi.tick(game, present, t);
-  }
-  return t;
-}
-const imp = (g) => g.round.imposterId;
-const wit = (g, ids) => ids.find((p) => p !== imp(g));
-const json = (x) => JSON.stringify(x);
-
-section("(b) role + view-window privacy");
+section("(b) difficulty progression + scoring");
 {
-  const g = newGame(P4);
-  let t = Date.now();
-  const I = imp(g);
-  const W = wit(g, P4);
-  const seq = g.round.sequence;
-  const seqNeedle = (state) => {
-    // The exact sequence, in order, anywhere in the payload.
-    const s = json(state);
-    return s.includes(json(seq));
+  const log = (label, start) => {
+    const rows = Array.from({ length: 12 }, (_, r) => progressFor(start, r));
+    console.log(`      ${label.padEnd(18)} ${rows.map((p, r) => `R${r + 1}:${p.length}/${p.viewSec}s`).join(" ")}`);
+    return rows;
   };
-
-  check("roles: nobody gets the sequence yet", !seqNeedle(mi.getPrivateState(g, I, t)) && !seqNeedle(mi.getPrivateState(g, W, t)));
-  check("roles: role is private and correct", mi.getPrivateState(g, I, t).memoryImposter.role === "imposter" && mi.getPrivateState(g, W, t).memoryImposter.role === "witness");
-  check("roles: public state names no Imposter", !json(mi.getPublicState(g, P4, t)).includes('"imposterId"'));
-
-  t = runPhase(g, P4, t);
-  check("-> memorize", g.phase === "memorize");
-  const pImp = mi.getPrivateState(g, I, t).memoryImposter;
-  check("memorize: the Imposter sees the sequence inside the window", json(pImp.sequence) === json(seq) && pImp.viewMsLeft > 0 && pImp.viewMs === 6000);
-  check("memorize: Witness sees it", json(mi.getPrivateState(g, W, t).memoryImposter.sequence) === json(seq));
-  check("memorize: public state never has the sequence", !seqNeedle(mi.getPublicState(g, P4, t)));
-
-  // One ms before the window ends vs. at the deadline.
-  const end = g.deadline;
-  check("Imposter payload at deadline-1ms still has it", Boolean(mi.getPrivateState(g, I, end - 1).memoryImposter.sequence));
-  check("Imposter payload AT the deadline has none (even before the tick)", !mi.getPrivateState(g, I, end).memoryImposter.sequence);
-
-  t = runPhase(g, P4, t);
-  check("-> statements", g.phase === "statements");
-  const after = mi.getPrivateState(g, I, t).memoryImposter;
-  check("after the window: Imposter gets length only", after.sequence === undefined && after.length === seq.length && !seqNeedle(after));
-  check("after the window: Witness still has it", json(mi.getPrivateState(g, W, t).memoryImposter.sequence) === json(seq));
-
-  // Walk every remaining phase and check every payload the Imposter or the
-  // public could ever receive.
-  const correct = g.round.questions.map((q) => q.answer);
-  let leaks = 0;
-  let answerLeaks = 0;
-  let guard = 0;
-  while (g.phase !== "reveal" && guard++ < 200) {
-    const pub = mi.getPublicState(g, P4, t);
-    if (seqNeedle(pub) || seqNeedle(mi.getPrivateState(g, I, t))) leaks++;
-    if (["statements", "questions"].includes(g.phase)) {
-      const s = json(pub) + json(mi.getPrivateState(g, I, t)) + json(mi.getPrivateState(g, W, t));
-      if (s.includes('"answer"') || s.includes('"correct"')) answerLeaks++;
-      if (g.phase === "questions" && pub.question.answer !== undefined) answerLeaks++;
-    }
-    if (g.phase === "questions") {
-      // Witness answers right, Imposter guesses "0".
-      const i = g.round.questionIndex;
-      const q = g.round.questions[i];
-      for (const p of P4) mi.submitAnswer(g, p, i, p === I ? (q.input === "count" ? 0 : "0") : q.answer, true, P4, t);
-      continue;
-    }
-    t = runPhase(g, P4, t);
+  const checkCurve = (label, start, rows) => {
+    const capRound = rows.findIndex((p) => p.length === 12);
+    const grows = rows.every((p, r) => p.length === Math.min(12, start.length + r));
+    const flat = rows.every((p, r) => r > capRound || p.viewSec === start.viewSec);
+    const drops = rows.every((p, r) => r <= capRound || p.viewSec === Math.max(3, start.viewSec - 0.5 * (r - capRound)));
+    check(`${label}: +1 item a round to 12, view flat until the first 12-item round, then -0.5s a round`, grows && flat && drops);
+  };
+  for (const [k, start] of Object.entries(PRESETS)) {
+    const rows = log(k, start);
+    checkCurve(k, start, rows);
   }
-  check("no state ever carries the sequence before the final reveal", leaks === 0, `${leaks}`);
-  check("no correct answer / correctness before the evidence", answerLeaks === 0, `${answerLeaks}`);
-  const ev = g.round.evidence;
-  check("evidence carries the correct answers", ev.questions.map((q) => q.answer).join() === correct.join());
-  check("reveal: public result has the sequence + Imposter", json(mi.getPublicState(g, P4, t).result.sequence) === json(seq) && mi.getPublicState(g, P4, t).result.imposterId === I);
+  const easy = Array.from({ length: 12 }, (_, r) => progressFor(PRESETS.easy, r));
+  check("Easy: 12 items first in round 9, 9.5s in round 10", easy[8].length === 12 && easy[8].viewSec === 10 && easy[9].viewSec === 9.5);
+  const c12 = log("custom 12 / 5s", { length: 12, viewSec: 5 });
+  check("start at 12: reductions begin in round 2, floor 3s", c12[0].viewSec === 5 && c12[1].viewSec === 4.5 && c12[4].viewSec === 3 && c12[11].viewSec === 3);
+  const c3 = log("custom 4 / 3s", { length: 4, viewSec: 3 });
+  check("start at the 3s floor: never below it", c3.every((p) => p.viewSec === 3));
+  const long = Array.from({ length: 40 }, (_, r) => progressFor(PRESETS.hard, r));
+  check("flat once 12 items + 3s", long.slice(30).every((p) => p.length === 12 && p.viewSec === 3));
 
-  // Reconnect after the window: still nothing.
-  const g2 = newGame(P4, {}, 11);
-  let t2 = runPhase(g2, P4, Date.now());
-  t2 = runPhase(g2, P4, t2);
-  check("a reconnecting Imposter after the window gets no sequence", g2.phase === "statements" && mi.getPrivateState(g2, imp(g2), t2 + 10).memoryImposter.sequence === undefined);
-
-  // Other players' answers never in my private state.
-  const g3 = newGame(P4, { statements: false }, 12);
-  let t3 = runPhase(g3, P4, Date.now());
-  t3 = runPhase(g3, P4, t3);
-  check("statements off -> straight to questions", g3.phase === "questions");
-  const [p1, p2] = P4;
-  mi.submitAnswer(g3, p1, 0, g3.round.questions[0].input === "count" ? 2 : "7", false, P4, t3);
-  const priv2 = mi.getPrivateState(g3, p2, t3).memoryImposter;
-  check("my private state never holds anyone else's answer", priv2.myAnswer === null);
-  check("public shows nobody locked for a draft", mi.getPublicState(g3, P4, t3).answeredIds.length === 0);
+  check("score formula", difficultyScore(4, 10) === 3 && difficultyScore(6, 15) === 4 && Math.abs(difficultyScore(12, 3) - 12.4) < 1e-9);
+  check("evade: Easy R1 = 3", evadePoints(4, 10) === 3);
+  check("evade: Medium R1 = 4", evadePoints(6, 15) === 4);
+  check("evade: Hard R1 = 6", evadePoints(8, 15) === 6);
+  const m7 = progressFor(PRESETS.medium, 6);
+  check("evade: Medium round 7 (12 items, 15s) = 9", m7.length === 12 && m7.viewSec === 15 && evadePoints(12, 15) === 9);
+  check("evade: Custom 12 items / 3s = 11", evadePoints(12, 3) === 11);
+  check("catch points = 2, constants in one config", DIFFICULTY.catchPoints === 2 && DIFFICULTY.evadeFactor === 0.8);
 }
 
 // ===================================================================
-section("(c) phase engine + timers");
+section("(c) round types — shuffle bag");
 {
-  // Statement turns: timeout passes to EXACTLY the next player.
-  const g = newGame(P6, {}, 21);
-  let t = runPhase(g, P6, Date.now());
-  t = runPhase(g, P6, t);
-  check("6 players: one statement pass", g.phase === "statements" && g.round.turns.passes === 1);
-  const order = g.round.turns.order;
-  const seen = [];
-  for (let i = 0; i < order.length; i++) {
-    seen.push(mi.getPublicState(g, P6, t).turns.speakerId);
-    if (i % 2) {
-      const turnId = g.round.turns.turnId;
-      mi.statementDone(g, seen.at(-1), turnId, {}, t);
-      // A double tap carrying the same turnId does nothing.
-      check(`turn ${i + 1}: double "Done" can't skip the next player`, !mi.statementDone(g, seen.at(-1), turnId, {}, t).ok);
-    } else {
-      t = g.deadline + 1;
-      mi.tick(g, P6, t); // timeout
-      mi.tick(g, P6, t); // a second tick at the same instant must NOT pass again
+  const run = (types, rounds, seed) => {
+    const rng = seeded(seed);
+    let bag = [];
+    let last = null;
+    const out = [];
+    for (let i = 0; i < rounds; i++) {
+      const r = nextRoundType(bag, types, last, rng);
+      bag = r.bag;
+      last = r.type;
+      out.push(r.type);
+    }
+    return out;
+  };
+  let bagOk = true;
+  let boundaryOk = true;
+  let consecutive = 0;
+  const combos = [["shapes", "colors"], ["digits", "mixed"], ["digits", "colors", "shapes", "mixed"], ["colors", "shapes", "mixed"]];
+  for (const types of combos) {
+    for (let seed = 1; seed <= 400; seed++) {
+      const seqs = run(types, types.length * 6, seed);
+      for (let i = 0; i < seqs.length; i += types.length) {
+        const chunk = seqs.slice(i, i + types.length);
+        if (new Set(chunk).size !== types.length) bagOk = false; // each once per bag
+      }
+      for (let i = types.length; i < seqs.length; i += types.length) if (seqs[i] === seqs[i - 1]) boundaryOk = false;
+      for (let i = 1; i < seqs.length; i++) if (seqs[i] === seqs[i - 1]) consecutive++;
     }
   }
-  check("every player got exactly one turn, in order (timeouts never skip)", seen.join() === order.join(), `${seen} vs ${order}`);
-  check("-> questions after the last turn", g.phase === "questions");
+  check("every selected chip once before any repeats", bagOk);
+  check("never the same chip on both sides of a reshuffle", boundaryOk);
+  check("so never the same chip twice in a row", consecutive === 0);
+  check("a single chip: every round uses it", run(["shapes"], 8, 3).every((t) => t === "shapes"));
 
-  const g5 = newGame(["a", "b", "c", "d", "e"], {}, 22);
-  let t5 = runPhase(g5, ["a", "b", "c", "d", "e"], Date.now());
-  t5 = runPhase(g5, ["a", "b", "c", "d", "e"], t5);
-  check("5 players: two statement passes (10 turns)", g5.round.turns.passes === 2 && mi.getPublicState(g5, ["a", "b", "c", "d", "e"], t5).turns.total === 10);
-  const notSpeaker = g5.round.turns.order[1];
-  check("only the speaker can tap Done", !mi.statementDone(g5, notSpeaker, g5.round.turns.turnId, {}, t5).ok);
-  check("the host can skip a turn", mi.statementDone(g5, notSpeaker, g5.round.turns.turnId, { asHost: true }, t5).ok && g5.round.turns.index === 1);
+  // Shapes + Colors over 6 rounds of a REAL game: each round purely one type.
+  const g = mi.createGame(P4, { sequenceTypes: ["shapes", "colors"], difficulty: "easy", rounds: 6 }, seeded(5));
+  const types = [];
+  const pure = [];
+  while (g.phase !== "final") {
+    if (g.phase === "memorize") {
+      types.push(g.round.type);
+      pure.push(new Set(g.round.sequence.map(kindOf)).size === 1 && kindOf(g.round.sequence[0]) === (g.round.type === "shapes" ? "s" : "c"));
+    }
+    while (g.phase !== "reveal" && g.phase !== "final") mi.forceAdvance(g, P4);
+    if (g.phase === "reveal") mi.forceAdvance(g, P4);
+  }
+  console.log(`      Shapes+Colors, 6 rounds: ${types.join(", ")}`);
+  check("Shapes+Colors game: 6 rounds, each purely one type", types.length === 6 && pure.every(Boolean));
+  check("...each bag of 2 uses both, never the same on a boundary", [0, 2, 4].every((i) => types[i] !== types[i + 1]) && [2, 4].every((i) => types[i] !== types[i - 1]));
+}
 
-  // Questions: drafts auto-submit on expiry; locks advance early.
-  const q = newGame(P4, { statements: false }, 23);
-  let tq = runPhase(q, P4, Date.now());
-  tq = runPhase(q, P4, tq);
-  const q0 = q.round.questions[0];
-  const draftVal = q0.input === "count" ? 1 : "5";
-  mi.submitAnswer(q, "a", 0, draftVal, false, P4, tq); // draft only
-  mi.submitAnswer(q, "b", 0, q0.answer, true, P4, tq);
-  check("drafts don't close the question", q.round.questionIndex === 0);
-  tq = q.deadline + 600;
-  mi.tick(q, P4, tq);
-  check("expiry moves to question 2", q.round.questionIndex === 1);
-  check("a's draft was auto-submitted", q.round.answers.get("a")[0].value === draftVal);
-  check("c never answered -> no answer", !q.round.answers.get("c")?.[0]);
-  check("a stale answer for question 1 is refused", !mi.submitAnswer(q, "c", 0, draftVal, true, P4, tq).ok);
-  check("a late answer past the grace is refused", !mi.submitAnswer(q, "c", 1, draftVal, true, P4, q.deadline + 2000).ok);
-  const q1 = q.round.questions[1];
-  check("a junk answer is refused", !mi.submitAnswer(q, "c", 1, q1.input === "count" ? 99 : "🍕", true, P4, tq).ok);
-  for (const p of P4) mi.submitAnswer(q, p, 1, q1.answer, true, P4, tq);
-  check("everyone locking in moves on at once", q.round.questionIndex === 2);
-  check("a locked answer can't be changed", (() => {
-    const i = q.round.questionIndex;
-    const qq = q.round.questions[i];
-    mi.submitAnswer(q, "a", i, qq.answer, true, ["x"], tq);
-    return !mi.submitAnswer(q, "a", i, qq.input === "count" ? 4 : "1", true, ["x"], tq).ok;
-  })());
-  // A disconnected player isn't waited on.
-  const i2 = q.round.questionIndex;
-  for (const p of ["a", "b", "c"]) mi.submitAnswer(q, p, i2, q.round.questions[i2].answer, true, ["a", "b", "c"], tq);
-  check("a disconnected player isn't waited on", q.round.questionIndex === i2 + 1 || q.phase === "evidence");
+// ===================================================================
+// Driving helpers.
+function playRound(g, present, { votes = "catch" } = {}) {
+  // memorize -> roles -> discussion -> vote
+  while (g.phase === "memorize" || g.phase === "roles" || g.phase === "discussion") mi.forceAdvance(g, present);
+  if (g.phase !== "vote") return;
+  const I = g.round.imposterId;
+  const W = present.filter((p) => p !== I && g.roster.includes(p) && !g.removed.has(p));
+  if (votes === "catch") {
+    for (const p of W) mi.submitVote(g, p, I, present);
+    mi.submitVote(g, I, W[0], present);
+  }
+  if (g.phase === "vote") mi.forceAdvance(g, present);
+}
 
-  // Imposter drops during the view window: hold, then resume.
-  const h = newGame(P4, {}, 24);
-  let th = runPhase(h, P4, Date.now());
-  const I = imp(h);
-  const away = P4.filter((p) => p !== I);
-  th += 2000;
-  mi.reconcilePresence(h, away, { final: false });
-  check("Imposter blip in memorize -> view window holds", h.phase === "memorize" && h.round.hold === true);
-  const frozen = h.round.viewLeftMs;
-  mi.tick(h, away, th + 30_000);
-  check("held: no clock runs while they're away", h.phase === "memorize" && h.round.viewLeftMs === frozen);
-  check("held: the Imposter gets no sequence while away", mi.getPrivateState(h, I, th).memoryImposter.sequence === undefined);
-  check("held: public shows who we're waiting on", mi.getPublicState(h, away, th).hold?.playerId === I);
-  mi.tick(h, P4, th + 31_000);
-  check("they're back -> window resumes with the time they had left", h.round.hold === false && h.deadline - (th + 31_000) === frozen);
-  check("...and they get the sequence again for the rest of the window", Boolean(mi.getPrivateState(h, I, th + 31_000).memoryImposter.sequence));
-
-  // Imposter doesn't come back: cancelled, no points, a NEW Imposter.
-  const c = newGame(P4, {}, 25);
-  let tc = runPhase(c, P4, Date.now());
-  const I2 = imp(c);
-  const serial = c.roundSerial;
-  const left = P4.filter((p) => p !== I2);
-  mi.reconcilePresence(c, left, { final: false });
-  mi.reconcilePresence(c, left, { final: true }); // grace expired
-  check("grace expired -> round cancelled and redealt", c.phase === "roles" && c.roundSerial === serial + 1 && c.roundIndex === 0);
-  check("cancelled round: a new Imposter, not the leaver", imp(c) !== I2 && left.includes(imp(c)));
-  check("cancelled round: no points", [...c.scores.values()].every((v) => v === 0));
-  check("cancelled round: event for the screen", c.lastEvent?.type === "cancelled" && c.lastEvent.playerId === I2);
-
-  // Host force-proceed during a hold cancels too.
-  const f = newGame(P4, {}, 26);
-  let tf = runPhase(f, P4, Date.now());
-  const I3 = imp(f);
-  mi.reconcilePresence(f, P4.filter((p) => p !== I3), { final: false });
-  mi.forceAdvance(f, P4.filter((p) => p !== I3));
-  check("force proceed while held -> cancel + redeal", f.phase === "roles" && imp(f) !== I3);
-
-  // Imposter rotation: nobody twice until everyone's had a go.
-  const rot = newGame(P6, { rounds: 12, statements: false }, 27);
+section("(d) Imposter selection");
+{
+  let back2back = 0;
+  let repeats = 0;
+  let firstCounts = { a: 0, b: 0, c: 0 };
+  for (let seed = 1; seed <= 300; seed++) {
+    const g = mi.createGame(P3, { rounds: 6 }, seeded(seed));
+    firstCounts[g.round.imposterId]++;
+    const imps = [];
+    while (g.phase !== "final") {
+      imps.push(g.round.imposterId);
+      playRound(g, P3);
+      mi.forceAdvance(g, P3);
+    }
+    for (let i = 1; i < imps.length; i++) if (imps[i] === imps[i - 1]) back2back++;
+    if (new Set(imps).size < imps.length) repeats++;
+  }
+  check("300 games of 6 rounds at 3 players: never the same Imposter twice in a row", back2back === 0);
+  check("...but players DO repeat later (no everyone-once cycle)", repeats === 300);
+  check("round 1 is uniform over all players", Object.values(firstCounts).every((c) => c > 70), json(firstCounts));
+  const g = mi.createGame(P6, { rounds: 8 }, seeded(77));
   const imps = [];
-  let tr = Date.now();
-  for (let r = 0; r < 12 && rot.phase !== "final"; r++) {
-    imps.push(imp(rot));
-    mi.forceAdvance(rot, P6); // roles
-    mi.forceAdvance(rot, P6); // memorize
-    while (rot.phase === "questions") mi.forceAdvance(rot, P6);
-    mi.forceAdvance(rot, P6); // evidence
-    mi.forceAdvance(rot, P6); // discussion
-    mi.forceAdvance(rot, P6); // vote
-    mi.forceAdvance(rot, P6); // reveal -> next
+  while (g.phase !== "final") {
+    imps.push(g.round.imposterId);
+    playRound(g, P6);
+    mi.forceAdvance(g, P6);
   }
-  check("rotation: first 6 Imposters are all different", new Set(imps.slice(0, 6)).size === 6, imps.join());
-  check("rotation: next 6 are all different again", new Set(imps.slice(6, 12)).size === 6, imps.join());
-  check("force proceed walks a whole game to the end", rot.phase === "final");
-
-  // Discussion host controls.
-  const d = newGame(P4, { statements: false, discussionSec: 60 }, 28);
-  for (let k = 0; k < 2; k++) mi.forceAdvance(d, P4);
-  while (d.phase === "questions") mi.forceAdvance(d, P4);
-  mi.forceAdvance(d, P4); // evidence -> discussion
-  const td = Date.now();
-  const before = d.deadline;
-  check("discussion uses the host's time", d.phase === "discussion" && d.windowMs === 60_000);
-  mi.extendDiscussion(d, td);
-  check("extend adds 30s", d.deadline - before === 30_000 && d.windowMs === 90_000);
-  mi.skipDiscussion(d, td);
-  check("skip goes straight to the vote", d.phase === "vote");
-
-  // A Witness leaving for good mid-statements: their turn skipped once.
-  const w = newGame(P6, {}, 29);
-  let tw = runPhase(w, P6, Date.now());
-  tw = runPhase(w, P6, tw);
-  const order2 = w.round.turns.order;
-  const speaker0 = order2[0];
-  if (speaker0 !== imp(w)) {
-    const present = P6.filter((p) => p !== speaker0);
-    mi.reconcilePresence(w, present, { final: true });
-    check("current speaker leaving -> exactly the next player", mi.getPublicState(w, present, tw).turns.speakerId === order2[1]);
-  } else {
-    check("current speaker leaving -> (seed made it the Imposter; cancelled instead)", true);
-  }
+  console.log(`      6 players, 8 rounds: ${imps.join(" ")}`);
+  check("6-player game: no back-to-back Imposter", imps.every((p, i) => i === 0 || p !== imps[i - 1]));
 }
 
 // ===================================================================
-section("(d) evidence table + voting + scoring");
+section("(e) privacy");
 {
-  const g = newGame(P4, { statements: false, questions: 3 }, 31);
-  let t = runPhase(g, P4, Date.now());
-  t = runPhase(g, P4, t);
-  const I = imp(g);
-  const W = P4.filter((p) => p !== I);
-  for (let i = 0; i < 3; i++) {
-    const q = g.round.questions[i];
-    for (const p of P4) {
-      if (p === I && i === 1) continue; // Imposter misses one
-      const wrong = q.input === "count" ? (q.answer + 1) % (COUNT_MAX + 1) : g.round.alphabet.find((x) => x !== q.answer);
-      mi.submitAnswer(g, p, i, p === I && i === 0 ? wrong : q.answer, true, P4, t);
-    }
-    if (g.phase === "questions" && g.round.questionIndex === i) {
-      t = g.deadline + 600;
-      mi.tick(g, P4, t);
-    }
+  const g = mi.createGame(P4, { difficulty: "medium" }, seeded(8));
+  const t = Date.now();
+  const I = g.round.imposterId;
+  const seq = json(g.round.sequence);
+  const payloads = P4.map((p) => mi.getPrivateState(g, p, t));
+  check("memorize: every private payload is identical (no role, same shape)", payloads.every((x) => json(x) === json(payloads[0])), json(payloads[0]));
+  check("memorize: it carries the sequence", json(payloads[0].memoryImposter.sequence) === seq);
+  check("memorize: no role anywhere", !json(payloads).includes("role") && !json(payloads).includes("imposter"));
+  const pub = json(mi.getPublicState(g, P4, t));
+  check("memorize: public has no sequence, no Imposter", !pub.includes(seq) && !pub.includes('"imposterId"') && !pub.includes('"role"'));
+
+  mi.tick(g, P4, g.deadline + 1); // look over -> roles
+  check("-> roles", g.phase === "roles");
+  const pi = mi.getPrivateState(g, I).memoryImposter;
+  check("roles: Imposter told, no sequence", pi.role === "imposter" && pi.sequence === undefined && !json(pi).includes(seq));
+  const W = P4.find((p) => p !== I);
+  check("roles: Witness keeps the sequence", mi.getPrivateState(g, W).memoryImposter.role === "witness" && json(mi.getPrivateState(g, W).memoryImposter.sequence) === seq);
+  // A reload = the same getPrivateState call; walk every later phase.
+  let leaks = 0;
+  let witnessOk = true;
+  while (g.phase !== "reveal") {
+    if (json(mi.getPrivateState(g, I)).includes(seq)) leaks++;
+    if (json(mi.getPublicState(g, P4)).includes(seq) || json(mi.getPublicState(g, P4)).includes('"imposterId"')) leaks++;
+    if (json(mi.getPrivateState(g, W).memoryImposter.sequence) !== seq) witnessOk = false;
+    mi.forceAdvance(g, P4);
   }
-  check("-> evidence", g.phase === "evidence");
-  const ev = mi.getPublicState(g, P4, t).evidence;
-  const rowI = ev.rows.find((r) => r.playerId === I);
-  check("evidence: Imposter's wrong answer flagged", rowI.answers[0].correct === false);
-  check("evidence: Imposter's missing answer = no answer", rowI.answers[1].value === null && rowI.answers[1].correct === false);
-  check("evidence: Witness rows all correct", ev.rows.filter((r) => r.playerId !== I).every((r) => r.answers.every((a) => a.correct)));
-  check("evidence: header row has every correct answer", ev.questions.every((q) => q.answer !== undefined));
-  check("evidence doesn't name the Imposter", !json(mi.getPublicState(g, P4, t)).includes("imposterId"));
-
-  t = runPhase(g, P4, t); // -> discussion
-  t = runPhase(g, P4, t); // -> vote
-  check("-> vote", g.phase === "vote");
-  check("can't vote for yourself", !mi.submitVote(g, W[0], W[0], P4, t).ok);
-  mi.submitVote(g, W[0], I, P4, t);
-  mi.submitVote(g, W[1], I, P4, t);
-  mi.submitVote(g, W[2], W[0], P4, t);
-  check("voted indicator shows who voted, not for whom", json(mi.getPublicState(g, P4, t).votedIds.sort()) === json([W[0], W[1], W[2]].sort()) && !("votes" in mi.getPublicState(g, P4, t)));
-  mi.submitVote(g, I, W[2], P4, t);
-  check("everyone voted -> reveal", g.phase === "reveal");
-  const res = g.round.result;
-  check("plurality eliminates the Imposter -> caught", res.caught && res.eliminatedId === I);
-  check("scoring when caught: voters +3, other Witness +1, Imposter 0",
-    res.points[W[0]] === 3 && res.points[W[1]] === 3 && res.points[W[2]] === 1 && res.points[I] === 0, json(res.points));
-
-  // Tie -> evades.
-  const tie = mi.tallyVotes(new Map([["a", "b"], ["b", "a"], ["c", "d"], ["d", "c"]]), P4);
-  check("a tie eliminates nobody", tie.eliminatedId === null && tie.tie);
-  const none = mi.tallyVotes(new Map(), P4);
-  check("no votes eliminates nobody", none.eliminatedId === null);
-
-  const g2 = newGame(P4, { statements: false, questions: 3 }, 32);
-  while (g2.phase !== "vote") mi.forceAdvance(g2, P4);
-  const I2 = imp(g2);
-  const W2 = P4.filter((p) => p !== I2);
-  mi.submitVote(g2, W2[0], W2[1], P4);
-  mi.submitVote(g2, W2[1], W2[0], P4);
-  mi.forceAdvance(g2, P4); // vote closes on a 1-1 tie
-  check("tie -> Imposter evades: +4, everyone else 0", !g2.round.result.caught && g2.round.result.points[I2] === 4 && W2.every((p) => g2.round.result.points[p] === 0), json(g2.round.result.points));
-
-  const g3 = newGame(P4, { statements: false, questions: 3 }, 33);
-  while (g3.phase !== "vote") mi.forceAdvance(g3, P4);
-  const I3 = imp(g3);
-  const W3 = P4.filter((p) => p !== I3);
-  for (const p of W3) mi.submitVote(g3, p, W3.find((x) => x !== p), P4);
-  mi.submitVote(g3, W3[0], W3[1], P4);
-  mi.submitVote(g3, W3[2], W3[1], P4);
-  mi.forceAdvance(g3, P4);
-  check("wrong player eliminated -> Imposter evades", g3.round.result.eliminatedId === W3[1] && !g3.round.result.caught && g3.round.result.points[I3] === 4);
-
-  // A Witness leaving drops out of the vote and the table.
-  const g4 = newGame(P6, { statements: false, questions: 3 }, 34);
-  while (g4.phase !== "vote") mi.forceAdvance(g4, P6);
-  const I4 = imp(g4);
-  const W4 = P6.filter((p) => p !== I4);
-  mi.submitVote(g4, W4[0], W4[1], P6);
-  const present = P6.filter((p) => p !== W4[1]);
-  mi.reconcilePresence(g4, present, { final: true });
-  check("leaver removed from the evidence rows", !mi.getPublicState(g4, present).evidence.rows.some((r) => r.playerId === W4[1]));
-  check("votes for the leaver are void", !g4.round.votes.has(W4[0]));
-  check("the leaver can't be voted for", !mi.submitVote(g4, W4[0], W4[1], present).ok);
+  check("roles → vote: the Imposter (and the public) never get the sequence", leaks === 0);
+  check("roles → vote: a Witness reload always gets it back", witnessOk);
+  check("reveal: sequence + Imposter public now", json(mi.getPublicState(g, P4).result.sequence) === seq && mi.getPublicState(g, P4).result.imposterId === I);
+  check("reveal / final: no private payload", mi.getPrivateState(g, I) === null);
 }
 
 // ===================================================================
-section("(e) integrations");
+section("(f) phase engine");
+{
+  // Discussion runs to its timer; the host can skip it.
+  const g = mi.createGame(P4, { discussionSec: 90 }, seeded(10));
+  mi.tick(g, P4, g.deadline);
+  mi.tick(g, P4, g.deadline);
+  check("discussion: host's time (90s default)", g.phase === "discussion" && g.windowMs === 90_000);
+  mi.tick(g, P4, g.deadline - 1);
+  check("discussion: still running before its timer", g.phase === "discussion");
+  mi.tick(g, P4, g.deadline);
+  check("discussion: timer ends -> vote (20s)", g.phase === "vote" && g.windowMs === 20_000);
+  const g2 = mi.createGame(P4, {}, seeded(11));
+  mi.forceAdvance(g2, P4);
+  mi.forceAdvance(g2, P4);
+  check("skip: only during discussion", mi.skipDiscussion(g2).ok && g2.phase === "vote" && !mi.skipDiscussion(g2).ok);
+
+  // Votes.
+  const v = mi.createGame(P3, {}, seeded(12));
+  while (v.phase !== "vote") mi.forceAdvance(v, P3);
+  check("can't vote for yourself", !mi.submitVote(v, "a", "a", P3).ok);
+  mi.submitVote(v, "a", "b", P3);
+  mi.submitVote(v, "b", "c", P3);
+  check("vote stays open until everyone's in", v.phase === "vote");
+  check("voted indicator, no picks public", json(mi.getPublicState(v, P3).votedIds) === json(["a", "b"]) && !json(mi.getPublicState(v, P3)).includes('"votes"'));
+  mi.submitVote(v, "c", "a", P3);
+  const vr = v.round.result;
+  const evade = evadePoints(v.round.length, v.round.viewSec);
+  check("tied vote at 3 players: nobody out, Imposter evades", vr.tie && vr.eliminatedId === null && !vr.caught);
+  check(`...Imposter +${evade}, everyone else 0`, vr.points[vr.imposterId] === evade && P3.filter((p) => p !== vr.imposterId).every((p) => vr.points[p] === 0), json(vr.points));
+  check("reveal shows type + difficulty", vr.type && vr.length === 4 && vr.viewSec === 10 && vr.difficultyScore === 3);
+
+  const c = mi.createGame(P4, {}, seeded(13));
+  playRound(c, P4, { votes: "catch" });
+  const cr = c.round.result;
+  check("caught: voters for the Imposter +2, Imposter 0", cr.caught && cr.points[cr.imposterId] === 0 && P4.filter((p) => p !== cr.imposterId).every((p) => cr.points[p] === 2), json(cr.points));
+  const w = mi.createGame(P4, {}, seeded(14));
+  while (w.phase !== "vote") mi.forceAdvance(w, P4);
+  const I = w.round.imposterId;
+  const Ws = P4.filter((p) => p !== I);
+  mi.submitVote(w, Ws[0], I, P4);
+  mi.submitVote(w, Ws[1], I, P4);
+  mi.submitVote(w, Ws[2], Ws[0], P4);
+  mi.submitVote(w, I, Ws[1], P4);
+  check("caught: a Witness who voted elsewhere gets 0", w.round.result.caught && w.round.result.points[Ws[2]] === 0 && w.round.result.points[Ws[0]] === 2);
+
+  // A drop during the look pauses it for EVERYONE (no role leak), then:
+  //   back in time -> resume with the time left
+  const h = mi.createGame(P4, {}, seeded(15));
+  const hi = h.round.imposterId;
+  const away = P4.filter((p) => p !== hi);
+  const t0 = h.deadline - 4000; // 6s into a 10s look
+  mi.tick(h, P4, t0);
+  mi.tick(h, away, t0);
+  check("Imposter drops during the look -> held", h.round.hold?.playerId === hi && h.phase === "memorize");
+  check("held: nobody gets the sequence", P4.every((p) => !mi.getPrivateState(h, p, t0 + 10).memoryImposter.sequence));
+  check("held: no role leaks either", !json(P4.map((p) => mi.getPrivateState(h, p, t0 + 10))).includes("role"));
+  mi.tick(h, P4, t0 + 30_000);
+  check("back -> resumes with the 4s that were left", !h.round.hold && h.deadline === t0 + 30_000 + 4000);
+  // A Witness dropping holds too (so the hold names nobody's role).
+  const wh = mi.createGame(P4, {}, seeded(16));
+  const wi = wh.round.imposterId;
+  const wDrop = P4.find((p) => p !== wi);
+  mi.reconcilePresence(wh, P4.filter((p) => p !== wDrop), { final: false });
+  check("a Witness dropping during the look holds it too", wh.round.hold?.playerId === wDrop);
+  mi.reconcilePresence(wh, P4.filter((p) => p !== wDrop), { final: true });
+  check("...gone for good -> the look resumes without them, same round", !wh.round.hold && wh.phase === "memorize" && wh.roundSerial === 1);
+
+  //   gone for good -> cancelled, redone: same type/length/view, new Imposter + sequence
+  const x = mi.createGame(P4, { sequenceTypes: ["colors", "shapes"], difficulty: "hard", rounds: 4 }, seeded(17));
+  playRound(x, P4);
+  mi.forceAdvance(x, P4); // round 2
+  const prevImp = x.history.at(-1).imposterId;
+  const before = { type: x.round.type, length: x.round.length, viewSec: x.round.viewSec, seq: json(x.round.sequence), imp: x.round.imposterId, scores: json([...x.scores]) };
+  const left = P4.filter((p) => p !== before.imp);
+  mi.reconcilePresence(x, left, { final: false });
+  mi.reconcilePresence(x, left, { final: true });
+  check("Imposter gone for good -> redo of the SAME round", x.phase === "memorize" && x.roundIndex === 1 && x.roundSerial === 3 && x.lastEvent?.type === "cancelled");
+  check("redo keeps type, length and view time", x.round.type === before.type && x.round.length === before.length && x.round.viewSec === before.viewSec, `${before.type}/${before.length}/${before.viewSec}`);
+  check("redo: new Imposter from the players left (not last round's either)", x.round.imposterId !== before.imp && left.includes(x.round.imposterId) && (x.round.imposterId !== prevImp || left.filter((p) => p !== prevImp).length === 0));
+  check("redo: no points changed", json([...x.scores].filter(([p]) => p !== before.imp)) === json(JSON.parse(before.scores).filter(([p]) => p !== before.imp)));
+  check("redo: a fresh sequence", json(x.round.sequence) !== before.seq);
+  // Host force-proceed past a look held for the Imposter = the same redo.
+  const f = mi.createGame(P4, {}, seeded(18));
+  const fi = f.round.imposterId;
+  mi.reconcilePresence(f, P4.filter((p) => p !== fi), { final: false });
+  mi.forceAdvance(f, P4.filter((p) => p !== fi));
+  check("force proceed while held for the Imposter -> redo", f.phase === "memorize" && f.round.imposterId !== fi && f.roundSerial === 2);
+  // At 3 players, losing one ends the game (below the minimum).
+  const e = mi.createGame(P3, {}, seeded(19));
+  mi.reconcilePresence(e, ["a", "b"], { final: true });
+  check("3 players -> 2: game ends", e.phase === "final");
+  // A Witness leaving drops out of the vote.
+  const r = mi.createGame(P6, {}, seeded(20));
+  while (r.phase !== "vote") mi.forceAdvance(r, P6);
+  const ri = r.round.imposterId;
+  const rw = P6.filter((p) => p !== ri);
+  mi.submitVote(r, rw[0], rw[1], P6);
+  const pres = P6.filter((p) => p !== rw[1]);
+  mi.reconcilePresence(r, pres, { final: true });
+  check("leaver: votes for them void, they can't be voted for", !r.round.votes.has(rw[0]) && !mi.submitVote(r, rw[0], rw[1], pres).ok && !mi.getPublicState(r, pres).participantIds.includes(rw[1]));
+}
+
+// ===================================================================
+section("(g) integrations");
 {
   const cfg = chaosGameConfig("memory-imposter");
-  check("Chaos: configured", cfg && cfg.rollPhases.includes("roles") && cfg.scoredPhases.includes("reveal"));
-  const pool = eligibleModifiers("memory-imposter", MODIFIERS, { playerCount: 4, roundsLeft: 2, game: null });
-  check("Chaos: Point Reversal filtered out", !pool.some((m) => m.id === "point-reversal"));
-  check("Chaos: Speed Round kept (handled in-game)", pool.some((m) => m.id === "speed-round"));
+  check("Chaos: rolls at memorize, settles at reveal", cfg.rollPhases.join() === "memorize" && cfg.scoredPhases.includes("reveal"));
+  const pool3 = eligibleModifiers("memory-imposter", MODIFIERS, { playerCount: 3, roundsLeft: 2, game: mi.createGame(P3, {}) }).map((m) => m.id);
+  const pool6 = eligibleModifiers("memory-imposter", MODIFIERS, { playerCount: 6, roundsLeft: 2, game: mi.createGame(P6, {}) }).map((m) => m.id);
+  console.log(`      pool at 3: ${pool3.join(", ")}`);
+  console.log(`      pool at 6: ${pool6.join(", ")}`);
+  const out3 = ["rival", "score-swap", "steal", "tax-collector", "the-tyrant", "risk-it", "point-reversal", "all-or-nothing"];
+  check("Chaos at 3: Rival, Score Swap, Steal, Tax Collector, The Tyrant (+ Risk It, Point Reversal, All or Nothing) excluded", out3.every((id) => !pool3.includes(id)));
+  check("Chaos at 6: Rival / Score Swap / Steal / Risk It back in", ["rival", "score-swap", "steal", "risk-it"].every((id) => pool6.includes(id)));
 
-  // Real chaos glue: Speed Round shortens the answer time; the role reveal
-  // waits for the takeover.
   process.env.CHAOS_FORCE = "1";
   process.env.CHAOS_FORCE_MODIFIER = "speed-round";
-  const g = newGame(P4, { statements: false }, 41);
+  const g = mi.createGame(P4, { difficulty: "medium" }, seeded(21));
   const room = { code: "T", status: "in-game", chaosFrequency: "low", chaos: null, chaosCarry: null, game: g };
-  const before = g.deadline;
+  const look = g.round.viewMs;
   chaosTick(room, { connectedPlayerIds: () => P4 });
-  check("Chaos: rolled on the role reveal", room.chaos?.modifier?.id === "speed-round");
-  check("Chaos: role reveal pushed back by the takeover", g.deadline > before);
+  check("Chaos: the look waits out the takeover (no sequence under the overlay)", g.round.lookStartsAt > Date.now() && !mi.getPrivateState(g, "a").memoryImposter.sequence);
+  check("Chaos: the look itself isn't shortened", g.deadline - g.round.lookStartsAt === look);
   mi.forceAdvance(g, P4);
   mi.forceAdvance(g, P4);
-  check("Speed Round: 5s answer window", g.phase === "questions" && g.windowMs === 5000);
+  check("Speed Round: 20s discussion", g.phase === "discussion" && g.windowMs === 20_000);
+  mi.forceAdvance(g, P4);
+  check("Speed Round: 10s vote", g.windowMs === 10_000);
 
   process.env.CHAOS_FORCE_MODIFIER = "double-points";
-  const g2 = newGame(P4, { statements: false }, 42);
+  const g2 = mi.createGame(P4, {}, seeded(22));
   const room2 = { code: "T", status: "in-game", chaosFrequency: "low", chaos: null, chaosCarry: null, game: g2 };
   chaosTick(room2, { connectedPlayerIds: () => P4 });
-  while (g2.phase !== "vote") mi.forceAdvance(g2, P4);
-  const I = imp(g2);
-  for (const p of P4.filter((x) => x !== I)) mi.submitVote(g2, p, I, P4);
-  mi.submitVote(g2, I, P4.find((x) => x !== I), P4);
+  playRound(g2, P4, { votes: "catch" });
   chaosTick(room2, { connectedPlayerIds: () => P4 });
-  check("Chaos: Double Points doubles a caught round (3 -> 6)", P4.filter((x) => x !== I).every((p) => g2.scores.get(p) === 6), json([...g2.scores]));
+  const I2 = g2.round.imposterId;
+  check("Chaos: Double Points doubles a caught round (2 -> 4)", P4.filter((p) => p !== I2).every((p) => g2.scores.get(p) === 4), json([...g2.scores]));
   delete process.env.CHAOS_FORCE;
   delete process.env.CHAOS_FORCE_MODIFIER;
 
-  // Tournament Mode: manual lineup with per-game settings, the wheel pool,
-  // standings, and a game ended by force-proceeding to the end.
-  const manual = createTournament({ mode: "manual", lineup: ["memory-imposter", "taboo"], lineupSettings: [{ sequenceType: "emoji", difficulty: "hard", rounds: 2 }, {}] }, P4);
-  check("tournament: manual lineup accepts it at 4 players with settings", manual.lineupSettings[0].sequenceType === "emoji");
-  let tErr = "";
-  try { createTournament({ mode: "manual", lineup: ["memory-imposter", "taboo"] }, ["a", "b", "c"]); } catch (e) { tErr = e.message; }
-  check("tournament: manual lineup refuses it at 3 players", /at least 4/.test(tErr), tErr);
-  check("tournament: on the Random wheel at 4, not at 3", eligibleGameIds(4).includes("memory-imposter") && !eligibleGameIds(3).includes("memory-imposter"));
-  const tg2 = mi.createGame(P4, { ...mi.tournamentOptions(), ...manual.lineupSettings[0] });
-  check("tournament: slot settings reach the game", tg2.settings.sequenceType === "emoji" && tg2.settings.length === 10 && tg2.totalRounds === 2);
-  let steps = 0;
-  while (tg2.phase !== "final" && steps++ < 200) mi.forceAdvance(tg2, P4);
-  check("tournament: force proceed reaches final -> isGameOver", isGameOver(mi, tg2));
-  check("tournament: standings come from the scores", finalStandingsOf(mi, tg2, P4).length === 4);
+  const manual = createTournament({ mode: "manual", lineup: ["memory-imposter", "taboo"], lineupSettings: [{ sequenceTypes: ["shapes"], difficulty: "hard", rounds: 2 }, {}] }, P3);
+  check("tournament: manual lineup at 3 players, with settings", manual.lineupSettings[0].sequenceTypes[0] === "shapes");
+  let err = "";
+  try { createTournament({ mode: "manual", lineup: ["memory-imposter", "taboo"] }, ["a", "b"]); } catch (e) { err = e.message; }
+  check("tournament: refused at 2 players", /at least 3/.test(err), err);
+  check("tournament: on the wheel at 3, not at 2", eligibleGameIds(3).includes("memory-imposter") && !eligibleGameIds(2).includes("memory-imposter"));
+  const tg = mi.createGame(P3, { ...mi.tournamentOptions(P3), ...manual.lineupSettings[0] });
+  check("tournament: slot settings reach the game", tg.settings.sequenceTypes.join() === "shapes" && tg.round.length === 8 && tg.totalRounds === 2);
+  while (tg.phase !== "final") mi.forceAdvance(tg, P3);
+  check("tournament: force proceed reaches final; standings from scores", isGameOver(mi, tg) && finalStandingsOf(mi, tg, P3).length === 3);
 
-  check("chaos participants = everyone still in", json(mi.chaosParticipants({ removed: new Set(["b"]) }, P4)) === json(["a", "c", "d"]));
-  const to = mi.tournamentOptions();
-  const tg = mi.createGame(P4, to);
-  check("tournament defaults create a game", tg.totalRounds === 4 && tg.settings.difficulty === "medium");
-  check("min 4 / max 10 enforced", (() => {
-    try { mi.createGame(["a", "b", "c"], {}); return false; } catch { /* expected */ }
+  // Settings: defaults, limits, v1 migration.
+  const d = mi.resolveSettings({}, 5);
+  check("defaults: Digits only, Easy, rounds = players, 90s", d.sequenceTypes.join() === "digits" && d.difficulty === "easy" && d.rounds === 5 && d.discussionMs === 90_000);
+  check("rounds max = 2 × players", mi.resolveSettings({ rounds: 99 }, 4).rounds === 8);
+  check("discussion 30–240 in 15s steps", mi.resolveSettings({ discussionSec: 10 }).discussionMs === 30_000 && mi.resolveSettings({ discussionSec: 999 }).discussionMs === 240_000 && mi.resolveSettings({ discussionSec: 98 }).discussionMs === 105_000);
+  const custom = mi.resolveSettings({ difficulty: "custom", customLength: 40, customViewSec: 1 });
+  check("custom clamps: 4–12 items, 3–20s", custom.start.length === 12 && custom.start.viewSec === 3);
+  const v1 = mi.resolveSettings({ sequenceType: "emoji", difficulty: "medium", questions: 6, answerSec: 9, statements: false, discussionSec: 60 });
+  check("v1 settings migrate: Emoji -> Shapes, removed options ignored", v1.sequenceTypes.join() === "shapes" && v1.start.length === 6 && v1.discussionMs === 60_000 && !("questionCount" in v1));
+  check("v1 Digits / Colors / Mixed map to their chips", ["digits", "colors", "mixed"].every((t) => mi.resolveSettings({ sequenceType: t }).sequenceTypes.join() === t));
+  check("an empty / junk chip list falls back to Digits", mi.resolveSettings({ sequenceTypes: ["emoji", "nope"] }).sequenceTypes.join() === "digits");
+  check("min 3 / max 10 enforced", (() => {
+    try { mi.createGame(["a", "b"], {}); return false; } catch { /* expected */ }
     try { mi.createGame(Array.from({ length: 11 }, (_, i) => `p${i}`), {}); return false; } catch { /* expected */ }
     return true;
   })());
-  const s = mi.resolveSettings({ difficulty: "custom", customLength: 99, customViewSec: 1, questions: 9, answerSec: 2, discussionSec: 1000 });
-  check("custom settings clamp", s.length === 12 && s.viewMs === 3000 && s.questionCount === 6 && s.answerMs === 6000 && s.discussionMs === 180_000);
-  const d = mi.resolveSettings({});
-  check("defaults: Digits, Easy, 4 questions, 8s, statements on, 60s", d.sequenceType === "digits" && d.difficulty === "easy" && d.questionCount === 4 && d.answerMs === 8000 && d.statements && d.discussionMs === 60_000);
+}
+
+// ===================================================================
+section("(h) whole games — players × chip sets × presets");
+{
+  const chipSets = [["digits"], ["colors"], ["shapes"], ["mixed"], ["shapes", "colors"], ["digits", "mixed"], ["digits", "colors", "shapes", "mixed"]];
+  const presets = ["easy", "medium", "hard"];
+  let games = 0;
+  const problems = [];
+  for (const players of [P3, P4, P6]) {
+    for (const chips of chipSets) {
+      for (const difficulty of presets) {
+        const rounds = players.length * 2;
+        const g = mi.createGame(players, { sequenceTypes: chips, difficulty, rounds }, seeded(games + 1));
+        games++;
+        let r = 0;
+        let prevImp = null;
+        let prevType = null;
+        while (g.phase !== "final" && r < 40) {
+          const round = g.round;
+          const exp = progressFor(PRESETS[difficulty], g.roundIndex);
+          if (round.length !== exp.length || round.viewSec !== exp.viewSec) problems.push(`len/view ${chips}/${difficulty} r${g.roundIndex}`);
+          if (!chips.includes(round.type)) problems.push(`type ${round.type} not in ${chips}`);
+          if (!isValidSequence(round.type, round.sequence)) problems.push(`bad seq ${round.type}`);
+          if (round.imposterId === prevImp) problems.push("back-to-back imposter");
+          if (chips.length > 1 && round.type === prevType) problems.push(`same type twice ${chips}`);
+          prevImp = round.imposterId;
+          prevType = round.type;
+          // Alternate outcomes: evade (tie / nobody) and caught.
+          playRound(g, players, { votes: r % 2 ? "catch" : "none" });
+          mi.forceAdvance(g, players);
+          r++;
+        }
+        if (g.phase !== "final" || r !== rounds) problems.push(`didn't finish ${chips}/${difficulty}/${players.length}: ${r}`);
+        const pub = mi.getPublicState(g, players);
+        if (pub.scores.length !== players.length || !pub.winnerIds.length) problems.push("no standings");
+      }
+    }
+  }
+  check(`${games} full games (3/4/6 players × 7 chip sets × 3 presets) play clean`, problems.length === 0, problems.slice(0, 5).join("; "));
 }
 
 console.log(failures === 0 ? "\nALL MEMORY IMPOSTER CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);

@@ -28,11 +28,10 @@ export function describeGameOptions(options) {
   else if (o.timerMode === 'hidden') parts.push('Hidden Fuse')
   else if (o.timerMode === 'mixed') parts.push('mixed timers')
   if (o.burnedLetters) parts.push('burned letters')
-  // Memory Imposter
-  if (o.sequenceType) parts.push({ digits: 'Digits', colors: 'Colors', emoji: 'Emoji' }[o.sequenceType] ?? o.sequenceType)
-  if (o.sequenceType && o.difficulty === 'custom') parts.push(`${o.customLength ?? 8} items, ${o.customViewSec ?? 6}s look`)
-  if (o.questions) parts.push(`${o.questions} questions`)
-  if (o.statements === false) parts.push('no statements')
+  // Memory Imposter (a v1 `sequenceType` reads as its v2 chip)
+  const miTypes = Array.isArray(o.sequenceTypes) ? o.sequenceTypes : o.sequenceType ? [o.sequenceType === 'emoji' ? 'shapes' : o.sequenceType] : []
+  if (miTypes.length) parts.push(miTypes.map((t) => t[0].toUpperCase() + t.slice(1)).join(' + '))
+  if (miTypes.length && o.difficulty === 'custom') parts.push(`starts ${o.customLength ?? 6} items, ${o.customViewSec ?? 15}s`)
   if (o.promptsPerPlayer) {
     parts.push(`${o.promptsPerPlayer} prompt${o.promptsPerPlayer === 1 ? '' : 's'}/player`)
   }
@@ -49,6 +48,8 @@ export function describeGameOptions(options) {
     parts.push(`${o.categories.length} categor${o.categories.length === 1 ? 'y' : 'ies'}`)
   }
   if (o.difficulty && o.difficulty !== 'mixed') parts.push(o.difficulty)
+  // Echo Chain: lives with no mode (Hot Potato's lives come with Elimination)
+  if (o.lives && !o.mode) parts.push(`${o.lives} ${o.lives === 1 ? 'life' : 'lives'}`)
   if (o.assignment === 'host') parts.push('host picks Witch')
   else if (o.assignment === 'rotation') parts.push('rotate Witch')
 

@@ -22,6 +22,12 @@
 //                       countdown players race).
 //   * Player Disable   — needs a round after it. On the FINAL round it
 //                       still announces but resolves to a no-op.
+//   * Echo Chain       — excluded entirely (deliberately NOT listed below).
+//                       Its points are rounds survived, counted at the end,
+//                       so there are no per-round score deltas for a
+//                       modifier to rewrite, and Speed Round's 10s timers
+//                       would be SLOWER than its own 4–5s tap timers. Its
+//                       setup screen says so.
 
 const SPEED_MS = 10_000;
 
@@ -130,29 +136,47 @@ export const CHAOS_GAMES = {
         : (m) => ["all-or-nothing", "tax-collector", "the-tyrant", "rival", "risk-it", "point-reversal"].includes(m.id),
   },
   "memory-imposter": {
-    // One roll per round, on the 3s role reveal, which waits out the
-    // takeover (onChaosAnnounced) like Hot Potato's intro. A round the
-    // Imposter abandons is redealt under the SAME roundIndex, so its Chaos
-    // Event carries over to the redo instead of rolling twice.
+    // One roll per round, at the start of the memorize phase. The look
+    // waits out the takeover (onChaosAnnounced), so nobody memorizes under
+    // the overlay. A round the Imposter abandons is redealt under the SAME
+    // roundIndex, so its Chaos Event carries over to the redo instead of
+    // rolling twice.
     //
-    // FLAGGED:
-    //   * Speed Round — handled by the GAME, not the generic 10s clamp (the
-    //     answer window is already 6–12s): answers 5s, statements 8s,
-    //     discussion 20s, vote 10s. No `timer` entry, so the glue never
-    //     touches the deadline. The Imposter's view window is NOT shortened
-    //     (that would change difficulty, not pace).
-    //   * Countdown Chaos — hides every timer bar AND the Imposter's view
-    //     ring ([data-chaos-blind]), so they don't know how long the look
-    //     lasts. Intended.
-    //   * Risk It — the wager beat lengthens the takeover; the role reveal
-    //     waits for it too.
-    //   * Point Reversal — excluded. It hands a caught Imposter the
-    //     Witnesses' +3 and zeroes the players who found them, which
-    //     rewards the exact play the round punishes.
-    rollPhases: ["roles"],
+    // Scoring is lopsided by design (an Imposter who evades is the round's
+    // only scorer; a caught one hands +2 to each Witness who voted for
+    // them), so several modifiers have nothing to act on. Audited at the
+    // 3-player minimum and above:
+    //   EXCLUDED at any size:
+    //     * Point Reversal — hands a caught Imposter the Witnesses' points.
+    //     * All or Nothing — a no-op: the round's scorers already ARE its
+    //       winners (the lone Imposter, or every Witness who voted right).
+    //     * Tax Collector / The Tyrant — 20% of a +2 rounds to 0, and an
+    //       evaded round has one scorer: always a no-op.
+    //   EXCLUDED at 3 players:
+    //     * Rival — pairs two of three, almost always both Witnesses on the
+    //       same score: nothing to steal.
+    //     * Score Swap — a coin flip between two of three totals.
+    //     * Steal — first and last are usually the only two players who
+    //       scored differently: a straight transfer.
+    //     * Risk It — "the top half" of three is the scorer plus one
+    //       arbitrary 0-scorer.
+    //   KEPT, with special handling:
+    //     * Speed Round — handled by the GAME, not the generic 10s clamp:
+    //       discussion 20s, vote 10s. The look itself is NOT shortened
+    //       (that changes difficulty, not pace). No `timer` entry.
+    //     * Countdown Chaos — hides the discussion / vote bars AND the
+    //       memorize ring ([data-chaos-blind]), the same for everyone.
+    //     * Risk It (4+ players) — the wager beat lengthens the takeover;
+    //       the look waits for it too.
+    rollPhases: ["memorize"],
     scoredPhases: ["reveal", "final"],
     speedRound: true,
-    exclude: () => (m) => m.id === "point-reversal",
+    exclude: (game) => {
+      const always = ["point-reversal", "all-or-nothing", "tax-collector", "the-tyrant"];
+      const players = game ? game.roster.length - game.removed.size : 3;
+      const small = players <= 3 ? ["rival", "score-swap", "steal", "risk-it"] : [];
+      return (m) => always.includes(m.id) || small.includes(m.id);
+    },
   },
 };
 

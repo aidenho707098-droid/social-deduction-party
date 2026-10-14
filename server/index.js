@@ -285,7 +285,10 @@ function advanceTournamentIfGameOver(room) {
 function reconcileGame(room, { final = true } = {}) {
   if (room?.status !== "in-game" || !room.game) return;
   const gameModule = GAMES[room.game.id];
-  gameModule.reconcilePresence?.(room.game, connectedPlayerIds(room), { final });
+  // `roomPlayerIds` = everyone still in the room, connected or not, so a
+  // game can tell the player who just LEFT from one still inside their
+  // rejoin grace (Echo Chain reads it; other games ignore it).
+  gameModule.reconcilePresence?.(room.game, connectedPlayerIds(room), { final, roomPlayerIds: [...room.players.keys()] });
 }
 
 // --- Rejoin grace timers -----------------------------------------------
@@ -1817,66 +1820,68 @@ io.on("connection", (socket) => {
   });
 
   // --- Memory Imposter actions -----------------------------------------
-  // Every clock runs in the memory-imposter sweep below. Turn / question
-  // actions carry the server's turnId / question index, so a tap that raced
-  // a change can never act on the NEXT turn or question. Private state is
-  // re-pushed after every change: it's how the Imposter's view window
-  // closes on their phone.
-
-  function memoryContext(socket, code) {
-    const room = getRoom(code);
-    if (!room || room.game?.id !== "memory-imposter") return null;
-    const playerId = playerIdOf(socket);
-    if (!playerId || !room.players.has(playerId)) return null;
-    return { room, playerId, present: connectedPlayerIds(room) };
-  }
-
-  function afterMemoryAction(room) {
-    broadcastRoom(room.code);
-    sendPrivateRoles(room);
-  }
-
-  socket.on("memory_statement_done", ({ code, turnId }, cb) => {
-    const ctx = memoryContext(socket, code);
-    if (!ctx) return cb?.({ ok: false });
-    const res = GAMES["memory-imposter"].statementDone(ctx.room.game, ctx.playerId, turnId, {
-      asHost: isRoomHost(ctx.room, socket),
-    });
-    cb?.(res);
-    if (res.ok) afterMemoryAction(ctx.room);
-  });
-
-  socket.on("memory_answer", ({ code, qIndex, value, final }, cb) => {
-    const ctx = memoryContext(socket, code);
-    if (!ctx) return cb?.({ ok: false });
-    const res = GAMES["memory-imposter"].submitAnswer(ctx.room.game, ctx.playerId, qIndex, value, final === true, ctx.present);
-    cb?.(res);
-    if (res.ok) afterMemoryAction(ctx.room);
-  });
+  // Every clock runs in the memory-imposter sweep below; the only player
+  // action is the vote, and the host can skip the discussion or start the
+  // next round early. Private state is re-pushed after every change: it is
+  // how roles are dealt (and the Imposter's sequence taken away) once the
+  // look is over.
 
   socket.on("memory_vote", ({ code, targetId }, cb) => {
-    const ctx = memoryContext(socket, code);
-    if (!ctx) return cb?.({ ok: false });
-    const res = GAMES["memory-imposter"].submitVote(ctx.room.game, ctx.playerId, targetId, ctx.present);
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "memory-imposter") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES["memory-imposter"].submitVote(room.game, playerId, targetId, connectedPlayerIds(room));
     cb?.(res);
-    if (res.ok) afterMemoryAction(ctx.room);
+    if (res.ok) {
+      broadcastRoom(room.code);
+      sendPrivateRoles(room);
+    }
   });
 
-  // Host: discussion +30s / skip to the vote / next round from the reveal.
+  // Host: skip the discussion to the vote / next round from the reveal.
   socket.on("memory_host", ({ code, action }, cb) => {
     const room = getRoom(code);
     if (!room || !isRoomHost(room, socket) || room.game?.id !== "memory-imposter") return cb?.({ ok: false });
     const mod = GAMES["memory-imposter"];
     const res =
-      action === "extend"
-        ? mod.extendDiscussion(room.game)
-        : action === "skip"
-          ? mod.skipDiscussion(room.game)
-          : action === "next"
-            ? mod.nextRound(room.game, connectedPlayerIds(room))
-            : { ok: false };
+      action === "skip"
+        ? mod.skipDiscussion(room.game)
+        : action === "next"
+          ? mod.nextRound(room.game, connectedPlayerIds(room))
+          : { ok: false };
     cb?.(res);
-    if (res.ok) afterMemoryAction(room);
+    if (res.ok) {
+      broadcastRoom(room.code);
+      sendPrivateRoles(room);
+    }
+  });
+
+  // --- Echo Chain actions -----------------------------------------------
+  // The chain stays on the server; every tap is validated there in order.
+  // A valid tap goes out to the whole room as its own one-off event (so
+  // every phone lights it up live, with its note) — taps are never kept in
+  // the room state. Clocks run in the echo-chain sweep below.
+
+  socket.on("echo_chain_tap", ({ code, tile, turnId }, cb) => {
+    const room = getRoom(code);
+    if (!room || room.game?.id !== "echo-chain") return cb?.({ ok: false });
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return cb?.({ ok: false });
+    const res = GAMES["echo-chain"].tap(room.game, playerId, tile, connectedPlayerIds(room), { turnId });
+    cb?.({ ok: res.ok, correct: res.correct, added: res.added, reason: res.reason, message: res.message });
+    if (!res.ok) return;
+    io.to(room.code).emit("echo_chain_tap", res.tap);
+    broadcastRoom(room.code);
+  });
+
+  // Host: end the game here — everyone still alive shares the top place.
+  socket.on("echo_chain_end", ({ code }, cb) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "echo-chain") return cb?.({ ok: false });
+    const res = GAMES["echo-chain"].endEarly(room.game);
+    cb?.(res);
+    if (res.ok) broadcastRoom(room.code);
   });
 
   socket.on("back_to_lobby", ({ code }) => {
@@ -2112,12 +2117,39 @@ const hotPotatoTimer = setInterval(() => {
 }, HOT_POTATO_TICK_MS);
 hotPotatoTimer.unref?.();
 
+// --- Echo Chain: turn timers, miss beat, replay ---------------------------
+// Taps are 4–5s apart at most and carry 500ms of grace, so a 100ms beat
+// (like Hot Potato) keeps a timeout from visibly overrunning. Broadcasts
+// the moment something changes, plus once a second for the timer ring.
+const ECHO_TICK_MS = 100;
+const echoLastBroadcast = new Map(); // roomCode -> ms
+const echoTimer = setInterval(() => {
+  const now = Date.now();
+  for (const room of allRooms()) {
+    const game = room.game;
+    if (room.status !== "in-game" || game?.id !== "echo-chain" || game.phase === "final") {
+      echoLastBroadcast.delete(room.code);
+      continue;
+    }
+    try {
+      const changed = GAMES["echo-chain"].tick(game, connectedPlayerIds(room), now);
+      if (changed || now - (echoLastBroadcast.get(room.code) ?? 0) >= 1000) {
+        echoLastBroadcast.set(room.code, now);
+        broadcastRoom(room.code);
+      }
+    } catch (err) {
+      console.warn(`[echo-chain] tick error for ${room.code}:`, err);
+    }
+  }
+}, ECHO_TICK_MS);
+echoTimer.unref?.();
+
 // --- Memory Imposter: every phase clock ---------------------------------
-// Role reveal, the Imposter's view window, statement turns, answer windows,
-// evidence, discussion, vote and reveal all run here. A 200ms beat keeps
-// the view window from overrunning visibly; it broadcasts (and re-pushes
-// private state — the view window closing is a private-state change) the
-// moment something changes, plus once a second for the countdowns.
+// Memorize, role reveal, discussion, vote and reveal all run here. A 200ms
+// beat keeps the look from overrunning visibly; it broadcasts (and re-pushes
+// private state — the look opening and the role deal are private-state
+// changes) the moment something changes, plus once a second for the
+// countdowns.
 const MEMORY_TICK_MS = 200;
 const memoryLastBroadcast = new Map(); // roomCode -> ms
 const memoryTimer = setInterval(() => {

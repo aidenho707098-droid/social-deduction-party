@@ -16,6 +16,9 @@ const REDUCED = typeof window !== 'undefined' && window.matchMedia?.('(prefers-r
 // fresh token (keyed on turnId), so a burst of rapid passes can never
 // leave a half-finished animation behind: the old token is simply gone.
 // Under prefers-reduced-motion the hop is replaced by a fade.
+//
+// Echo Chain reuses the strip for its turn order (`showToken={false}`: the
+// active player is ringed in coral, no potato) and `ariaLabel`.
 export default function CycleStrip({
   cycle = [],
   activeIds = [],
@@ -29,6 +32,9 @@ export default function CycleStrip({
   colorById,
   nameById,
   popId = null,
+  showToken = true,
+  ariaLabel = 'Passing order',
+  activeLabel = 'holding the potato',
 }) {
   const slotRefs = useRef(new Map())
   const tokenRef = useRef(null)
@@ -67,7 +73,7 @@ export default function CycleStrip({
   const visible = cycle.filter((pid) => !removedIds.includes(pid))
 
   return (
-    <div className="hp-strip" role="list" aria-label="Passing order">
+    <div className="hp-strip" role="list" aria-label={ariaLabel}>
       {visible.map((pid) => {
         const out = !activeIds.includes(pid)
         const isHolder = pid === holderId
@@ -84,10 +90,10 @@ export default function CycleStrip({
             className={`hp-slot ${isHolder ? 'hp-slot-holder' : ''} ${isMe ? 'hp-slot-me' : ''} ${
               out ? 'hp-slot-out' : ''
             } ${pid === nextId ? 'hp-slot-next' : ''} ${pid === popId ? 'hp-slot-pop' : ''}`}
-            aria-label={`${nameById[pid] ?? 'Player'}${isHolder ? ', holding the potato' : ''}${out ? ', out' : ''}`}
+            aria-label={`${nameById[pid] ?? 'Player'}${isHolder ? `, ${activeLabel}` : ''}${out ? ', out' : ''}`}
           >
             <span className="hp-token-dock">
-              {isHolder && (
+              {isHolder && showToken && (
                 <span key={turnId} ref={tokenRef} className="hp-token">
                   <span ref={arcRef} className="hp-token-arc">
                     <PotatoToken />

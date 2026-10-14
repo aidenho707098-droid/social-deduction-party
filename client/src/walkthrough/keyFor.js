@@ -22,6 +22,8 @@ export function walkthroughKeyForGame(game) {
       return 'hot-potato'
     case 'memory-imposter':
       return 'memory-imposter'
+    case 'echo-chain':
+      return 'echo-chain'
     case 'fibbage':
       return game.personal ? 'fibbage-personal' : null
     case 'would-you-rather':
@@ -29,4 +31,19 @@ export function walkthroughKeyForGame(game) {
     default:
       return null
   }
+}
+
+// When the first-time walkthrough must NOT be on screen, because the
+// overlay would eat time a player can't get back: Memory Imposter's look;
+// Echo Chain while it's YOUR turn (or you're about to start it), and the
+// replay after a miss for anyone still in (the only time the chain is shown
+// again). It shows as soon as that's over instead.
+export function walkthroughDeferred(game, myId) {
+  if (game?.id === 'memory-imposter') return game.phase === 'memorize'
+  if (game?.id === 'echo-chain') {
+    const up = game.activeId ?? game.activeIds?.[0]
+    if (game.phase === 'replay') return (game.activeIds ?? []).includes(myId)
+    return up === myId && ['countdown', 'echo', 'add'].includes(game.phase)
+  }
+  return false
 }

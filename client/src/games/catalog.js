@@ -140,10 +140,20 @@ export const CATALOG = [
     // module's `name`, which server/catalog.selftest.mjs keeps in sync).
     name: 'Memory Imposter',
     genre: 'memory & bluff',
-    description: 'Everyone can see a secret sequence except the Imposter, who only gets a quick look. Prove you can see it, and vote out whoever is bluffing.',
-    minPlayers: 4,
+    description: 'Everyone memorizes the same secret sequence, then one player loses theirs. Talk it out, spot the bluffer, and vote them out.',
+    minPlayers: 3,
     maxPlayers: 10,
     tags: ['deduction', 'memory'],
+    isNew: true,
+  },
+  {
+    id: 'echo-chain',
+    name: 'Echo Chain',
+    genre: 'memory showdown',
+    description: 'Tap back the whole chain of tiles from memory, then add one more. Miss and lose a life. Last one standing wins.',
+    minPlayers: 2,
+    maxPlayers: 10,
+    tags: ['memory', 'quick'],
     isNew: true,
   },
 ]

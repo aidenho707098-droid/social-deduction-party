@@ -28,6 +28,10 @@ The three Hot Potato clips (`potato-tick.wav`, `potato-pass.wav`,
 `potato-pop.wav`) are NOT from Mixkit: they're synthesised from scratch by
 `client/scripts/make-potato-sounds.mjs` (run it to regenerate them).
 
+Echo Chain's ten tile notes (`echo-note-0.wav` … `echo-note-9.wav`, soft
+bells on a C major pentatonic scale) are synthesised the same way, by
+`client/scripts/make-echo-sounds.mjs`.
+
 ## Replacing or adding a sound
 
 1. Drop a new file in this folder.

@@ -1,4 +1,5 @@
 import { SequenceStrip } from './items'
+import { TYPE_LABELS, seconds } from './memoryData'
 
 // A plain timer bar (Countdown Chaos hides `.wyr-timer` + the line after it).
 export function TimerBar({ msLeft, total, label }) {
@@ -16,29 +17,37 @@ export function TimerBar({ msLeft, total, label }) {
   )
 }
 
-export function RoundLine({ game }) {
+// "Round 3 of 6" over "Colors · 8 items, 15s" — the round's type and
+// difficulty on their own line, so the header stays clear of the step badge.
+export function RoundLine({ game, detail = true }) {
   return (
-    <p className="wyr-round">
+    <p className="wyr-round mi-round">
       Round {game.roundIndex + 1} of {game.totalRounds}
-      {game.speed && <span className="mi-speed"> · ⚡ Speed Round</span>}
+      {detail && game.roundType && (
+        <span className="mi-round-detail">
+          {TYPE_LABELS[game.roundType]} · {game.length} items, {seconds(game.viewMs)}
+          {game.speed && <span className="mi-speed"> · Speed Round</span>}
+        </span>
+      )}
     </p>
   )
 }
 
-// The small strip pinned under the header for the rest of the round: the
-// sequence for a Witness, the same-size blanks for the Imposter. Same
-// label for both, so a glance at the screen doesn't give a role away.
+// The strip pinned at the top for the rest of the round: the sequence for
+// a Witness, the same-size blanks for the Imposter.
 export function MySequence({ game, priv }) {
   const items = priv?.role === 'witness' ? priv.sequence : null
   return (
     <div className="mi-mine">
-      <SequenceStrip type={game.sequenceType} items={items ?? null} length={game.length} size="sm" />
-      <p className="mi-mine-label">Your sequence · keep it private</p>
+      <SequenceStrip items={items ?? null} length={game.length} size="sm" />
+      <p className="mi-mine-label">
+        {priv?.role === 'imposter' ? "You're the Imposter · bluff" : 'Your sequence · keep it private'}
+      </p>
     </div>
   )
 }
 
-// The countdown ring (memorize). Countdown Chaos hides its progress + count.
+// The memorize countdown ring. Countdown Chaos hides its progress + count.
 export function Ring({ frac, children }) {
   const R = 54
   const C = 2 * Math.PI * R

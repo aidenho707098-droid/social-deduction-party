@@ -63,6 +63,12 @@ export const SOUND_MANIFEST = {
   'potato-tick': { src: 'potato-tick.wav', gain: 0.35 },
   'potato-pass': { src: 'potato-pass.wav', gain: 0.45 },
   'potato-pop': { src: 'potato-pop.wav', gain: 0.7 },
+  // Echo Chain tile notes (client/scripts/make-echo-sounds.mjs): soft bells
+  // on a C major pentatonic scale, C5 to A6. Which tile plays which note
+  // is client/src/games/echoChain/board.js.
+  ...Object.fromEntries(
+    Array.from({ length: 10 }, (_, i) => [`echo-note-${i}`, { src: `echo-note-${i}.wav`, gain: 0.5 }]),
+  ),
 }
 
 // Vite serves /public at BASE_URL (normally "/").

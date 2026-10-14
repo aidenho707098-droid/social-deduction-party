@@ -59,8 +59,8 @@ section("(a) client catalogue matches the server");
   check("lowered games have minimum 2", twos.every((id) => GAMES[id].minPlayers === 2));
   check("other minimums unchanged", ["imposter", "fibbage", "fake-artist", "hot-potato"].every((id) => GAMES[id].minPlayers === 3) && GAMES["would-you-rather"].minPlayers === 2);
   const memory = CATALOG.find((g) => g.id === "memory-imposter");
-  check("Memory Imposter: 4–10, Deduction + Memory, Memory chip exists",
-    GAMES["memory-imposter"].minPlayers === 4 && GAMES["memory-imposter"].maxPlayers === 10 &&
+  check("Memory Imposter: 3–10, Deduction + Memory, Memory chip exists",
+    GAMES["memory-imposter"].minPlayers === 3 && GAMES["memory-imposter"].maxPlayers === 10 &&
     memory?.tags.join() === "deduction,memory" && FILTERS.some((f) => f.key === "memory"));
   check("Memory Imposter: client name = server name constant", memory?.name === GAMES["memory-imposter"].name);
   check("menu label shows both Alphabet Soup minimums", playerRangeLabel(CATALOG.find((g) => g.id === "alphabet-soup")) === "2–10 players, Spoken 3+");
@@ -81,7 +81,7 @@ section("(b) fit checks");
     Array.from({ length: 12 }, (_, i) => i + 1).every((n) => (fitReason(g, n) === null) === fitsSomeMode(GAMES[g.id], n))));
 
   const pool2 = eligibleGameIds(2).sort();
-  check("wheel pool at 2 = exactly the 2-player games", pool2.join() === ["alphabet-soup", "black-magic", "emoji-movie", "taboo", "wavelength", "who-am-i", "would-you-rather"].sort().join(), pool2.join());
+  check("wheel pool at 2 = exactly the 2-player games", pool2.join() === ["alphabet-soup", "black-magic", "echo-chain", "emoji-movie", "taboo", "wavelength", "who-am-i", "would-you-rather"].sort().join(), pool2.join());
   // Spin the wheel many times at 2 players: it never lands on a game that doesn't fit.
   const t = createTournament({ mode: "random", totalGames: 12 }, P2);
   let bad = 0;

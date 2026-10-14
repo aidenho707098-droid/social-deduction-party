@@ -36,6 +36,7 @@
 // This module is pure state + timestamps; server/index.js drives tick().
 
 import { shuffle } from "./deck.js";
+import { activePlayers, freezeClocks, isActive, loseLife, nextActiveAfter, resumeClocks } from "./turnCycle.js";
 import { CATEGORY_KEYS, RANDOM_CATEGORY } from "./alphabetSoupBank.js";
 import { categoryMapFor, deckCandidates, deckTake, newCategoryDeck, resolveSelection } from "./categorySelection.js";
 
@@ -87,30 +88,16 @@ const clampInt = (v, lo, hi, dflt) => {
 };
 
 // =====================================================================
-// (a) the cycle
+// (a) the cycle — the shared engine in turnCycle.js (Echo Chain uses it
+// too): isActive / activePlayers / nextActiveAfter walk the fixed cycle,
+// loseLife handles lives + elimination, freeze/resume hold the clocks.
 // =====================================================================
 
-// Still in this match's cycle: not eliminated, not gone for good.
-function isActive(game, pid) {
-  return game.cycle.includes(pid) && !game.removed.has(pid) && (game.lives.get(pid) ?? 0) > 0;
-}
+export { activePlayers, nextActiveAfter };
 
-export function activePlayers(game) {
-  return game.cycle.filter((pid) => isActive(game, pid));
-}
-
-// The next ACTIVE player after `pid` in the fixed cycle — exactly one seat
-// on, skipping only players who are out. `pid` itself may be out (an
-// exploder who just lost their last life): the walk starts from their seat.
-export function nextActiveAfter(game, pid) {
-  const n = game.cycle.length;
-  const start = game.cycle.indexOf(pid);
-  for (let step = 1; step <= n; step++) {
-    const cand = game.cycle[(start + step) % n];
-    if (cand !== pid && isActive(game, cand)) return cand;
-  }
-  return null;
-}
+// Both clocks a potato can have, and where each one's ms left sits while
+// frozen.
+const CLOCKS = { deadline: "turnLeftMs", fuseDeadline: "fuseLeftMs" };
 
 // =====================================================================
 // lifecycle
@@ -253,21 +240,12 @@ function lightPotato(game, presentPlayerIds, now) {
 // Stop both clocks where they are (a challenge vote, or a holder who
 // dropped). Idempotent; the first reason wins.
 function freeze(game, reason, now) {
-  if (game.frozen) return;
-  game.frozen = {
-    reason,
-    turnLeftMs: Math.max(0, game.deadline - now),
-    fuseLeftMs: game.fuseDeadline != null ? Math.max(0, game.fuseDeadline - now) : null,
-  };
+  freezeClocks(game, reason, now, CLOCKS);
 }
 
 // Pick both clocks up exactly where they stopped.
 function resume(game, now) {
-  const f = game.frozen;
-  if (!f) return;
-  game.deadline = now + f.turnLeftMs;
-  if (f.fuseLeftMs != null) game.fuseDeadline = now + f.fuseLeftMs;
-  game.frozen = null;
+  resumeClocks(game, now, CLOCKS);
 }
 
 function turnLeft(game, now) {
@@ -420,13 +398,9 @@ function explode(game, playerId, cause, now) {
     }
     result.gameOver = game.roundIndex + 1 >= game.totalRounds;
   } else {
-    const left = Math.max(0, (game.lives.get(playerId) ?? 0) - 1);
-    game.lives.set(playerId, left);
+    const left = loseLife(game, playerId);
     result.livesLeft = left;
-    if (left === 0) {
-      result.eliminated = true;
-      if (!game.eliminated.includes(playerId)) game.eliminated.push(playerId);
-    }
+    if (left === 0) result.eliminated = true;
     if (activePlayers(game).length <= 1) finishMatch(game, result);
   }
   game.explosion = result;
