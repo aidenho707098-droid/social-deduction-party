@@ -3,10 +3,23 @@
 // can see how each game is set up at a glance. Handles the option shapes
 // of all games; unknown keys are ignored.
 import { ALL_KEYS as SOUP_KEYS } from './alphabetSoup/categories'
+import { tierOf } from './echoChain/tiers'
+import { modeName as wordHeistMode } from './wordHeist/config'
 
-export function describeGameOptions(options) {
+// `gameId` (optional) is for options whose meaning depends on the game:
+// Echo Chain's difficulty is a named tier (old easy/medium/hard saves read
+// as their renamed tiers).
+export function describeGameOptions(options, gameId = null) {
   if (!options || typeof options !== 'object') return null
   const o = options
+  if (gameId === 'echo-chain') {
+    const lives = Number(o.lives) || 2
+    return `${tierOf(o.difficulty).name} · ${lives} ${lives === 1 ? 'life' : 'lives'}`
+  }
+  if (gameId === 'word-heist') {
+    const rounds = Number(o.rounds) || 3
+    return `${wordHeistMode(o.mode)} · ${rounds} ${rounds === 1 ? 'round' : 'rounds'}`
+  }
   const parts = []
 
   if (o.mode === 'bank') parts.push('Standard')
@@ -48,8 +61,6 @@ export function describeGameOptions(options) {
     parts.push(`${o.categories.length} categor${o.categories.length === 1 ? 'y' : 'ies'}`)
   }
   if (o.difficulty && o.difficulty !== 'mixed') parts.push(o.difficulty)
-  // Echo Chain: lives with no mode (Hot Potato's lives come with Elimination)
-  if (o.lives && !o.mode) parts.push(`${o.lives} ${o.lives === 1 ? 'life' : 'lives'}`)
   if (o.assignment === 'host') parts.push('host picks Witch')
   else if (o.assignment === 'rotation') parts.push('rotate Witch')
 

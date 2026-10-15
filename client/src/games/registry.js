@@ -37,6 +37,9 @@ import { rules as memoryImposterRules } from './memoryImposter/rules'
 import EchoChainSetup from './echoChain/EchoChainSetup'
 import EchoChainGame from './echoChain/EchoChainGame'
 import { rules as echoChainRules } from './echoChain/rules'
+import WordHeistSetup from './wordHeist/WordHeistSetup'
+import WordHeistGame from './wordHeist/WordHeistGame'
+import { rules as wordHeistRules } from './wordHeist/rules'
 
 import { CATALOG } from './catalog'
 
@@ -58,6 +61,7 @@ const PARTS = {
   'hot-potato': { Setup: HotPotatoSetup, Game: HotPotatoGame, rules: hotPotatoRules },
   'memory-imposter': { Setup: MemoryImposterSetup, Game: MemoryImposterGame, rules: memoryImposterRules },
   'echo-chain': { Setup: EchoChainSetup, Game: EchoChainGame, rules: echoChainRules },
+  'word-heist': { Setup: WordHeistSetup, Game: WordHeistGame, rules: wordHeistRules },
 }
 
 export const GAMES = CATALOG.map((entry) => ({ ...entry, ...PARTS[entry.id] }))

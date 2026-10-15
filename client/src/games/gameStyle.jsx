@@ -122,6 +122,15 @@ const ICONS = {
       <path d="M17 7h.01" strokeWidth="3.4" />
     </>
   ),
+  // Word Heist — a padlock with a keyhole.
+  'word-heist': (
+    <>
+      <rect x="4" y="10.5" width="16" height="10" rx="2.2" />
+      <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+      <circle cx="12" cy="14.6" r="1.4" />
+      <path d="M12 16v2" />
+    </>
+  ),
 }
 
 export function GameIcon({ id }) {

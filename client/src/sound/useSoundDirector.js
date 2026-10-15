@@ -71,6 +71,9 @@ const PHASE_CUES = {
   // Echo Chain: tile notes, the 3-2-1 beeps and the replay's notes are
   // timed inside EchoPlay; the director only sounds the miss.
   'echo-chain': { miss: 'wrong' },
+  // Word Heist: lock-in confirm and per-guess correct / wrong fire inside
+  // SetWord / Solve; the director marks the solve opening and the reveal.
+  'word-heist': { solve: 'round-start', reveal: REVEAL },
   'who-am-i': {
     reveal: REVEAL,
     // correct/wrong-guess blips fire inside AskScreen (play('correct' |

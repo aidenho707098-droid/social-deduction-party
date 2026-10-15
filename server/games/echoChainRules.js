@@ -2,12 +2,28 @@
 // schedule and scoring. Pure data + pure functions, so the selftest can log
 // the schedule and the client can mirror the board without a server.
 
+// The tiers' RULES. Their names and descriptions live in the client's
+// one config (client/src/games/echoChain/tiers.js); the selftest checks the
+// two agree on size and replay.
+//   replay: true  — after a miss, the correct chain is replayed once.
+//   replay: false — Savant: the chain is NEVER shown or sent again; players
+//                   only ever see it through other players' live taps.
 export const DIFFICULTIES = {
-  easy: { size: 3 }, // 9 tiles
-  medium: { size: 4 }, // 16 tiles
-  hard: { size: 5 }, // 25 tiles
+  recall: { size: 3, replay: true }, // 9 tiles
+  retain: { size: 4, replay: true }, // 16 tiles
+  photographic: { size: 5, replay: true }, // 25 tiles
+  savant: { size: 5, replay: false }, // 25 tiles, no replay
 };
 export const DIFFICULTY_KEYS = Object.keys(DIFFICULTIES);
+export const DEFAULT_DIFFICULTY = "recall";
+
+// Rooms saved before the rename stored easy / medium / hard.
+export const LEGACY_DIFFICULTIES = { easy: "recall", medium: "retain", hard: "photographic" };
+
+export function difficultyKey(value) {
+  if (DIFFICULTIES[value]) return value;
+  return LEGACY_DIFFICULTIES[value] ?? DEFAULT_DIFFICULTY;
+}
 
 export const LIVES = { min: 1, max: 3, dflt: 2 };
 
@@ -27,7 +43,8 @@ export const BEATS = {
   missMs: 1_800, // "Missed! [Name] loses a life"
 };
 
-// The flash-through after a miss. Per-tile interval: 0.6s for chains of 1
+// The flash-through after a miss (replay tiers only — Savant has none, so
+// this schedule never applies to it). Per-tile interval: 0.6s for chains of 1
 // to 5, then 0.03s faster for every extra tile, never below 0.2s. A flash
 // lasts 70% of its interval.
 export const REPLAY = {

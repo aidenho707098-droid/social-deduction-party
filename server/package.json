@@ -17,6 +17,7 @@
     "test:hot-potato": "node hot-potato.selftest.mjs",
     "test:memory-imposter": "node memory-imposter.selftest.mjs && node ../client/src/games/memoryImposter/palette.selftest.mjs",
     "test:echo-chain": "node echo-chain.selftest.mjs && node ../client/src/games/echoChain/board.selftest.mjs",
+    "test:word-heist": "node word-heist.selftest.mjs",
     "test:tournament":"node tournament.selftest.mjs",
     "test:catalog": "node catalog.selftest.mjs",
     "test:categories": "node categories.selftest.mjs"

@@ -2,6 +2,7 @@ import { PlayerDot } from '../../PlayerDot'
 import { playerColorMap } from '../../playerColors'
 import CountUp from '../CountUp'
 import { GameIcon } from '../gameStyle'
+import { tierMeta, tierOf } from './tiers'
 
 // The end: each player's rounds survived (their points) and the final
 // chain length. Ties share a place (players out in the same round, or
@@ -56,6 +57,10 @@ export default function EchoResults({ game, players, myId, isHost, onBackToLobby
           <span className="ec-final-cap">rounds</span>
         </div>
       </div>
+      <p className="hint ec-final-tier">
+        <strong>{tierOf(game.difficulty).name}</strong> · {tierMeta(game.difficulty)} · {game.startLives}{' '}
+        {game.startLives === 1 ? 'life' : 'lives'} each
+      </p>
 
       <div>
         <span className="label">Rounds survived</span>

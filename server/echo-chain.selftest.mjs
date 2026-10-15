@@ -8,7 +8,8 @@
 // Run:  node server/echo-chain.selftest.mjs   (or npm run test:echo-chain)
 
 import * as ec from "./games/echo-chain.js";
-import { REPLAY, TIMERS, BEATS, replayIntervalMs, replayFlashMs, replayDurationMs, pointsFor } from "./games/echoChainRules.js";
+import { TIERS, TIER_KEYS, LEGACY_TIERS } from "../client/src/games/echoChain/tiers.js";
+import { DIFFICULTIES, LEGACY_DIFFICULTIES, REPLAY, TIMERS, BEATS, replayIntervalMs, replayFlashMs, replayDurationMs, pointsFor } from "./games/echoChainRules.js";
 import { activePlayers, nextActiveAfter } from "./games/turnCycle.js";
 import { GAMES } from "./games/registry.js";
 import { CATALOG, FILTERS } from "../client/src/games/catalog.js";
@@ -64,11 +65,20 @@ section("(a) sequence + turn engine");
   try { ec.createGame(Array.from({ length: 11 }, (_, i) => `p${i}`)); } catch { threw++; }
   check("2–10 players enforced", threw === 2 && ec.minPlayers === 2 && ec.maxPlayers === 10);
 
-  check("settings: defaults Easy / 2 lives", JSON.stringify(ec.resolveSettings({})) === '{"difficulty":"easy","lives":2}');
+  check("settings: defaults Recall / 2 lives", JSON.stringify(ec.resolveSettings({})) === '{"difficulty":"recall","lives":2}');
   check("settings: lives clamp to 1..3", ec.resolveSettings({ lives: 0 }).lives === 1 && ec.resolveSettings({ lives: 9 }).lives === 3);
-  check("settings: unknown difficulty -> Easy", ec.resolveSettings({ difficulty: "nightmare" }).difficulty === "easy");
-  const sizes = ["easy", "medium", "hard"].map((d) => ec.createGame(["a", "b"], { difficulty: d }).tileCount);
-  check("boards: 9 / 16 / 25 tiles", sizes.join() === "9,16,25", sizes.join());
+  check("settings: unknown difficulty -> Recall", ec.resolveSettings({ difficulty: "nightmare" }).difficulty === "recall");
+  const migrated = ["easy", "medium", "hard"].map((d) => ec.resolveSettings({ difficulty: d }).difficulty);
+  check("old saved names migrate: easy/medium/hard -> recall/retain/photographic", migrated.join() === "recall,retain,photographic", migrated.join());
+  const old = ec.createGame(["a", "b"], { difficulty: "hard", lives: 3 });
+  check("a game started from an old saved setting runs as Photographic", old.difficulty === "photographic" && old.tileCount === 25 && old.replays);
+  const sizes = ["recall", "retain", "photographic", "savant"].map((d) => ec.createGame(["a", "b"], { difficulty: d }).tileCount);
+  check("boards: 9 / 16 / 25 / 25 tiles", sizes.join() === "9,16,25,25", sizes.join());
+  const replays = ["recall", "retain", "photographic", "savant"].map((d) => ec.createGame(["a", "b"], { difficulty: d }).replays);
+  check("replay after a miss on every tier except Savant", replays.join() === "true,true,true,false");
+  check("client tier config agrees with the server rules", TIER_KEYS.join() === Object.keys(DIFFICULTIES).join() &&
+    TIER_KEYS.every((k) => TIERS[k].size === DIFFICULTIES[k].size && TIERS[k].replay === DIFFICULTIES[k].replay) &&
+    JSON.stringify(LEGACY_TIERS) === JSON.stringify(LEGACY_DIFFICULTIES));
 
   const P = ["a", "b", "c", "d", "e", "f"];
   const orders = new Set();
@@ -285,7 +295,7 @@ section("(d) rounds + scoring");
     pointsFor({ eliminatedInRound: 4, round: 6 }) === 3 && pointsFor({ round: 6 }) === 6 && pointsFor({ round: 6, endedEarly: true }) === 5);
   check("difficulty and lives don't change scoring", (() => {
     const run = (o) => { const x = started(["a", "b"], o); ec.endEarly(x.g); return x.g.result.rows.map((r) => r.score).join(); };
-    return run({ difficulty: "hard", lives: 3 }) === run({ difficulty: "easy", lives: 1 });
+    return ["recall", "retain", "photographic", "savant"].every((d) => run({ difficulty: d, lives: 3 }) === run({ difficulty: "recall", lives: 1 }));
   })());
 }
 
@@ -328,7 +338,7 @@ section("(e) privacy + long chains");
 
   // A 60-tile chain: echo all of it, then miss + replay.
   const seq60 = Array.from({ length: 60 }, (_, i) => (i * 7) % 25);
-  const L = started(["a", "b"], { difficulty: "hard" }, { seq: seq60 });
+  const L = started(["a", "b"], { difficulty: "photographic" }, { seq: seq60 });
   const t0 = performance.now();
   let tl = L.t;
   for (const x of seq60) ec.tap(L.g, "a", x, ["a", "b"], { now: (tl += 150) });
@@ -348,13 +358,97 @@ section("(e) privacy + long chains");
 }
 
 // ===================================================================
+section("(e2) Savant: no replay, the chain never leaves the server");
+{
+  const P = ["a", "b", "c"];
+  const fresh = started(P, { difficulty: "savant" });
+  check("first turn unchanged: empty chain -> add", fresh.g.phase === "add" && fresh.g.seq.length === 0);
+
+  const S = started(P, { difficulty: "savant", lives: 2 }, { seq: [3, 14, 22, 7] });
+  let t = S.t;
+  const blobs = [];
+  const snap = (g, present, now) => blobs.push(JSON.stringify(ec.getPublicState(g, present, now)));
+  ec.tap(S.g, "a", 3, P, { now: (t += 200) });
+  ec.tap(S.g, "a", 14, P, { now: (t += 200) });
+  const w = ec.tap(S.g, "a", 0, P, { now: (t += 200) });
+  check("wrong tap: broadcast as WRONG with the tapped tile only", w.tap.kind === "wrong" && w.tap.tile === 0 && Object.keys(w.tap).sort().join() === "kind,n,playerId,tile,turnId");
+  check("miss: a life lost, chain unchanged", S.g.phase === "miss" && S.g.lives.get("a") === 1 && S.g.seq.join() === "3,14,22,7");
+  check("the misser's remaining taps are refused (never shown)", !ec.tap(S.g, "a", 22, P, { now: t + 50 }).ok);
+  snap(S.g, P, t + 100);
+  const pm = ec.getPublicState(S.g, P, t + 100);
+  check("the miss moment carries replays:false and no replay", pm.replays === false && pm.miss && !("replay" in pm));
+  let at = S.g.beatEndsAt;
+  ec.tick(S.g, P, at);
+  check("NO replay: straight to the next player echoing the same chain", S.g.phase === "echo" && S.g.activeId === "b" && S.g.seq.length === 4 && S.g.echoPos === 0);
+  snap(S.g, P, at);
+  at = S.g.deadline + 501;
+  ec.tick(S.g, P, at);
+  check("timeout in Savant: a miss, nothing shown, no replay", S.g.phase === "miss" && S.g.miss.cause === "timeout");
+  snap(S.g, P, at);
+  at = S.g.beatEndsAt;
+  ec.tick(S.g, P, at);
+  check("...then c echoes it from memory", S.g.phase === "echo" && S.g.activeId === "c");
+  snap(S.g, P, at);
+  const realNow = Date.now;
+  let now = at + 1000;
+  Date.now = () => now;
+  try {
+    ec.reconcilePresence(S.g, ["a", "b"], { final: true, roomPlayerIds: ["a", "b"] });
+  } finally {
+    Date.now = realNow;
+  }
+  check("active player leaves for good: out, no replay", S.g.phase === "miss" && S.g.miss.cause === "left");
+  snap(S.g, ["a", "b"], now);
+  at = S.g.beatEndsAt;
+  ec.tick(S.g, ["a", "b"], at);
+  check("...turn passes, still no replay", S.g.phase === "echo" && S.g.activeId === "a");
+  snap(S.g, ["a", "b"], at);
+  ec.forceAdvance(S.g, ["a", "b"], at + 500);
+  check("host force proceed in Savant: a miss for the idle player", S.g.phase === "miss" && S.g.miss.cause === "skipped");
+  snap(S.g, ["a", "b"], at + 600);
+  ec.tick(S.g, ["a", "b"], S.g.beatEndsAt);
+  check("...and no replay after it (here it was a's last life: game over)", S.g.phase !== "replay" && (S.g.phase === "echo" || S.g.phase === "final"));
+  snap(S.g, ["a", "b"], S.g.beatEndsAt);
+  ec.endEarly(S.g, at + 9000);
+  snap(S.g, ["a", "b"], at + 9000);
+  const all = blobs.join("\n");
+  check("no Savant payload (miss, timeout, leave, force, early end) carries the chain", !/"tiles"|"seq"|"replay":\{/.test(all) && !/3,14,22,7/.test(all), `${blobs.length} payloads`);
+
+  // Differential: two Savant games with different chains -> identical payloads.
+  const A = started(P, { difficulty: "savant", lives: 2 }, { seq: [3, 14, 22, 7] });
+  const B = started(P, { difficulty: "savant", lives: 2 }, { seq: [9, 1, 18, 24] });
+  const t1 = A.t + 5501;
+  ec.tick(A.g, P, t1);
+  ec.tick(B.g, P, t1);
+  const same1 = JSON.stringify(ec.getPublicState(A.g, P, t1)) === JSON.stringify(ec.getPublicState(B.g, P, t1));
+  const t2 = A.g.beatEndsAt;
+  ec.tick(A.g, P, t2);
+  ec.tick(B.g, P, t2);
+  const same2 = JSON.stringify(ec.getPublicState(A.g, P, t2)) === JSON.stringify(ec.getPublicState(B.g, P, t2));
+  check("Savant payloads after a miss don't depend on the chain at all", same1 && same2);
+
+  // A whole simulated Savant game never enters the replay phase.
+  const g = ec.createGame(P, { difficulty: "savant", lives: 1 }, 0);
+  let x = 3000;
+  ec.tick(g, P, x);
+  let sawReplay = false;
+  for (let i = 0; i < 2000 && g.phase !== "final"; i++) {
+    if (g.phase === "replay") sawReplay = true;
+    if (g.phase === "miss") { ec.tick(g, P, (x = g.beatEndsAt)); continue; }
+    if (g.phase === "echo") ec.tap(g, g.activeId, Math.random() < 0.95 ? g.seq[g.echoPos] : (g.seq[g.echoPos] + 1) % 25, P, { now: (x += 100) });
+    else ec.tap(g, g.activeId, Math.floor(Math.random() * 25), P, { now: (x += 100) });
+  }
+  check("a whole Savant game: no replay phase, ever (the schedule never applies)", !sawReplay && g.phase === "final");
+}
+
+// ===================================================================
 section("(f) integrations + simulated games");
 {
   const entry = CATALOG.find((g) => g.id === "echo-chain");
   check("registry + catalogue: 2–10, tags Memory + Quick", GAMES["echo-chain"] === ec && entry?.minPlayers === 2 && entry?.maxPlayers === 10 && entry?.tags.join() === "memory,quick");
   check("Memory and Quick filter chips exist", ["memory", "quick"].every((k) => FILTERS.some((f) => f.key === k)));
   check("Chaos Events don't apply", !isChaosEligible("echo-chain"));
-  check("tournament defaults: Easy, 2 lives", JSON.stringify(tournamentOptionsFor("echo-chain", ["a", "b"])) === '{"difficulty":"easy","lives":2}');
+  check("tournament defaults: Recall, 2 lives", JSON.stringify(tournamentOptionsFor("echo-chain", ["a", "b"])) === '{"difficulty":"recall","lives":2}');
   check("fit: 1 player refused, 2 and 10 fine", fitError(ec, 1) && !fitError(ec, 2) && !fitError(ec, 10) && fitError(ec, 11));
 
   // Simulated games: players who remember with some accuracy.
@@ -362,7 +456,7 @@ section("(f) integrations + simulated games");
   let total = 0;
   const lengths = [];
   for (const n of [2, 3, 4, 6, 10]) {
-    for (const difficulty of ["easy", "medium", "hard"]) {
+    for (const difficulty of ["recall", "retain", "photographic", "savant"]) {
       for (const lives of [1, 2, 3]) {
         total++;
         const P = Array.from({ length: n }, (_, i) => `p${i}`);

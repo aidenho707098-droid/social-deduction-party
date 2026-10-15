@@ -8,9 +8,14 @@
 // At 0 lives you're out (you stay in the room and watch). The last player
 // standing wins. There is no cap on the chain's length.
 //
+// Tiers (echoChainRules.js DIFFICULTIES): Recall 3x3, Retain 4x4 and
+// Photographic 5x5 replay the chain after a miss. SAVANT (5x5) never does:
+// the miss moment passes straight to the next player, and the chain is
+// never sent to anyone, ever — only the live taps show it.
+//
 //   phase: countdown -> echo -> add -> echo -> add -> ...    (turn by turn)
 //                        \-> miss -> replay -> echo ...     (wrong / timeout)
-//          ... -> final
+//          ... -> final            (Savant: miss -> echo, no replay)
 //
 // A tile's identity is its POSITION (0 .. size*size-1, row by row); colour
 // and note are client-side decoration (client/src/games/echoChain/board.js).
@@ -20,7 +25,7 @@
 // the active player are ignored. The public state never carries the chain
 // or the next expected tile — only its LENGTH and how far the active player
 // has echoed — except during the replay after a miss, which is the one time
-// everyone is shown the chain again. Taps themselves are public (that's the
+// everyone is shown the chain again (never, in Savant). Taps themselves are public (that's the
 // game: everyone watches the echo live), and a wrong tap shows the tile
 // that WAS tapped, never the one that was due.
 //
@@ -36,6 +41,7 @@ import {
   REPLAY,
   TIMERS,
   clampInt,
+  difficultyKey,
   pointsFor,
   replayDurationMs,
   replayFlashMs,
@@ -53,7 +59,8 @@ const CLOCKS = { deadline: "turnLeftMs" };
 
 export function resolveSettings(options = {}) {
   return {
-    difficulty: DIFFICULTIES[options.difficulty] ? options.difficulty : "easy",
+    // Old rooms saved easy / medium / hard: migrated to the new tiers.
+    difficulty: difficultyKey(options.difficulty),
     lives: clampInt(options.lives, LIVES.min, LIVES.max, LIVES.dflt),
   };
 }
@@ -72,6 +79,7 @@ export function createGame(playerIds, options = {}, now = Date.now()) {
     id,
     difficulty,
     size,
+    replays: DIFFICULTIES[difficulty].replay, // false = Savant
     tileCount: size * size,
     startLives: lives,
     cycle,
@@ -215,10 +223,11 @@ function miss(game, playerId, cause, now) {
 }
 
 // After the miss beat: the game may be over; otherwise replay the correct
-// chain (if there is one) before the next player echoes it.
+// chain (if there is one, and the tier replays) before the next player
+// echoes it. Savant goes straight on: the chain is never shown again.
 function afterMiss(game, presentPlayerIds, now) {
   if (activePlayers(game).length <= 1) return finish(game, now);
-  if (!game.seq.length) return passTurn(game, game.missFrom, presentPlayerIds, now);
+  if (!game.seq.length || !game.replays) return passTurn(game, game.missFrom, presentPlayerIds, now);
   startReplay(game, now);
 }
 
@@ -331,7 +340,7 @@ export function reconcilePresence(game, presentPlayerIds, { final = false, roomP
 }
 
 // Gone for good. The active player is eliminated, the chain is replayed
-// once and the turn passes; anyone else just drops out of the order.
+// once (not in Savant) and the turn passes; anyone else just drops out of the order.
 function removeFromGame(game, pid, presentPlayerIds, now) {
   const wasActive = isActive(game, pid);
   const wasTurn = pid === game.activeId && (game.phase === "echo" || game.phase === "add");
@@ -373,9 +382,9 @@ export function forceAdvance(game, presentPlayerIds, now = Date.now()) {
 }
 
 // Tournament: game over at "final" (the default), standings = the points
-// (rounds survived). Settings default to Easy with 2 lives.
+// (rounds survived). Settings default to Recall with 2 lives.
 export function tournamentOptions() {
-  return { difficulty: "easy", lives: LIVES.dflt };
+  return { difficulty: "recall", lives: LIVES.dflt };
 }
 
 export function getFinalStandings(game) {
@@ -403,6 +412,7 @@ export function getPublicState(game, presentPlayerIds, now = Date.now()) {
     phase: game.phase,
     difficulty: game.difficulty,
     size: game.size,
+    replays: game.replays,
     startLives: game.startLives,
     cycle: game.cycle,
     activeIds: activePlayers(game),
@@ -437,8 +447,8 @@ export function getPublicState(game, presentPlayerIds, now = Date.now()) {
     state.msLeft = Math.max(0, game.beatEndsAt - now);
   }
 
-  if (game.phase === "replay") {
-    // The one time the chain leaves the server: the correct chain, replayed
+  if (game.phase === "replay" && game.replays) {
+    // The one time the chain leaves the server (never in Savant): the correct chain, replayed
     // once for everyone after a miss.
     state.miss = game.miss;
     state.replay = {

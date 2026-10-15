@@ -4,7 +4,11 @@
 // .ec-board fills the screen width, 6px gaps, capped at 360px).
 // Run:  node client/src/games/echoChain/board.selftest.mjs
 
-import { EASY_COLORS, NOTE_COUNT, PATTERN_COLORS, SIZES, colorFor, noteFor } from './board.js'
+import { EASY_COLORS, NOTE_COUNT, PATTERN_COLORS, colorFor, noteFor } from './board.js'
+import { TIERS } from './tiers.js'
+
+// Tier name -> board size (Savant shares Photographic's 5x5).
+const SIZES = Object.fromEntries(Object.entries(TIERS).map(([k, v]) => [k, v.size]))
 
 let failures = 0
 function check(name, cond, detail = '') {
@@ -13,7 +17,7 @@ function check(name, cond, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  — ${detail}` : ''}`)
 }
 
-check('Easy: nine distinct colours', new Set(EASY_COLORS).size === 9)
+check('Recall: nine distinct colours', new Set(EASY_COLORS).size === 9)
 check('Medium/Hard: six colours', new Set(PATTERN_COLORS).size === 6)
 
 for (const [name, size] of Object.entries(SIZES)) {
@@ -32,7 +36,7 @@ for (const [name, size] of Object.entries(SIZES)) {
 
   const notes = Array.from({ length: size * size }, (_, t) => noteFor(size, t))
   check(`${name}: notes are valid bells`, notes.every((n) => Number.isInteger(n) && n >= 0 && n < NOTE_COUNT))
-  if (size === 3) check('easy: nine distinct notes', new Set(notes).size === 9)
+  if (size === 3) check(`${name}: nine distinct notes`, new Set(notes).size === 9)
   else {
     const rowsOk = Array.from({ length: size }, (_, r) => notes.slice(r * size, r * size + size)).every(
       (row, r) => row.every((n, c) => n === c + (r % 2 === 0 ? 5 : 0)),

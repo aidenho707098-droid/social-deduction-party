@@ -270,6 +270,11 @@ export default function Lobby() {
       socket.on('echo_chain_tap', handler)
       return () => socket.off('echo_chain_tap', handler)
     },
+    wordHeistPrompt: (promptId, cb) => socket.emit('word_heist_prompt', { code, promptId }, cb),
+    wordHeistCheck: (text, cb) => socket.emit('word_heist_check', { code, text }, cb),
+    wordHeistConfirm: (yes, cb) => socket.emit('word_heist_confirm', { code, yes }, cb),
+    wordHeistGuess: (guess, cb) => socket.emit('word_heist_guess', { code, guess }, cb),
+    wordHeistNext: (cb) => socket.emit('word_heist_next', { code }, cb),
     backToLobby: () => socket.emit('back_to_lobby', { code }),
     setPlayerColor: (color) => socket.emit('set_player_color', { code, color }),
     kickPlayer: (playerId) => socket.emit('kick_player', { code, playerId }),

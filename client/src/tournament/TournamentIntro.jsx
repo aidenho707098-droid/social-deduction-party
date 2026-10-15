@@ -50,7 +50,7 @@ export default function TournamentIntro({
   const [error, setError] = useState('')
 
   const effectiveOptions = pendingOptions ?? savedByGame[gameId] ?? null
-  const summary = describeGameOptions(effectiveOptions)
+  const summary = describeGameOptions(effectiveOptions, gameId)
   // The server judges fit with the settings it knows; once the host has
   // re-configured locally, judge it with those instead.
   const notFit = pendingOptions

@@ -18,6 +18,9 @@
 //   tags — filter chips (see FILTERS); every game needs at least one.
 //   isNew — shows the mustard NEW pill.
 
+// Echo Chain's tier names (plain data, like this file).
+import { TIERS as ECHO_TIERS } from './echoChain/tiers.js'
+
 export const FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'deduction', label: 'Deduction' },
@@ -150,10 +153,22 @@ export const CATALOG = [
     id: 'echo-chain',
     name: 'Echo Chain',
     genre: 'memory showdown',
-    description: 'Tap back the whole chain of tiles from memory, then add one more. Miss and lose a life. Last one standing wins.',
+    description: `Tap back the whole chain of tiles from memory, then add one more. Miss and lose a life. From ${ECHO_TIERS.recall.name} up to ${ECHO_TIERS.savant.name}, where a miss is never replayed.`,
     minPlayers: 2,
     maxPlayers: 10,
     tags: ['memory', 'quick'],
+    isNew: true,
+  },
+  {
+    id: 'word-heist',
+    // Working title: every screen reads the name from here (and the server's
+    // wordHeistRules.js NAME, which server/catalog.selftest.mjs keeps in sync).
+    name: 'Word Heist',
+    genre: 'wordle duel',
+    description: 'Everyone secretly sets one word, then cracks someone else’s, Wordle-style. Crack it fast to score, or set a word that stumps your solver.',
+    minPlayers: 2,
+    maxPlayers: 10,
+    tags: ['word', 'guessing'],
     isNew: true,
   },
 ]

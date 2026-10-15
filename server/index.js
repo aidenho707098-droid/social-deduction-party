@@ -31,6 +31,7 @@ import { sameAnswer } from "./games/wordMatch.js";
 import { GAMES } from "./games/registry.js";
 import { fitError, fitsSomeMode } from "./games/playerLimits.js";
 import { pumpValidation as pumpSoupValidation } from "./alphabetSoupRuntime.js";
+import { wordCheckerFor } from "./wordHeistChecker.js";
 import {
   chaosTick,
   chaosPublicSlice,
@@ -1884,6 +1885,76 @@ io.on("connection", (socket) => {
     if (res.ok) broadcastRoom(room.code);
   });
 
+  // --- Word Heist actions -------------------------------------------------
+  // Everything is validated in word-heist.js. A word only ever goes to its
+  // setter's own socket (your_role) until the reveal; the room broadcast
+  // carries counts. A check is async: beginCheck -> the AI (wordHeistChecker)
+  // -> finishCheck, which ignores a result that lands after the round moved on.
+  const wordHeistCtx = (code) => {
+    const room = getRoom(code);
+    if (!room || room.status !== "in-game" || room.game?.id !== "word-heist") return null;
+    const playerId = playerIdOf(socket);
+    if (!playerId || !room.players.has(playerId)) return null;
+    return { room, playerId, mod: GAMES["word-heist"] };
+  };
+  const wordHeistSync = (room) => {
+    broadcastRoom(room.code);
+    sendPrivateRoles(room);
+  };
+
+  socket.on("word_heist_prompt", ({ code, promptId }, cb) => {
+    const ctx = wordHeistCtx(code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = ctx.mod.choosePrompt(ctx.room.game, ctx.playerId, promptId);
+    cb?.(res);
+    if (res.ok) sendPrivateRoleTo(ctx.room, ctx.room.players.get(ctx.playerId));
+  });
+
+  socket.on("word_heist_check", async ({ code, text }, cb) => {
+    const ctx = wordHeistCtx(code);
+    if (!ctx) return cb?.({ ok: false });
+    const { room, playerId, mod } = ctx;
+    const game = room.game;
+    const begun = mod.beginCheck(game, playerId, text);
+    if (!begun.ok || !begun.job) {
+      cb?.(begun);
+      wordHeistSync(room); // checks left / message / a fallback all changed
+      return;
+    }
+    sendPrivateRoleTo(room, room.players.get(playerId)); // "checking…"
+    const verdict = await wordCheckerFor(room).check(begun.job);
+    const now = getRoom(code);
+    if (now !== room || room.game !== game) return cb?.({ ok: false, stale: true });
+    const res = mod.finishCheck(game, begun.job, verdict, connectedPlayerIds(room));
+    cb?.(res);
+    wordHeistSync(room);
+  });
+
+  socket.on("word_heist_confirm", ({ code, yes }, cb) => {
+    const ctx = wordHeistCtx(code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = ctx.mod.confirm(ctx.room.game, ctx.playerId, Boolean(yes), connectedPlayerIds(ctx.room));
+    cb?.(res);
+    if (res.ok) wordHeistSync(ctx.room);
+  });
+
+  socket.on("word_heist_guess", ({ code, guess }, cb) => {
+    const ctx = wordHeistCtx(code);
+    if (!ctx) return cb?.({ ok: false });
+    const res = ctx.mod.guess(ctx.room.game, ctx.playerId, guess, connectedPlayerIds(ctx.room));
+    cb?.(res);
+    if (res.ok) wordHeistSync(ctx.room);
+  });
+
+  // Host: skip the rest of the reveal and deal the next round.
+  socket.on("word_heist_next", ({ code }, cb) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "word-heist") return cb?.({ ok: false });
+    const res = GAMES["word-heist"].nextRound(room.game);
+    cb?.(res);
+    if (res.ok) wordHeistSync(room);
+  });
+
   socket.on("back_to_lobby", ({ code }) => {
     const room = getRoom(code);
     if (!room || !isRoomHost(room, socket)) return;
@@ -2143,6 +2214,34 @@ const echoTimer = setInterval(() => {
   }
 }, ECHO_TICK_MS);
 echoTimer.unref?.();
+
+// --- Word Heist: set / solve / reveal clocks ------------------------------
+// Minute-scale clocks, but a 250ms beat keeps "time's up" crisp. Broadcasts
+// (and re-pushes private state: the solve phase dealing boards is a private
+// change) the moment something changes, plus once a second for the rings.
+const WORD_HEIST_TICK_MS = 250;
+const wordHeistLastBroadcast = new Map(); // roomCode -> ms
+const wordHeistTimer = setInterval(() => {
+  const now = Date.now();
+  for (const room of allRooms()) {
+    const game = room.game;
+    if (room.status !== "in-game" || game?.id !== "word-heist" || game.phase === "final") {
+      wordHeistLastBroadcast.delete(room.code);
+      continue;
+    }
+    try {
+      const changed = GAMES["word-heist"].tick(game, connectedPlayerIds(room), now);
+      if (changed || now - (wordHeistLastBroadcast.get(room.code) ?? 0) >= 1000) {
+        wordHeistLastBroadcast.set(room.code, now);
+        broadcastRoom(room.code);
+        if (changed) sendPrivateRoles(room);
+      }
+    } catch (err) {
+      console.warn(`[word-heist] tick error for ${room.code}:`, err);
+    }
+  }
+}, WORD_HEIST_TICK_MS);
+wordHeistTimer.unref?.();
 
 // --- Memory Imposter: every phase clock ---------------------------------
 // Memorize, role reveal, discussion, vote and reveal all run here. A 200ms

@@ -1,3 +1,5 @@
+import { TIERS as ECHO } from '../games/echoChain/tiers'
+
 // Step-by-step walkthrough copy for the modes complex enough to warrant a
 // guided first play: Fact or Fake's Personal Mode, Majority Pick's Custom
 // Mode, Fake Artist, Tournament Mode, Wavelength, Black Magic, and Taboo.
@@ -306,15 +308,37 @@ export const WALKTHROUGHS = {
       {
         icon: '💔',
         title: 'Miss, and you lose a life',
-        text: "A wrong tile or running out of time costs a life, and the chain is replayed once for everyone. That's the only time anyone sees it again. At 0 lives you're out and watch.",
+        text: `A wrong tile (marked with a cross) or running out of time costs a life. On ${ECHO.recall.name}, ${ECHO.retain.name} and ${ECHO.photographic.name} the chain is then replayed once, the only time anyone sees it again. On ${ECHO.savant.name} it never is. At 0 lives you're out and watch.`,
       },
       {
         icon: '🏆',
         title: 'Finally, last one standing wins',
-        text: 'Points are rounds survived. The last player left scores the round the game ended in.',
+        text: 'Points are rounds survived, on every difficulty. The last player left scores the round the game ended in.',
       },
     ],
     phaseSteps: { countdown: 0, echo: 1, add: 2, miss: 3, replay: 3 },
+  },
+
+  'word-heist': {
+    title: 'How Word Heist works',
+    steps: [
+      {
+        icon: '🔒',
+        title: 'First, set a secret word',
+        text: 'Everyone at once, 45 seconds. Pick a prompt (or any word in Free choice), type one 4 to 8 letter word and tap Check word. If the spelling gets fixed, you choose Yes or No.',
+      },
+      {
+        icon: '🔤',
+        title: 'Then, crack someone else’s word',
+        text: 'Everyone at once, 3 minutes, each on a different player’s word. Green is the right spot, yellow is in the word somewhere else, grey is not in it. One more guess than letters.',
+      },
+      {
+        icon: '🏆',
+        title: 'Finally, split the pot',
+        text: 'Each word is worth its length + 2. Crack it in g guesses: you score the rest and the setter scores g. Not cracked: the setter takes it all.',
+      },
+    ],
+    phaseSteps: { set: 0, solve: 1, reveal: 2 },
   },
 
   tournament: {

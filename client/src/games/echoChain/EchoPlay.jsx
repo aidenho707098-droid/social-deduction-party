@@ -6,8 +6,12 @@ import { useClock } from '../hotPotato/useClock'
 import { buzz } from '../hotPotato/usePotatoSounds'
 import EchoBoard from './EchoBoard'
 import { noteKey } from './board'
+import { tierOf } from './tiers'
 
 const TAP_FLASH_MS = 280
+// A wrong tap stays up longer, marked with a cross, so nobody takes it for
+// part of the chain (in Savant it's the only thing a miss shows).
+const WRONG_FLASH_MS = 900
 
 // One screen for the whole game up to the results: the board never
 // remounts, so flashes and notes carry across turns. What changes is the
@@ -16,9 +20,9 @@ const TAP_FLASH_MS = 280
 //   countdown  3-2-1 over the board
 //   echo/add   the ACTIVE player taps; everyone else watches the same taps
 //              live (they arrive as one-off `echo_chain_tap` events)
-//   miss       "Missed! [Name] loses a life"
+//   miss       "Missed! [Name] loses a life" (Savant: "No replay. Remember it.")
 //   replay     "Watch the chain": the correct chain flashes through once —
-//              the only time the server ever sends it
+//              the only time the server ever sends it. Never in Savant.
 //
 // The app never shows the chain or hints at the next tile: the status line
 // is a count, and taps are lit only as they happen.
@@ -28,6 +32,7 @@ export default function EchoPlay({ game, players, myId, isHost, actions }) {
   const colorById = playerColorMap(players)
   const nm = (id) => nameById[id] ?? 'Someone'
   const size = game.size
+  const tier = tierOf(game.difficulty)
   const L = game.chainLength
   const isTurnPhase = game.phase === 'echo' || game.phase === 'add'
   const amActive = isTurnPhase && game.activeId === myId
@@ -71,7 +76,7 @@ export default function EchoPlay({ game, players, myId, isHost, actions }) {
     () =>
       actions.onEchoTap((ev) => {
         if (!ev || ev.playerId === myId) return // my own taps lit locally already
-        flash(ev.tile, ev.kind, TAP_FLASH_MS)
+        flash(ev.tile, ev.kind, ev.kind === 'wrong' ? WRONG_FLASH_MS : TAP_FLASH_MS)
         play(noteKey(size, ev.tile))
       }),
     [actions, myId, flash, play, size],
@@ -95,6 +100,7 @@ export default function EchoPlay({ game, players, myId, isHost, actions }) {
     const turnId = game.turnId
     setSent((s) => (s.turnId === turnId ? { ...s, n: s.n + 1 } : { turnId, n: 1 }))
     actions.echoTap(tile, turnId, (res) => {
+      if (res?.ok && res.correct === false) flash(tile, 'wrong', WRONG_FLASH_MS)
       if (res && !res.ok && res.reason !== 'notActive' && res.reason !== 'closed' && res.message) setNote(res.message)
     })
   }
@@ -183,7 +189,9 @@ export default function EchoPlay({ game, players, myId, isHost, actions }) {
       <div className="ec-head">
         <div className="ec-head-text">
           <h2 className="ec-title">{header}</h2>
-          <p className="ec-round">Round {game.round}</p>
+          <p className="ec-round">
+            Round {game.round} · {tier.name}
+          </p>
         </div>
         {amActive && !frozen && (
           <TimerRing frac={ringFrac} label={`${Math.ceil(msLeft / 1000)}`} />
@@ -214,10 +222,13 @@ export default function EchoPlay({ game, players, myId, isHost, actions }) {
           </div>
         )}
         {game.phase === 'miss' && (
-          <div className="ec-over ec-over-miss" role="status">
+          <div className={`ec-over ec-over-miss ${game.miss?.cause === 'wrong' ? 'ec-over-after-wrong' : ''}`} role="status">
             <p className="ec-miss-title">{game.miss?.cause === 'left' ? 'Out!' : 'Missed!'}</p>
             <p className="ec-miss-line">{missLine}</p>
             {missWhy && <p className="ec-miss-why">{missWhy}</p>}
+            {game.replays === false && game.chainLength > 0 && (
+              <p className="ec-miss-savant">No replay. Remember it.</p>
+            )}
           </div>
         )}
         {frozen && (

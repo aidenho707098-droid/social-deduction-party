@@ -188,7 +188,7 @@ export default function TournamentSetup({
               <ol className="tour-lineup-edit">
                 {lineup.map((id, i) => {
                   const g = getGame(id)
-                  const summary = describeGameOptions(lineupSettings[i])
+                  const summary = describeGameOptions(lineupSettings[i], id)
                   const problem = lineupProblems.find((p) => p.i === i)
                   return (
                     <li key={`${id}-${i}`} className="tour-lineup-edit-item">

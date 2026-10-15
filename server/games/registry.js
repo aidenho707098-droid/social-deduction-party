@@ -11,6 +11,7 @@ import * as alphabetSoup from "./alphabet-soup.js";
 import * as hotPotato from "./hot-potato.js";
 import * as memoryImposter from "./memory-imposter.js";
 import * as echoChain from "./echo-chain.js";
+import * as wordHeist from "./word-heist.js";
 
 // Every game module exports the same shape: id, name, minPlayers,
 // createGame(), getPublicState(), getPrivateState(). index.js and rooms.js
@@ -30,4 +31,5 @@ export const GAMES = {
   [hotPotato.id]: hotPotato,
   [memoryImposter.id]: memoryImposter,
   [echoChain.id]: echoChain,
+  [wordHeist.id]: wordHeist,
 };

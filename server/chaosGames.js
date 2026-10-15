@@ -178,6 +178,37 @@ export const CHAOS_GAMES = {
       return (m) => always.includes(m.id) || small.includes(m.id);
     },
   },
+  "word-heist": {
+    // One roll per round, as the set phase opens. The set clock waits out
+    // the takeover (onChaosAnnounced), so nobody loses word-setting time.
+    // Only the round's active participants are eligible (chaosParticipants).
+    //
+    // Scoring is a SHARED POT per pairing: everyone scores every round, as
+    // solver (pot - guesses) and as setter (guesses, or the whole pot if
+    // their solver fails). Audited:
+    //   EXCLUDED:
+    //     * Point Reversal — makes failing pay: a solver can burn all their
+    //       guesses on nonsense in seconds to score 0, which reversal turns
+    //       into the top reward. Trivially gamed.
+    //   KEPT, with special handling:
+    //     * Speed Round — handled by the GAME, not the generic 10s clamp
+    //       (a 10s set phase can't fit an AI-checked word, and 10s can't
+    //       fit a Wordle board): set 20s, solve 60s (CONFIG.speed). No
+    //       `timer` entry.
+    //     * Countdown Chaos — hides the timer ring on both screens
+    //       ([data-chaos-blind] .wh-ring).
+    //     * Risk It — its wager beat lengthens the takeover; the set clock
+    //       waits for it too.
+    //   KEPT as is: the multipliers, Underdog Boost, All or Nothing,
+    //   Kingbreaker and Half Reset (every player has round points to act
+    //   on); Score Swap, Steal, Rival, Tax Collector, The Tyrant and Player
+    //   Disable are already 3+ players only, so a 2-player duel never
+    //   collapses into a straight transfer.
+    rollPhases: ["set"],
+    scoredPhases: ["reveal", "final"],
+    speedRound: true,
+    exclude: () => (m) => m.id === "point-reversal",
+  },
 };
 
 export function chaosGameConfig(gameId) {
