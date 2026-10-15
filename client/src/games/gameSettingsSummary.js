@@ -5,6 +5,7 @@
 import { ALL_KEYS as SOUP_KEYS } from './alphabetSoup/categories'
 import { tierOf } from './echoChain/tiers'
 import { modeName as wordHeistMode } from './wordHeist/config'
+import { difficultyOf as bombDifficulty, playStyleOf as bombStyle } from './bombSquad/config'
 
 // `gameId` (optional) is for options whose meaning depends on the game:
 // Echo Chain's difficulty is a named tier (old easy/medium/hard saves read
@@ -15,6 +16,10 @@ export function describeGameOptions(options, gameId = null) {
   if (gameId === 'echo-chain') {
     const lives = Number(o.lives) || 2
     return `${tierOf(o.difficulty).name} · ${lives} ${lives === 1 ? 'life' : 'lives'}`
+  }
+  if (gameId === 'bomb-squad') {
+    const rounds = Number(o.rounds) || 2
+    return `${bombDifficulty(o.difficulty).name} · ${rounds} ${rounds === 1 ? 'round' : 'rounds'} · ${bombStyle(o.playStyle).name.toLowerCase()}`
   }
   if (gameId === 'word-heist') {
     const rounds = Number(o.rounds) || 3

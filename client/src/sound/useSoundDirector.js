@@ -74,6 +74,10 @@ const PHASE_CUES = {
   // Word Heist: lock-in confirm and per-guess correct / wrong fire inside
   // SetWord / Solve; the director marks the solve opening and the reveal.
   'word-heist': { solve: 'round-start', reveal: REVEAL },
+  // Bomb Squad: the fuse ticks, strike buzz, module chimes, defuse fanfare
+  // and explosion pop are all timed inside the game (useFuse.js); the
+  // director just marks each fuse lighting.
+  'bomb-squad': { live: 'round-start' },
   'who-am-i': {
     reveal: REVEAL,
     // correct/wrong-guess blips fire inside AskScreen (play('correct' |

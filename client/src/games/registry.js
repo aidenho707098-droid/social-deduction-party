@@ -40,6 +40,9 @@ import { rules as echoChainRules } from './echoChain/rules'
 import WordHeistSetup from './wordHeist/WordHeistSetup'
 import WordHeistGame from './wordHeist/WordHeistGame'
 import { rules as wordHeistRules } from './wordHeist/rules'
+import BombSquadSetup from './bombSquad/BombSquadSetup'
+import BombSquadGame from './bombSquad/BombSquadGame'
+import { rules as bombSquadRules } from './bombSquad/rules'
 
 import { CATALOG } from './catalog'
 
@@ -62,6 +65,7 @@ const PARTS = {
   'memory-imposter': { Setup: MemoryImposterSetup, Game: MemoryImposterGame, rules: memoryImposterRules },
   'echo-chain': { Setup: EchoChainSetup, Game: EchoChainGame, rules: echoChainRules },
   'word-heist': { Setup: WordHeistSetup, Game: WordHeistGame, rules: wordHeistRules },
+  'bomb-squad': { Setup: BombSquadSetup, Game: BombSquadGame, rules: bombSquadRules },
 }
 
 export const GAMES = CATALOG.map((entry) => ({ ...entry, ...PARTS[entry.id] }))

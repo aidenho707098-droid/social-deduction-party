@@ -275,6 +275,11 @@ export default function Lobby() {
     wordHeistConfirm: (yes, cb) => socket.emit('word_heist_confirm', { code, yes }, cb),
     wordHeistGuess: (guess, cb) => socket.emit('word_heist_guess', { code, guess }, cb),
     wordHeistNext: (cb) => socket.emit('word_heist_next', { code }, cb),
+    bombAct: (action, cb) => socket.emit('bomb_squad_act', { code, ...action }, cb),
+    bombBet: (choice, cb) => socket.emit('bomb_squad_bet', { code, choice }, cb),
+    // "All pairs at once": which pair to skip (one at a time: the current one).
+    bombSkip: (groupId = null, cb) => socket.emit('bomb_squad_skip', { code, groupId }, cb),
+    bombPairs: (cb) => socket.emit('bomb_squad_pairs', { code }, cb),
     backToLobby: () => socket.emit('back_to_lobby', { code }),
     setPlayerColor: (color) => socket.emit('set_player_color', { code, color }),
     kickPlayer: (playerId) => socket.emit('kick_player', { code, playerId }),
@@ -509,6 +514,10 @@ export default function Lobby() {
         onCancel={() => setHostFlow('menu')}
         error={startError}
         {...aiProps}
+        // Bomb Squad's team preview + re-roll (other games ignore these).
+        players={room.players}
+        bombSquadPairing={room.bombSquadPairing}
+        onRerollPairs={gameActions.bombPairs}
       />
     )
   }

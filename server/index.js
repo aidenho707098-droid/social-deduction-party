@@ -32,6 +32,8 @@ import { GAMES } from "./games/registry.js";
 import { fitError, fitsSomeMode } from "./games/playerLimits.js";
 import { pumpValidation as pumpSoupValidation } from "./alphabetSoupRuntime.js";
 import { wordCheckerFor } from "./wordHeistChecker.js";
+import { createLatencyTracker } from "./latency.js";
+import { makePairing } from "./games/bomb-squad.js";
 import {
   chaosTick,
   chaosPublicSlice,
@@ -133,6 +135,9 @@ function aiCallDone(room) {
 // `gameId` (or {} for a game with no AI content). Used by every code path
 // that starts a game — the standalone start and both tournament paths.
 function aiCreateGameExtras(gameId, room) {
+  // Bomb Squad: the pairs the host rolled in the lobby (used only if they
+  // still cover exactly the players starting; otherwise it pairs at random).
+  if (gameId === "bomb-squad") return { pairing: room.bombSquadPairing ?? null };
   // Alphabet Soup + Hot Potato read the room's shared custom categories.
   if (gameId === "alphabet-soup" || gameId === "hot-potato") {
     return { customCategories: room.customCategories ?? [] };
@@ -212,6 +217,8 @@ function buildPublicRoom(room) {
     aiContentEnabled: aiContentAvailable(),
     // Alphabet Soup + Hot Potato custom categories (no letter data).
     customCategories: publicCustomCategories(room),
+    // Bomb Squad: the pairs the host has rolled in the lobby (player ids).
+    bombSquadPairing: room.bombSquadPairing ?? null,
     // Chaos Events layer: the host's frequency dial + any live event.
     chaos: chaosPublicSlice(room),
   };
@@ -1955,6 +1962,57 @@ io.on("connection", (socket) => {
     if (res.ok) wordHeistSync(room);
   });
 
+  // --- Bomb Squad actions -------------------------------------------------
+  // Everything is checked in bomb-squad.js against the pair's own rules. The
+  // bomb goes privately to the Defuser (and as a mirror to spectators), the
+  // manual privately to the Experts; the room broadcast has neither.
+
+  // Lobby: the host rolls (or re-rolls) the pairs before starting.
+  socket.on("bomb_squad_pairs", ({ code } = {}, ack) => {
+    const cb = typeof ack === "function" ? ack : null;
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.status === "in-game") return cb?.({ ok: false });
+    room.bombSquadPairing = makePairing([...room.players.keys()]);
+    cb?.({ ok: true });
+    broadcastRoom(room.code);
+  });
+
+  socket.on("bomb_squad_act", ({ code, ...action }, cb) => {
+    const room = getRoom(code);
+    const playerId = playerIdOf(socket);
+    if (!room || room.game?.id !== "bomb-squad" || !playerId) return cb?.({ ok: false });
+    const res = GAMES["bomb-squad"].act(room.game, playerId, action, { halfRttMs: latency.halfRttOf(socket.id) });
+    cb?.(res);
+    if (res.ok) {
+      broadcastRoom(room.code);
+      sendPrivateRoles(room);
+    }
+  });
+
+  socket.on("bomb_squad_bet", ({ code, choice }, cb) => {
+    const room = getRoom(code);
+    const playerId = playerIdOf(socket);
+    if (!room || room.game?.id !== "bomb-squad" || !playerId) return cb?.({ ok: false });
+    const res = GAMES["bomb-squad"].bet(room.game, playerId, choice);
+    cb?.(res);
+    if (res.ok) {
+      broadcastRoom(room.code);
+      sendPrivateRoleTo(room, room.players.get(playerId));
+    }
+  });
+
+  // Host: the pair on the bomb forfeits it, play moves to the next pair.
+  socket.on("bomb_squad_skip", ({ code, groupId = null }, cb) => {
+    const room = getRoom(code);
+    if (!room || !isRoomHost(room, socket) || room.game?.id !== "bomb-squad") return cb?.({ ok: false });
+    const res = GAMES["bomb-squad"].skipPair(room.game, groupId);
+    cb?.(res);
+    if (res.ok) {
+      broadcastRoom(room.code);
+      sendPrivateRoles(room);
+    }
+  });
+
   socket.on("back_to_lobby", ({ code }) => {
     const room = getRoom(code);
     if (!room || !isRoomHost(room, socket)) return;
@@ -2034,6 +2092,7 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log(`Socket disconnected: ${socket.id}`);
+    latency.forget(socket.id);
     const info = markDisconnected(socket.id);
     if (!info) return; // stale socket / already reconnected elsewhere
 
@@ -2242,6 +2301,41 @@ const wordHeistTimer = setInterval(() => {
   }
 }, WORD_HEIST_TICK_MS);
 wordHeistTimer.unref?.();
+
+// --- Bomb Squad: ready / fuse / result / summary clocks -----------------
+// The fuse can explode mid-second and pauses the instant a Defuser or the
+// last Expert drops, so a 100ms beat. Broadcasts on any change (and re-sends
+// private state: a new turn deals new bombs and manuals), plus once a
+// second. Every 2s it also pings each player's socket so latency.js has a
+// fresh round trip for judging the button release.
+const BOMB_TICK_MS = 100;
+const bombLastBroadcast = new Map(); // roomCode -> ms
+let bombLastPing = 0;
+const latency = createLatencyTracker(io);
+const bombTimer = setInterval(() => {
+  const now = Date.now();
+  const ping = now - bombLastPing >= 2000;
+  if (ping) bombLastPing = now;
+  for (const room of allRooms()) {
+    const game = room.game;
+    if (room.status !== "in-game" || game?.id !== "bomb-squad" || game.phase === "final") {
+      bombLastBroadcast.delete(room.code);
+      continue;
+    }
+    if (ping) for (const p of room.players.values()) if (p.socketId) latency.sample(p.socketId);
+    try {
+      const changed = GAMES["bomb-squad"].tick(game, connectedPlayerIds(room), now);
+      if (changed || now - (bombLastBroadcast.get(room.code) ?? 0) >= 1000) {
+        bombLastBroadcast.set(room.code, now);
+        broadcastRoom(room.code);
+        if (changed) sendPrivateRoles(room);
+      }
+    } catch (err) {
+      console.warn(`[bomb-squad] tick error for ${room.code}:`, err);
+    }
+  }
+}, BOMB_TICK_MS);
+bombTimer.unref?.();
 
 // --- Memory Imposter: every phase clock ---------------------------------
 // Memorize, role reveal, discussion, vote and reveal all run here. A 200ms

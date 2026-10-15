@@ -16,6 +16,10 @@ export const socket = io(SERVER_URL, {
   autoConnect: true,
 });
 
+// The server measures each connection's round trip (server/latency.js) by
+// pinging; answering straight away is all the client does.
+socket.on("latency_ping", (_t, ack) => ack?.());
+
 // --- Session persistence ---------------------------------------------
 // The server hands us a stable playerId plus a secret token when we first
 // create/join a room. We stash {code, playerId, token, name} here so that

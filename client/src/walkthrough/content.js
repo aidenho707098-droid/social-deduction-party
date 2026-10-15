@@ -341,6 +341,28 @@ export const WALKTHROUGHS = {
     phaseSteps: { set: 0, solve: 1, reveal: 2 },
   },
 
+  'bomb-squad': {
+    title: 'How Bomb Squad works',
+    steps: [
+      {
+        icon: '🤝',
+        title: 'First, team up and sit apart',
+        text: 'Each bomb is one team’s turn. The Defuser sees the bomb; the Expert has the manual. Sit so you can’t see each other’s screens. Everyone else watches quietly.',
+      },
+      {
+        icon: '🗣️',
+        title: 'Then, talk the bomb down',
+        text: 'The Defuser describes what they see: wires, symbols, flashing lights, where the dot is in the maze, the serial number. The Expert finds the rule and says what to do. A wrong move is a strike, and strikes speed the fuse up.',
+      },
+      {
+        icon: '🏆',
+        title: 'Finally, score the defuse',
+        text: 'Defuse it for 3 + 1 per module + a time bonus, minus strikes. Three strikes or no time left: boom, no points. Roles swap every round.',
+      },
+    ],
+    phaseSteps: { ready: 0, live: 1, result: 2, summary: 2 },
+  },
+
   tournament: {
     title: 'How Tournament Mode works',
     steps: [

@@ -26,6 +26,8 @@ export function walkthroughKeyForGame(game) {
       return 'echo-chain'
     case 'word-heist':
       return 'word-heist'
+    case 'bomb-squad':
+      return 'bomb-squad'
     case 'fibbage':
       return game.personal ? 'fibbage-personal' : null
     case 'would-you-rather':
@@ -44,6 +46,16 @@ export function walkthroughKeyForGame(game) {
 // when the next turn begins.
 export function walkthroughDeferred(game, myId) {
   if (game?.id === 'memory-imposter') return game.phase === 'memorize'
+  // Bomb Squad: never over a live bomb for the team on it (it eats fuse).
+  if (game?.id === 'bomb-squad') {
+    if (game.phase !== 'live') return false
+    if (game.style === 'together') {
+      const b = (game.bombs ?? []).find((x) => x.defuserId === myId || x.expertIds.includes(myId))
+      return !!b && b.status === 'live'
+    }
+    const t = game.turn
+    return !!t && (t.defuserId === myId || t.expertIds.includes(myId))
+  }
   if (game?.id === 'echo-chain') {
     const playing = (game.activeIds ?? []).includes(myId)
     if (!playing) return false

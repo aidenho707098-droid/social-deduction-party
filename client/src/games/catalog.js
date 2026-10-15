@@ -31,6 +31,8 @@ export const FILTERS = [
   { key: 'guessing', label: 'Guessing' },
   { key: 'quick', label: 'Quick' },
   { key: 'memory', label: 'Memory' },
+  { key: 'co-op', label: 'Co-op' },
+  { key: 'talking', label: 'Talking' },
 ]
 
 export const CATALOG = [
@@ -169,6 +171,18 @@ export const CATALOG = [
     minPlayers: 2,
     maxPlayers: 10,
     tags: ['word', 'guessing'],
+    isNew: true,
+  },
+  {
+    id: 'bomb-squad',
+    // Working title: every screen reads the name from here (and the server's
+    // bombSquad/config.js NAME, which server/catalog.selftest.mjs keeps in sync).
+    name: 'Bomb Squad',
+    genre: 'talk it down',
+    description: 'One of you sees the bomb, the other has the manual. Talk each other through the wires before the fuse runs out.',
+    minPlayers: 2,
+    maxPlayers: 10,
+    tags: ['co-op', 'talking'],
     isNew: true,
   },
 ]

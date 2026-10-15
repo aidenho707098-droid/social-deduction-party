@@ -81,7 +81,7 @@ section("(b) fit checks");
     Array.from({ length: 12 }, (_, i) => i + 1).every((n) => (fitReason(g, n) === null) === fitsSomeMode(GAMES[g.id], n))));
 
   const pool2 = eligibleGameIds(2).sort();
-  check("wheel pool at 2 = exactly the 2-player games", pool2.join() === ["alphabet-soup", "black-magic", "echo-chain", "emoji-movie", "taboo", "wavelength", "who-am-i", "word-heist", "would-you-rather"].sort().join(), pool2.join());
+  check("wheel pool at 2 = exactly the 2-player games", pool2.join() === ["alphabet-soup", "black-magic", "echo-chain", "emoji-movie", "taboo", "wavelength", "bomb-squad", "who-am-i", "word-heist", "would-you-rather"].sort().join(), pool2.join());
   // Spin the wheel many times at 2 players: it never lands on a game that doesn't fit.
   const t = createTournament({ mode: "random", totalGames: 12 }, P2);
   let bad = 0;

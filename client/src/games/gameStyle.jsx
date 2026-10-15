@@ -131,6 +131,16 @@ const ICONS = {
       <path d="M12 16v2" />
     </>
   ),
+  // Bomb Squad — a round bomb with a short lit fuse.
+  'bomb-squad': (
+    <>
+      <circle cx="10.5" cy="14" r="6.5" />
+      <path d="M14.8 9.2 17 7" />
+      <path d="M17 7c1-1 2.2-1 3 0" />
+      <path d="M20.6 3.4v1.4M22 5h-1.4M19.2 3.8l.8.8" />
+      <path d="M7.5 12.5a3 3 0 0 1 2-2" />
+    </>
+  ),
 }
 
 export function GameIcon({ id }) {
