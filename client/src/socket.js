@@ -1,4 +1,5 @@
 import { io } from "socket.io-client";
+import { useSyncExternalStore } from "react";
 
 // In a deployed build, VITE_SERVER_URL points at the separately-hosted
 // server (e.g. https://social-deduction-party.onrender.com). It's baked in
@@ -53,4 +54,20 @@ export function clearSession() {
   } catch {
     // ignore
   }
+}
+
+// Whether the socket is up right now, as a React hook (re-renders on
+// connect / disconnect). Input that must reach the server (Bomb Squad's
+// modules) disables itself while this is false instead of letting
+// socket.io buffer presses and flush them before the seat is resumed.
+function subscribeConnected(onChange) {
+  socket.on("connect", onChange);
+  socket.on("disconnect", onChange);
+  return () => {
+    socket.off("connect", onChange);
+    socket.off("disconnect", onChange);
+  };
+}
+export function useSocketConnected() {
+  return useSyncExternalStore(subscribeConnected, () => socket.connected);
 }

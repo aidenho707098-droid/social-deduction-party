@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSound } from '../sound/SoundContext'
 import { playChaosBuildup, playChaosSting } from './chaosSting'
+import { soundManager } from '../sound/soundManager'
 import { CHAOS_ICONS } from './chaosCopy'
 
 // The ONE loud moment in the app — a full-screen takeover on every device:
@@ -104,11 +105,11 @@ export default function ChaosOverlay({ event, players = [], myId = null, myScore
 
       if (audible && !rm && !fired.buildup && el < 260) {
         fired.buildup = true
-        playChaosBuildup(vo)
+        soundManager.run('chaos-buildup', () => playChaosBuildup(vo), { trigger: `chaos event ${roundKey}` })
       }
       if (audible && !fired.sting && el >= T_BUILDUP) {
         fired.sting = true
-        playChaosSting(vo)
+        soundManager.run('chaos-sting', () => playChaosSting(vo), { trigger: `chaos event ${roundKey}` })
       }
 
       if (st === null) {

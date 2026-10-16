@@ -445,8 +445,8 @@ section("(e2) Savant: no replay, the chain never leaves the server");
 section("(f) integrations + simulated games");
 {
   const entry = CATALOG.find((g) => g.id === "echo-chain");
-  check("registry + catalogue: 2–10, tags Memory + Quick", GAMES["echo-chain"] === ec && entry?.minPlayers === 2 && entry?.maxPlayers === 10 && entry?.tags.join() === "memory,quick");
-  check("Memory and Quick filter chips exist", ["memory", "quick"].every((k) => FILTERS.some((f) => f.key === k)));
+  check("registry + catalogue: 2–10, the Brain chip", GAMES["echo-chain"] === ec && entry?.minPlayers === 2 && entry?.maxPlayers === 10 && entry?.tags.join() === "brain");
+  check("the Brain filter chip exists", FILTERS.some((f) => f.key === "brain"));
   check("Chaos Events don't apply", !isChaosEligible("echo-chain"));
   check("tournament defaults: Recall, 2 lives", JSON.stringify(tournamentOptionsFor("echo-chain", ["a", "b"])) === '{"difficulty":"recall","lives":2}');
   check("fit: 1 player refused, 2 and 10 fine", fitError(ec, 1) && !fitError(ec, 2) && !fitError(ec, 10) && fitError(ec, 11));

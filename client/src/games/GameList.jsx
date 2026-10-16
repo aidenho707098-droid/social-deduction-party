@@ -20,7 +20,10 @@ export function FilterChips({ filter, onFilter }) {
           type="button"
           className={`gb-chip ${filter === f.key ? 'gb-chip-on' : ''}`}
           aria-pressed={filter === f.key}
-          onClick={() => onFilter(f.key)}
+          onClick={(e) => {
+            onFilter(f.key)
+            e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }) // a half-hidden chip slides into view
+          }}
         >
           {f.label}
         </button>

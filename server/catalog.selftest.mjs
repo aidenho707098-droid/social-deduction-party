@@ -52,16 +52,19 @@ section("(a) client catalogue matches the server");
     check(`${entry.id}: maxPlayers`, (entry.maxPlayers ?? null) === (mod.maxPlayers ?? null), `${entry.maxPlayers} vs ${mod.maxPlayers}`);
     const clientModes = Object.fromEntries(Object.entries(entry.modes ?? {}).map(([k, m]) => [k, m.minPlayers]));
     check(`${entry.id}: per-mode minimums`, JSON.stringify(clientModes) === JSON.stringify(mod.modeMinPlayers ?? {}));
-    check(`${entry.id}: has a valid tag`, entry.tags.length > 0 && entry.tags.every((t) => tagKeys.has(t)), entry.tags.join());
+    check(`${entry.id}: one or two valid chips`, entry.tags.length >= 1 && entry.tags.length <= 2 && new Set(entry.tags).size === entry.tags.length && entry.tags.every((t) => tagKeys.has(t)), entry.tags.join());
     check(`${entry.id}: has a description + genre`, entry.description?.length > 20 && entry.genre);
   }
   const twos = ["emoji-movie", "wavelength", "black-magic", "who-am-i", "taboo", "alphabet-soup"];
   check("lowered games have minimum 2", twos.every((id) => GAMES[id].minPlayers === 2));
   check("other minimums unchanged", ["imposter", "fibbage", "fake-artist", "hot-potato"].every((id) => GAMES[id].minPlayers === 3) && GAMES["would-you-rather"].minPlayers === 2);
+  check("five chips: All, Deduction, Words, Brain, Active", FILTERS.map((f) => f.label).join() === "All,Deduction,Words,Brain,Active");
+  check("every chip label is one word (no '&', no spaces)", FILTERS.every((f) => /^[A-Za-z]+$/.test(f.label)));
+  check("every chip has at least one game", [...tagKeys].every((k) => CATALOG.some((g) => g.tags.includes(k))));
   const memory = CATALOG.find((g) => g.id === "memory-imposter");
-  check("Memory Imposter: 3–10, Deduction + Memory, Memory chip exists",
+  check("Memory Imposter: 3–10, Deduction + Brain",
     GAMES["memory-imposter"].minPlayers === 3 && GAMES["memory-imposter"].maxPlayers === 10 &&
-    memory?.tags.join() === "deduction,memory" && FILTERS.some((f) => f.key === "memory"));
+    memory?.tags.join() === "deduction,brain");
   check("Memory Imposter: client name = server name constant", memory?.name === GAMES["memory-imposter"].name);
   check("menu label shows both Alphabet Soup minimums", playerRangeLabel(CATALOG.find((g) => g.id === "alphabet-soup")) === "2–10 players, Spoken 3+");
 }

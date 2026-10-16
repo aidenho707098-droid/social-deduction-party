@@ -36,6 +36,10 @@ export default function TournamentWheel({ t, isHost, onReady }) {
   const [landed, setLanded] = useState(false)
   const firedRef = useRef(false)
   const { play, stop } = useSound()
+  // One spin sound per spinId. StrictMode (dev) runs this effect twice;
+  // the first cleanup only SCHEDULES the stop, and the re-run cancels it
+  // and keeps the same sound, so it neither doubles nor goes silent.
+  const spinSound = useRef({ id: null, el: null, stopTimer: 0 })
 
   useEffect(() => {
     if (!wheel) return
@@ -47,7 +51,9 @@ export default function TournamentWheel({ t, isHost, onReady }) {
     // to nearly nothing. Ride the spin sound's playbackRate down the same
     // curve so its ticking spaces out as the wheel slows, rather than
     // racing at one flat tempo for the whole spin.
-    const spinEl = play('wheel-spin')
+    clearTimeout(spinSound.current.stopTimer)
+    if (spinSound.current.id !== wheel.spinId) spinSound.current = { id: wheel.spinId, el: play('wheel-spin', { trigger: `tournament wheel spin ${wheel.spinId}` }), stopTimer: 0 }
+    const spinEl = spinSound.current.el
     const SPIN_MS = 4400
     const RATE_START = 0.85
     const RATE_END = 0.3
@@ -82,7 +88,7 @@ export default function TournamentWheel({ t, isHost, onReady }) {
     })
     const done = setTimeout(() => {
       stop('wheel-spin')
-      play('wheel-land')
+      play('wheel-land', { trigger: `tournament wheel landed ${wheel.spinId}` })
       setLanded(true)
       if (isHost && !firedRef.current) {
         firedRef.current = true
@@ -94,7 +100,7 @@ export default function TournamentWheel({ t, isHost, onReady }) {
       cancelAnimationFrame(raf)
       cancelAnimationFrame(rateRaf)
       clearTimeout(done)
-      stop('wheel-spin')
+      spinSound.current.stopTimer = setTimeout(() => stop('wheel-spin'), 0)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wheel?.spinId])

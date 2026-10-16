@@ -67,7 +67,7 @@ function pin(game, catKey, letter) {
 // ===================================================================
 section("(a) content + selection");
 
-check("50+ categories in the bank", CATEGORIES.length >= 50, `${CATEGORIES.length}`);
+check("100+ categories in the bank", CATEGORIES.length >= 100, `${CATEGORIES.length}`);
 check("letter pool is all 26 letters", LETTER_POOL.join("") === "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
 check(
   "every category's letters come from the pool",
@@ -815,7 +815,9 @@ section("(e) rare letters: bank, weighted draw, guardrails, hidden from clients"
   check("10,000 draws: never a rare letter two rounds in a row", doubleRare === 0, `${doubleRare}`);
   check("10,000 draws: every rare letter shows up", LETTER_DRAW.rareLetters.every((l) => freq[l] > 0));
   check("10,000 draws: letters always from the category's own list", catMismatch === 0);
-  check("10,000 draws: rare share is low (bank-limited, under the 7% all-eligible ceiling)", share > 0.015 && share < 0.07, (share * 100).toFixed(2) + "%");
+  // The floor follows the bank: most everyday categories have no rare letter,
+  // so the 100-category bank's expected share is ~1.4% (it was ~2.1% at 55).
+  check("10,000 draws: rare share is low (bank-limited, under the 7% all-eligible ceiling)", share > 0.01 && share < 0.07, (share * 100).toFixed(2) + "%");
 
   // --- Burned Letters: full-length games never strand on rare letters ---
   let short = 0;

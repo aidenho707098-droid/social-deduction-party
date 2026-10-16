@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { MODULE_NAMES, fmtFuse } from './config'
 import { ModuleIcon } from './ModuleIcon'
 import { MODULE_UI } from './modules'
+import { useSocketConnected } from '../../socket'
 
 // The fuse: mm:ss, a burning bar with a spark at its end, and the rate
 // when strikes have sped it up. Shared by every role.
@@ -32,17 +33,56 @@ export function FuseReadout({ msLeft, fuse, strikes, max = 3 }) {
 }
 
 // The bomb, for the Defuser (interactive) or spectators (a read-only mirror).
+//
+// Sync with the server: every action goes out numbered (`seq`, carried on
+// from the bomb's lastSeq so a reload keeps counting) and the server acks
+// each one with that module's fresh view + rev. Each module shows whichever
+// view is newest — the ack or the latest push — so the bomb never drifts
+// from the server, however acks and pushes interleave. `onAct` resolves
+// with the ack, so modules can count their in-flight actions.
 export default function Bomb({ bomb, turn, msLeft, interactive, onAct }) {
   const strikes = turn?.strikes ?? 0
-  const [shake, setShake] = useState(0)
+  const connected = useSocketConnected()
+
+  // A strike shakes the bomb by restarting a CSS animation — never by
+  // remounting it, which would swallow a tap that's halfway through.
+  const shakeRef = useRef(null)
   const last = useRef(strikes)
   useEffect(() => {
-    if (strikes > last.current) setShake((n) => n + 1)
+    const el = shakeRef.current
+    if (strikes > last.current && el) {
+      el.classList.remove('bs-bomb-shake')
+      void el.offsetWidth
+      el.classList.add('bs-bomb-shake')
+    }
     last.current = strikes
   }, [strikes])
 
+  const seq = useRef(0)
+  const [acked, setAcked] = useState({}) // module index -> { rev, solved, view } from acks
+  const [pending, setPending] = useState({}) // module index -> actions not acked yet
+  const bump = (index, d) => setPending((p) => ({ ...p, [index]: Math.max(0, (p[index] ?? 0) + d) }))
+  const send = (index, a) =>
+    new Promise((resolve) => {
+      seq.current = Math.max(seq.current, bomb.lastSeq ?? 0) + 1
+      bump(index, 1)
+      onAct(index, { ...a, seq: seq.current }, (res) => {
+        // The fresh view and the in-flight count change in the SAME render,
+        // so "server progress + in flight" never double-counts a press.
+        const m = res?.module
+        if (m) setAcked((prev) => (prev[m.index] && prev[m.index].rev > m.rev ? prev : { ...prev, [m.index]: m }))
+        bump(index, -1)
+        if (Number.isInteger(res?.lastSeq)) seq.current = Math.max(seq.current, res.lastSeq)
+        resolve(res ?? null)
+      })
+    })
+  const newest = (m) => {
+    const a = acked[m.index]
+    return a && a.rev > (m.rev ?? -1) ? { ...m, ...a } : m
+  }
+
   return (
-    <div key={shake} className={`bs-bomb ${shake ? 'bs-bomb-shake' : ''}`}>
+    <div ref={shakeRef} className="bs-bomb" onAnimationEnd={(e) => e.target === e.currentTarget && e.currentTarget.classList.remove('bs-bomb-shake')}>
       <div className="bs-bomb-head">
         <FuseReadout msLeft={msLeft} fuse={turn?.fuse} strikes={strikes} />
         <div className="bs-serial">
@@ -50,8 +90,13 @@ export default function Bomb({ bomb, turn, msLeft, interactive, onAct }) {
           <span className="bs-serial-no">{bomb.serialNo}</span>
         </div>
       </div>
+      {interactive && !connected && (
+        <p className="bs-paused" role="status">
+          Reconnecting… presses are paused.
+        </p>
+      )}
       <div className="bs-modules">
-        {bomb.modules.map((m) => {
+        {bomb.modules.map(newest).map((m) => {
           const UI = MODULE_UI[m.type]
           return (
             <section key={m.index} className={`bs-module ${m.solved ? 'bs-module-solved' : ''}`} aria-label={MODULE_NAMES[m.type]}>
@@ -61,7 +106,7 @@ export default function Bomb({ bomb, turn, msLeft, interactive, onAct }) {
                 <span className={`bs-light ${m.solved ? 'bs-light-on' : ''}`} aria-label={m.solved ? 'solved' : 'not solved'} />
               </header>
               {UI ? (
-                <UI view={m.view} interactive={interactive && !m.solved} onAct={(a) => onAct?.(m.index, a)} />
+                <UI view={m.view} pending={pending[m.index] ?? 0} interactive={interactive && connected && !m.solved} onAct={(a) => send(m.index, a)} />
               ) : (
                 <p className="hint">Unknown module.</p>
               )}

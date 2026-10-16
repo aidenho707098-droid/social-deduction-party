@@ -12,6 +12,7 @@ import {
   getPlayerBySocket,
   toPublicRoom,
   setPlayerColor,
+  markWalkthroughSeen,
   allRooms,
   deleteRoom,
   startGame as startGameOnRoom,
@@ -806,6 +807,18 @@ io.on("connection", (socket) => {
     syncFakeArtistTicker(room);
     syncWhoAmITicker(room);
     syncAlphabetSoupTicker(room);
+  });
+
+  // A player's client has just SHOWN them a first-time walkthrough
+  // ("game:<id>" or "tournament"). Recorded in the room the moment it
+  // appears (not on dismiss), so it never auto-shows again in this room.
+  socket.on("walkthrough_seen", ({ code, key } = {}, cb) => {
+    const room = getRoom(code);
+    const playerId = playerIdOf(socket);
+    if (!room || !playerId) return cb?.({ ok: false });
+    const changed = markWalkthroughSeen(room, playerId, key);
+    cb?.({ ok: true });
+    if (changed) broadcastRoom(room.code);
   });
 
   // Lobby-only: a player changes their colour identity. The server checks
@@ -1977,10 +1990,15 @@ io.on("connection", (socket) => {
     broadcastRoom(room.code);
   });
 
-  socket.on("bomb_squad_act", ({ code, ...action }, cb) => {
+  // Every action is acked (bomb-squad.js act: the module's fresh view and
+  // rev). A socket that hasn't resumed its seat yet — e.g. a press flushed
+  // from the client's buffer the instant it reconnects, before
+  // resume_session — is told so instead of being silently dropped.
+  socket.on("bomb_squad_act", ({ code, ...action } = {}, cb) => {
     const room = getRoom(code);
     const playerId = playerIdOf(socket);
-    if (!room || room.game?.id !== "bomb-squad" || !playerId) return cb?.({ ok: false });
+    if (!playerId) return cb?.({ ok: false, reason: "reconnecting", message: "Reconnecting…" });
+    if (!room || room.game?.id !== "bomb-squad") return cb?.({ ok: false });
     const res = GAMES["bomb-squad"].act(room.game, playerId, action, { halfRttMs: latency.halfRttOf(socket.id) });
     cb?.(res);
     if (res.ok) {

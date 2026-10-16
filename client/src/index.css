@@ -8810,3 +8810,23 @@ body:has(.wh-solve) .host-panel-toggle::before { content: "\1F6E0\FE0F"; font-si
   .bs-chapter { padding: 12px 10px; }
   .bs-table th, .bs-table td { padding: 5px 3px; }
 }
+
+/* Bomb Squad input: every module button takes one press per tap — no
+   double-tap zoom swallowing a quick repeat (red, red), no text selection
+   or callout from a long press. */
+.bs-bomb button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+/* Simon: visibly disabled while the server is playing the flashes. */
+.bs-simon-btn:disabled { opacity: 0.38; filter: saturate(0.5); cursor: not-allowed; }
+.bs-simon-buttons-wait { pointer-events: none; }
+
+/* Filter chips: at 320px the five chips are a little wider than the
+   screen, so the row scrolls — smoothly, without the swipe turning into a
+   browser back gesture, settling on a chip edge. */
+.gb-chips { overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-behavior: smooth; }
+.gb-chip { scroll-snap-align: start; }

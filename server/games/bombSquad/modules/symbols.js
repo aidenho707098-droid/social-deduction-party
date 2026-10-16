@@ -67,6 +67,12 @@ export default {
     return { kind: "tap", symbol: state.order[state.progress] };
   },
 
+  // Live taps say which place in the order they're for (`index`), so a tap
+  // that crossed a strike or another tap in flight is refused, not judged.
+  gate(state, a) {
+    return Number.isInteger(a.index) && a.index === state.progress ? null : { reason: "stale" };
+  },
+
   act(rules, state, a) {
     if (a.kind !== "tap" || !state.shown.includes(a.symbol)) return { valid: false };
     if (state.order.slice(0, state.progress).includes(a.symbol)) return { valid: false }; // already tapped

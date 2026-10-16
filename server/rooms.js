@@ -106,6 +106,12 @@ export function createRoom(hostSocketId, hostName) {
     tournament: null, // set by the tournament layer (see server/tournament.js)
     itemMemory: {}, // gameId -> { seen: string[] }; session no-repeat memory
     gameSettings: {}, // gameId -> last host-configured options this session
+    // First-time walkthroughs each player has been shown in this room:
+    // playerId -> ["game:taboo", "tournament", ...]. Keyed per GAME (not
+    // per round or mode), marked the moment one is first shown, and kept
+    // for the life of the room, so it never auto-shows again across rounds,
+    // restarts, reloads or reconnects. See markWalkthroughSeen.
+    walkthroughsSeen: {},
     // AI-generated custom content, per game: gameId -> [{ name, ...batch }].
     // Host-typed names the server filled in via the OpenAI API (Imposter
     // categories, Crack the Code themes, Fact or Fake topics, Taboo
@@ -357,6 +363,19 @@ export function publicCustomCategories(room) {
   }));
 }
 
+// A player has now been shown the walkthrough `key` ("game:<gameId>" or
+// "tournament"). Idempotent; returns true only the first time.
+const WALKTHROUGH_KEY = /^(game:[a-z0-9-]{1,40}|tournament)$/;
+const MAX_WALKTHROUGHS_PER_PLAYER = 40;
+export function markWalkthroughSeen(room, playerId, key) {
+  if (!room?.players.has(playerId) || typeof key !== "string" || !WALKTHROUGH_KEY.test(key)) return false;
+  room.walkthroughsSeen = room.walkthroughsSeen ?? {};
+  const list = (room.walkthroughsSeen[playerId] = room.walkthroughsSeen[playerId] ?? []);
+  if (list.includes(key) || list.length >= MAX_WALKTHROUGHS_PER_PLAYER) return false;
+  list.push(key);
+  return true;
+}
+
 // The custom batches for one game, or [] — safe read used by index.js when
 // building createGame options and the public room view.
 export function aiContentFor(room, gameId) {
@@ -375,5 +394,7 @@ export function toPublicRoom(room) {
       colorHex: hexOf(p.color), // resolved hex, so clients never need the map
     })),
     playedGameIds: [...(room.playedGameIds ?? [])],
+    // playerId -> walkthrough keys already shown (see markWalkthroughSeen).
+    walkthroughsSeen: room.walkthroughsSeen ?? {},
   };
 }

@@ -106,9 +106,12 @@ function Turn({ game, priv, myId, isHost, nameById, colorById, actions }) {
     </p>
   )
 
-  function onAct(index, a) {
+  // `done` gets the server's ack (Bomb applies the fresh module view).
+  // Refusals that are just resyncs (a duplicate, a stale press) stay quiet.
+  function onAct(index, a, done) {
     actions.bombAct({ turn: turn.serial, module: index, ...a }, (res) => {
       if (res && !res.ok && res.message) setNote(res.message)
+      done?.(res)
     })
   }
 

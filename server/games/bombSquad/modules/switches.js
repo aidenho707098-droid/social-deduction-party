@@ -57,6 +57,19 @@ export default {
     return i < 0 ? { kind: "lock" } : { kind: "toggle", switch: i };
   },
 
+  // Live input is idempotent: a toggle says where the switch should END UP
+  // (`to`), and LOCK says which pattern the Defuser saw (`pattern`). A
+  // repeated toggle is a no-op; a LOCK on a pattern the server doesn't have
+  // (a toggle still in flight or lost) is refused, not judged.
+  gate(state, a) {
+    if (a.kind === "toggle") {
+      if (typeof a.to !== "boolean") return { reason: "stale" };
+      return (state.switches[a.switch] === "1") === a.to ? { reason: "noop" } : null;
+    }
+    if (a.kind === "lock") return a.pattern === state.switches ? null : { reason: "stale" };
+    return null;
+  },
+
   act(rules, state, a) {
     if (a.kind === "toggle") {
       if (!Number.isInteger(a.switch) || a.switch < 0 || a.switch >= N) return { valid: false };

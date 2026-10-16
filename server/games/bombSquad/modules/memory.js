@@ -76,6 +76,13 @@ export default {
     return { kind: "press", position };
   },
 
+  // Live presses say which stage they're for: a double tap (or a press
+  // sent before the new display arrived) is refused, never judged against
+  // the next stage.
+  gate(state, a) {
+    return Number.isInteger(a.stage) && a.stage === state.stage ? null : { reason: "stale" };
+  },
+
   act(rules, state, a) {
     if (a.kind !== "press" || !Number.isInteger(a.position) || a.position < 0 || a.position > 3) return { valid: false };
     const want = this.solve(rules, state);

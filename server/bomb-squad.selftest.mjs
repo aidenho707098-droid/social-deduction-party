@@ -22,6 +22,25 @@ const json = (x) => JSON.stringify(x);
 const IDS = ["ann", "bob", "cat", "dan", "eve", "fay", "gus", "hal", "ivy", "joe"];
 const newGame = (n, opts = {}) => bs.createGame(IDS.slice(0, n), { difficulty: "medium", rounds: 2, seed: 7, ...opts });
 
+// The client fills in the live input protocol (see simon-protocol.selftest.mjs):
+// what step each action is for, and Simon waits for its playback to finish.
+function actP(g, pid, a, { now = Date.now(), ...o } = {}) {
+  const turn = bs.bombsOf(g).find((b) => b.defuserId === pid);
+  const m = turn?.modules[a.module];
+  const st = m?.state;
+  const p = { ...a };
+  if (m?.type === "symbols") p.index ??= st.progress;
+  if (m?.type === "memory") p.stage ??= st.stage;
+  if (m?.type === "switches" && a.kind === "toggle") p.to ??= st.switches[a.switch] !== "1";
+  if (m?.type === "switches" && a.kind === "lock") p.pattern ??= st.switches;
+  if (m?.type === "simon") {
+    p.stage ??= st.stage;
+    p.index ??= st.progress;
+    if (st.playback) now = Math.max(now, st.playback.endAt);
+  }
+  return bs.act(g, pid, p, { now, ...o });
+}
+
 // Solve the live bomb the way a perfect pair would (via each module's solver).
 function defuse(g, now = Date.now()) {
   const turn = g.turn;
@@ -38,16 +57,16 @@ function doAction(g, pid, i, want, now = Date.now()) {
   const turn = g.turn;
   const base = { turn: turn.serial, module: i };
   if (want.kind === "tap" && turn.modules[i].type === "button") {
-    bs.act(g, pid, { ...base, kind: "press" }, { now });
-    return bs.act(g, pid, { ...base, kind: "release" }, { now: now + 100 });
+    actP(g, pid, { ...base, kind: "press" }, { now });
+    return actP(g, pid, { ...base, kind: "release" }, { now: now + 100 });
   }
   if (want.kind === "hold") {
-    bs.act(g, pid, { ...base, kind: "press" }, { now });
+    actP(g, pid, { ...base, kind: "press" }, { now });
     let at = now + 1500;
     while (!bs.secondsAt(turn, at).includes(String(want.digit))) at += 100;
-    return bs.act(g, pid, { ...base, kind: "release" }, { now: at });
+    return actP(g, pid, { ...base, kind: "release" }, { now: at });
   }
-  return bs.act(g, pid, { ...base, ...want }, { now });
+  return actP(g, pid, { ...base, ...want }, { now });
 }
 // One wrong action on module i (for a strike).
 function wrong(g, i, now = Date.now()) {
@@ -55,28 +74,28 @@ function wrong(g, i, now = Date.now()) {
   const m = turn.modules[i];
   const want = MODULES[m.type].solve(m.rules, m.state, { serial: turn.serialNo, strikes: turn.strikes });
   const base = { turn: turn.serial, module: i };
-  if (m.type === "wires") return bs.act(g, turn.defuserId, { ...base, kind: "cut", wire: (want.wire + 1) % m.state.wires.length }, { now });
-  if (m.type === "symbols") return bs.act(g, turn.defuserId, { ...base, kind: "tap", symbol: m.state.shown.find((s) => s !== want.symbol && !m.state.order.slice(0, m.state.progress).includes(s)) }, { now });
+  if (m.type === "wires") return actP(g, turn.defuserId, { ...base, kind: "cut", wire: (want.wire + 1) % m.state.wires.length }, { now });
+  if (m.type === "symbols") return actP(g, turn.defuserId, { ...base, kind: "tap", symbol: m.state.shown.find((s) => s !== want.symbol && !m.state.order.slice(0, m.state.progress).includes(s)) }, { now });
   if (m.type === "button") {
-    bs.act(g, turn.defuserId, { ...base, kind: "press" }, { now });
-    return bs.act(g, turn.defuserId, { ...base, kind: "release" }, { now: now + (want.kind === "tap" ? 2500 : 100) });
+    actP(g, turn.defuserId, { ...base, kind: "press" }, { now });
+    return actP(g, turn.defuserId, { ...base, kind: "release" }, { now: now + (want.kind === "tap" ? 2500 : 100) });
   }
   if (m.type === "memory") {
     const b = m.state.buttons[m.state.stage];
-    return bs.act(g, turn.defuserId, { ...base, kind: "press", position: (want.position + 1) % b.length }, { now });
+    return actP(g, turn.defuserId, { ...base, kind: "press", position: (want.position + 1) % b.length }, { now });
   }
   if (m.type === "maze") {
     const open = m.rules.mazes[m.state.layout].open[m.state.pos];
     const dir = Object.entries({ up: 1, right: 2, down: 4, left: 8 }).find(([, bit]) => !(open & bit))[0];
-    return bs.act(g, turn.defuserId, { ...base, kind: "move", dir }, { now });
+    return actP(g, turn.defuserId, { ...base, kind: "move", dir }, { now });
   }
-  if (m.type === "simon") return bs.act(g, turn.defuserId, { ...base, kind: "press", color: ["red", "blue", "green", "yellow"].find((c) => c !== want.color) }, { now });
+  if (m.type === "simon") return actP(g, turn.defuserId, { ...base, kind: "press", color: ["red", "blue", "green", "yellow"].find((c) => c !== want.color) }, { now });
   if (m.type === "switches") {
-    bs.act(g, turn.defuserId, { ...base, kind: "toggle", switch: 0 }, { now });
-    const r = bs.act(g, turn.defuserId, { ...base, kind: "lock" }, { now });
+    actP(g, turn.defuserId, { ...base, kind: "toggle", switch: 0 }, { now });
+    const r = actP(g, turn.defuserId, { ...base, kind: "lock" }, { now });
     if (!r.strike) {
       // landed on the answer by chance: undo, then lock wrong
-      bs.act(g, turn.defuserId, { ...base, kind: "toggle", switch: 0 }, { now });
+      actP(g, turn.defuserId, { ...base, kind: "toggle", switch: 0 }, { now });
     }
     return r;
   }
@@ -89,7 +108,7 @@ const live = (g) => {
 section("catalogue + config");
 {
   const e = CATALOG.find((x) => x.id === "bomb-squad");
-  check("catalogue: name constant, 2-10, Co-op + Talking chips exist", e?.name === bs.name && e.minPlayers === 2 && e.maxPlayers === 10 && e.tags.join() === "co-op,talking" && ["co-op", "talking"].every((k) => FILTERS.some((f) => f.key === k)));
+  check("catalogue: name constant, 2-10, the Active chip", e?.name === bs.name && e.minPlayers === 2 && e.maxPlayers === 10 && e.tags.join() === "active" && FILTERS.some((f) => f.key === "active"));
   check("difficulties: 2/3/4 modules, 4:00/4:30/5:00", json(Object.values(CONFIG.difficulties).map((d) => [d.modules, d.fuseMs / 1000])) === json([[2, 240], [3, 270], [4, 300]]));
   check("rounds 1-6, default 2", CONFIG.rounds.min === 1 && CONFIG.rounds.max === 6 && CONFIG.rounds.dflt === 2);
   check("Chaos excluded", !isChaosEligible("bomb-squad"));
@@ -214,12 +233,12 @@ section("button: the release is judged on the server's fuse clock");
   let bad = t0 + 3000;
   while ([-1300, -650, 0, 650, 1300].some((d) => bs.secondsAt(turn, bad + d).includes(String(want.digit)))) bad += 50;
   const base = { turn: turn.serial, module: i };
-  bs.act(g, turn.defuserId, { ...base, kind: "press" }, { now: bad - 2000 });
-  const late = bs.act(g, turn.defuserId, { ...base, kind: "release" }, { now: bad });
+  actP(g, turn.defuserId, { ...base, kind: "press" }, { now: bad - 2000 });
+  const late = actP(g, turn.defuserId, { ...base, kind: "release" }, { now: bad });
   check("letting go when the seconds don't show the digit: strike", late.strike);
   // Arrives 400ms late, but the RTT was 800ms: judged at the real moment.
-  bs.act(g, turn.defuserId, { ...base, kind: "press" }, { now: good - 2000 });
-  const ok = bs.act(g, turn.defuserId, { ...base, kind: "release" }, { now: good + 400, halfRttMs: 400 });
+  actP(g, turn.defuserId, { ...base, kind: "press" }, { now: good - 2000 });
+  const ok = actP(g, turn.defuserId, { ...base, kind: "release" }, { now: good + 400, halfRttMs: 400 });
   check("a release on the right digit, latency-compensated: solved", ok.solved && !ok.strike);
 }
 
@@ -242,7 +261,7 @@ section("Phase 2 modules: a wrong Memory press restarts; Switch Board locks");
   check("memory: a wrong press is a strike and restarts at stage 1 with a new display", r.strike && mem.state.stage === 0 && json(mem.state.displays) + json(mem.state.buttons) !== before);
   const si = turn.modules.findIndex((m) => m.type === "switches");
   const sw = turn.modules[si];
-  const lockEarly = bs.act(g, turn.defuserId, { turn: turn.serial, module: si, kind: "lock" });
+  const lockEarly = actP(g, turn.defuserId, { turn: turn.serial, module: si, kind: "lock" });
   check("switches: LOCK with the wrong pattern is a strike", lockEarly.strike);
   for (let k = 0; k < 6 && !sw.solved; k++) doAction(g, turn.defuserId, si, MODULES.switches.solve(sw.rules, sw.state));
   check("switches: set the pattern + LOCK solves it", sw.solved);
@@ -300,7 +319,7 @@ section("disconnects + host controls");
   check("Defuser drops: the fuse pauses", turn.fuse.paused);
   const left = bs.fuseLeft(turn, t + 30_000);
   check("…and stays put while paused", Math.abs(left - bs.fuseLeft(turn, t)) < 1);
-  check("…and the bomb can't be touched", !bs.act(g, turn.defuserId, { turn: turn.serial, module: 0, kind: "cut", wire: 0 }).ok);
+  check("…and the bomb can't be touched", !actP(g, turn.defuserId, { turn: turn.serial, module: 0, kind: "cut", wire: 0 }).ok);
   bs.tick(g, g.participants, t + 30_000);
   check("Defuser back: the fuse runs again", !turn.fuse.paused);
   bs.tick(g, [turn.defuserId], t + 31_000);
@@ -421,7 +440,7 @@ section("Part A: all pairs at once");
   bs.tick(g, g.participants, t);
   check("every fuse lit at the same server time", g.phase === "live" && bombs.every((b) => b.fuse.anchorAt === t));
   const [A, B] = bombs;
-  const cross = bs.act(g, A.defuserId, { turn: B.serial, module: 0, kind: "cut", wire: 0 }, { now: t + 100 });
+  const cross = actP(g, A.defuserId, { turn: B.serial, module: 0, kind: "cut", wire: 0 }, { now: t + 100 });
   check("a Defuser's action is checked against their own bomb only", !cross.ok);
   const save = g.turn;
   g.turn = A; // reuse the 'wrong' helper on bomb A
@@ -487,7 +506,7 @@ section("Part B: Maze + Simon Lights");
   const D = { up: 1, right: 2, down: 4, left: 8 };
   const wallDir = Object.keys(D).find((d) => !(maze.rules.mazes[maze.state.layout].open[maze.state.pos] & D[d]));
   const pos = maze.state.pos;
-  const r = bs.act(g, turn.defuserId, { turn: turn.serial, module: mi, kind: "move", dir: wallDir });
+  const r = actP(g, turn.defuserId, { turn: turn.serial, module: mi, kind: "move", dir: wallDir });
   const flat = (parts) => parts.map((p) => p.t ?? p.b ?? `[${p.c}]`).join("");
   check("maze: walking into a wall is a strike and the dot doesn't move", r.strike && maze.state.pos === pos);
   check("maze: entry reads like 'Moved up from C3 into a wall'", /^Moved (up|down|left|right) from [A-F][1-6] into a wall$/.test(flat(turn.strikeLog.at(-1).did)), flat(turn.strikeLog.at(-1).did));
@@ -495,7 +514,7 @@ section("Part B: Maze + Simon Lights");
   const want = MODULES.simon.solve(sim.rules, sim.state, { serial: turn.serialNo, strikes: turn.strikes });
   const bad = ["red", "blue", "green", "yellow"].find((c) => c !== want.color);
   const replay = sim.state.replay;
-  bs.act(g, turn.defuserId, { turn: turn.serial, module: si, kind: "press", color: bad });
+  actP(g, turn.defuserId, { turn: turn.serial, module: si, kind: "press", color: bad });
   check("simon: a wrong press is a strike, the stage replays, progress resets", turn.strikes === 2 && sim.state.replay === replay + 1 && sim.state.progress === 0);
   const e = turn.strikeLog.at(-1);
   check("simon: entry reads like 'Pressed yellow' / 'Press blue (stage 1, flash 1)'", /^Pressed \[\w+\]$/.test(flat(e.did)) && /^Press \[\w+\] \(stage \d, flash \d\)$/.test(flat(e.expected)), `${flat(e.did)} / ${flat(e.expected)}`);

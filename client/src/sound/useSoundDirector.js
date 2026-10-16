@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useSound } from './SoundContext'
+import { soundManager } from './soundManager'
 
 // Central "sound director". Mounted once (in Lobby) with the live room /
 // role state; it watches for the transitions that deserve a sound and
@@ -135,6 +136,11 @@ export function useSoundDirector(room, myRole, myPlayerId) {
     const snap = { status, gameId, phase, roundIndex, tourPhase }
     const playerIds = (room?.players ?? []).map((pl) => pl.id)
 
+    // While the app is catching up (first load, a reload, a reconnect)
+    // every difference is old news: just take the state as the new
+    // baseline. Sounds only ever come from changes seen live.
+    if (soundManager.catchingUp()) seeded.current = false
+
     // First observed state — don't sound anything for "we just loaded into
     // a room that's already mid-game" (a refresh / reconnect), and take the
     // current roster as the baseline so it doesn't blip for who's already here.
@@ -154,19 +160,19 @@ export function useSoundDirector(room, myRole, myPlayerId) {
     }
     knownPlayerIds.current = new Set(playerIds)
     if (someoneJoined && status === 'lobby' && !tourPhase) {
-      play('player-join')
+      play('player-join', { trigger: 'room_update: a new player joined' })
     }
 
     const announceRoundStart = () => {
       const key = `${gameId}:${roundIndex}`
       if (roundStarted.current.has(key)) return
       roundStarted.current.add(key)
-      play('round-start')
+      play('round-start', { trigger: `${gameId} round ${roundIndex + 1} started` })
     }
 
     // --- Game start: room entered "in-game" ---------------------------
     if (status === 'in-game' && p.status !== 'in-game') {
-      play('game-start')
+      play('game-start', { trigger: `room entered in-game (${gameId})` })
       roundStarted.current = new Set()
       finalPlayed.current = new Set()
       if (gameId != null) roundStarted.current.add(`${gameId}:${roundIndex}`)
@@ -194,7 +200,7 @@ export function useSoundDirector(room, myRole, myPlayerId) {
         const ctx = buildCtx(game, myRole, myPlayerId)
         const key = typeof cue === 'function' ? cue(ctx) : cue
         if (key === 'round-start') announceRoundStart()
-        else if (key) play(key)
+        else if (key) play(key, { trigger: `${gameId} phase -> ${phase}` })
       }
 
       // Generic end-of-game standings (standalone games end on 'final';
@@ -202,13 +208,13 @@ export function useSoundDirector(room, myRole, myPlayerId) {
       if (phase === 'final' && !finalPlayed.current.has(gameId)) {
         finalPlayed.current.add(gameId)
         const iWon = (game.winnerIds ?? []).includes(myPlayerId)
-        play(iWon ? 'game-win' : 'game-over')
+        play(iWon ? 'game-win' : 'game-over', { trigger: `${gameId} final standings` })
       }
     }
 
     // --- Tournament flow ------------------------------------------
     if (tourPhase !== p.tourPhase && tourPhase === 'between') {
-      play('reveal') // between-games results screen
+      play('reveal', { trigger: 'tournament -> between games' }) // results screen
     }
 
     prev.current = snap

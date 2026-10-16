@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useSound } from '../../../sound/SoundContext'
+import { tapProps } from './tap'
 
 const COLS = 'ABCDEF'
 
@@ -47,7 +48,7 @@ export default function Maze({ view, interactive, onAct }) {
           ['right', '→'],
           ['down', '↓'],
         ].map(([dir, glyph]) => (
-          <button key={dir} type="button" className={`bs-maze-btn bs-maze-${dir}`} disabled={!interactive} onClick={() => onAct({ kind: 'move', dir })} aria-label={`Move ${dir}`}>
+          <button key={dir} type="button" className={`bs-maze-btn bs-maze-${dir}`} disabled={!interactive} {...tapProps(() => onAct({ kind: 'move', dir }))} aria-label={`Move ${dir}`}>
             {glyph}
           </button>
         ))}

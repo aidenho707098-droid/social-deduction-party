@@ -18,11 +18,15 @@
     "test:memory-imposter": "node memory-imposter.selftest.mjs && node ../client/src/games/memoryImposter/palette.selftest.mjs",
     "test:echo-chain": "node echo-chain.selftest.mjs && node ../client/src/games/echoChain/board.selftest.mjs",
     "test:word-heist": "node word-heist.selftest.mjs",
-    "test:bomb-squad": "node bomb-squad.selftest.mjs",
+    "test:bomb-squad": "node bomb-squad.selftest.mjs && node simon-protocol.selftest.mjs",
+    "test:simon": "node simon-protocol.selftest.mjs",
     "test:bomb-squad-solvability": "node bomb-squad.solvability.mjs",
     "test:tournament":"node tournament.selftest.mjs",
     "test:catalog": "node catalog.selftest.mjs",
-    "test:categories": "node categories.selftest.mjs"
+    "test:categories": "node categories.selftest.mjs",
+    "test:content": "node content-audit.mjs && node content-norepeat.selftest.mjs",
+    "audit:content": "node content-audit.mjs",
+    "test:sound": "node ../client/src/sound/soundManager.selftest.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

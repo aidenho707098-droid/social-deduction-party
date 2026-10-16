@@ -39,7 +39,7 @@ section("config + content");
 {
   check("one config object holds the timers", CONFIG.setMs === 45_000 && CONFIG.solveMs === 180_000 && CONFIG.aiTimeoutMs === 8_000);
   check("rounds 1-8, default 3; 2-10 players", CONFIG.rounds.min === 1 && CONFIG.rounds.max === 8 && CONFIG.rounds.dflt === 3 && wh.minPlayers === 2 && wh.maxPlayers === 10);
-  check("~40 prompts", PROMPTS.length >= 38 && PROMPTS.length <= 45, `${PROMPTS.length}`);
+  check("80+ prompts, unique ids and texts", PROMPTS.length >= 80 && new Set(PROMPTS.map((p) => p.id)).size === PROMPTS.length && new Set(PROMPTS.map((p) => p.text)).size === PROMPTS.length, `${PROMPTS.length}`);
   const badPrompt = PROMPTS.filter((p) => p.words.length < 14 || p.words.some((w) => !/^[A-Z]{4,8}$/.test(w)) || new Set(p.words).size !== p.words.length);
   check("every prompt has ~15 distinct 4-8 letter fallbacks", badPrompt.length === 0, badPrompt.map((p) => p.id).join());
   check("proper-noun prompts included", ["country", "carbrand", "city", "usstate"].every((id) => PROMPTS_BY_ID[id]));
@@ -47,7 +47,7 @@ section("config + content");
   const badHints = GENERAL.filter((g) => cleanHint(g.hint, g.word) !== g.hint);
   check("every general hint is valid and doesn't contain its word", badHints.length === 0, badHints.map((g) => g.word).join());
   const entry = CATALOG.find((g) => g.id === "word-heist");
-  check("catalogue: name constant, 2-10, Word + Guessing", entry?.name === wh.name && entry.minPlayers === 2 && entry.maxPlayers === 10 && entry.tags.join() === "word,guessing");
+  check("catalogue: name constant, 2-10, Words + Brain", entry?.name === wh.name && entry.minPlayers === 2 && entry.maxPlayers === 10 && entry.tags.join() === "words,brain");
 }
 
 // ===================================================================

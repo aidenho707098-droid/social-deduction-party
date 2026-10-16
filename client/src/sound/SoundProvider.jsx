@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { soundEngine } from './soundEngine'
+import { soundManager } from './soundManager'
 import { SoundContext } from './SoundContext'
 import { unlockChaosAudio } from '../chaos/chaosSting'
 
@@ -36,8 +37,9 @@ export function SoundProvider({ children }) {
     }
   }, [])
 
-  const play = useCallback((key, o) => soundEngine.play(key, o), [])
-  const stop = useCallback((key) => soundEngine.stop(key), [])
+  // Every sound goes through the ONE sound manager (soundManager.js).
+  const play = useCallback((key, o) => soundManager.play(key, o), [])
+  const stop = useCallback((key) => soundManager.stop(key), [])
   const setMuted = useCallback((v) => soundEngine.setMuted(v), [])
   const toggleMuted = useCallback(() => soundEngine.toggleMuted(), [])
   const setVolume = useCallback((v) => soundEngine.setVolume(v), [])

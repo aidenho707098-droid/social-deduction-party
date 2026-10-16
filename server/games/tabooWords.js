@@ -38,6 +38,18 @@ const OBJECTS = [
   { word: "Padlock", taboo: ["key", "lock", "secure", "combination", "chain"], alts: [] },
   { word: "Suitcase", taboo: ["travel", "pack", "clothes", "wheels", "trip"], alts: ["luggage"] },
   { word: "Corkscrew", taboo: ["wine", "bottle", "open", "twist", "cork"], alts: [] },
+  { word: "Toaster", taboo: ["bread", "toast", "kitchen", "pop", "breakfast"], alts: [] },
+  { word: "Remote control", taboo: ["TV", "channel", "buttons", "couch", "batteries"], alts: ["remote"] },
+  { word: "Headphones", taboo: ["music", "ears", "listen", "wireless", "sound"], alts: ["headphone"] },
+  { word: "Calculator", taboo: ["math", "numbers", "add", "buttons", "sum"], alts: [] },
+  { word: "Microwave", taboo: ["heat", "kitchen", "popcorn", "beep", "oven"], alts: [] },
+  { word: "Doorbell", taboo: ["ring", "door", "button", "visitor", "ding"], alts: [] },
+  { word: "Paintbrush", taboo: ["paint", "art", "bristles", "canvas", "color"], alts: ["paint brush"] },
+  { word: "Hourglass", taboo: ["sand", "time", "glass", "timer", "flip"], alts: ["hour glass"] },
+  { word: "Trampoline", taboo: ["jump", "bounce", "garden", "springs", "high"], alts: [] },
+  { word: "Wheelbarrow", taboo: ["garden", "wheel", "push", "dirt", "carry"], alts: ["wheel barrow"] },
+  { word: "Lawnmower", taboo: ["grass", "cut", "garden", "engine", "push"], alts: ["lawn mower"] },
+  { word: "Snow globe", taboo: ["snow", "shake", "glass", "souvenir", "water"], alts: ["snowglobe"] },
 ];
 
 const MOVIES = [
@@ -67,6 +79,20 @@ const MOVIES = [
   { word: "The Terminator", taboo: ["robot", "future", "Arnold", "cyborg", "machine"], alts: ["terminator"] },
   { word: "Forrest Gump", taboo: ["running", "chocolate", "bench", "shrimp", "Hanks"], alts: [] },
   { word: "Pulp Fiction", taboo: ["Tarantino", "briefcase", "dance", "hitman", "diner"], alts: [] },
+  { word: "Harry Potter", taboo: ["wizard", "Hogwarts", "magic", "wand", "Hermione"], alts: [] },
+  { word: "Moana", taboo: ["ocean", "Maui", "Disney", "island", "boat"], alts: [] },
+  { word: "Ratatouille", taboo: ["rat", "chef", "Paris", "cooking", "Pixar"], alts: [] },
+  { word: "Mary Poppins", taboo: ["nanny", "umbrella", "spoonful", "sugar", "chimney"], alts: [] },
+  { word: "E.T.", taboo: ["alien", "phone", "home", "bike", "Spielberg"], alts: ["et", "e t", "the extra terrestrial"] },
+  { word: "Spider-Man", taboo: ["web", "Peter Parker", "superhero", "Marvel", "spider"], alts: ["spiderman", "spider man"] },
+  { word: "Top Gun", taboo: ["pilot", "jets", "Tom Cruise", "Maverick", "navy"], alts: [] },
+  { word: "Wall-E", taboo: ["robot", "trash", "Pixar", "Eve", "space"], alts: ["walle", "wall e"] },
+  { word: "The Incredibles", taboo: ["superheroes", "family", "Pixar", "Elastigirl", "suits"], alts: ["incredibles"] },
+  { word: "Mean Girls", taboo: ["school", "Plastics", "pink", "Regina", "Tina Fey"], alts: [] },
+  { word: "Encanto", taboo: ["Bruno", "family", "magic", "Disney", "house"], alts: [] },
+  { word: "Godzilla", taboo: ["monster", "lizard", "Tokyo", "giant", "roar"], alts: [] },
+  { word: "Cars", taboo: ["race", "Lightning McQueen", "Pixar", "Mater", "vehicles"], alts: [] },
+  { word: "Mrs. Doubtfire", taboo: ["nanny", "Robin Williams", "disguise", "dad", "divorce"], alts: ["mrs doubtfire", "doubtfire"] },
 ];
 
 const PLACES = [
@@ -96,6 +122,20 @@ const PLACES = [
   { word: "Pharmacy", taboo: ["medicine", "prescription", "drugs", "counter", "pills"], alts: ["chemist"] },
   { word: "Bank", taboo: ["money", "vault", "account", "teller", "loans"], alts: [] },
   { word: "Cinema", taboo: ["movie", "screen", "popcorn", "seats", "film"], alts: ["theater", "movies"] },
+  { word: "Supermarket", taboo: ["shopping", "groceries", "cart", "aisle", "food"], alts: ["grocery store"] },
+  { word: "Hair salon", taboo: ["haircut", "hairdresser", "scissors", "style", "chair"], alts: ["salon", "hairdresser"] },
+  { word: "Theme park", taboo: ["rides", "rollercoaster", "tickets", "queue", "Disney"], alts: ["amusement park"] },
+  { word: "Train station", taboo: ["platform", "tracks", "ticket", "travel", "rail"], alts: ["railway station"] },
+  { word: "Post office", taboo: ["mail", "stamps", "letters", "parcel", "send"], alts: [] },
+  { word: "Police station", taboo: ["cops", "officer", "jail", "crime", "arrest"], alts: [] },
+  { word: "Fire station", taboo: ["firefighter", "truck", "pole", "siren", "hose"], alts: ["fire house", "firehouse"] },
+  { word: "Playground", taboo: ["swings", "slide", "kids", "park", "play"], alts: [] },
+  { word: "Pyramid", taboo: ["Egypt", "pharaoh", "triangle", "tomb", "desert"], alts: ["pyramids"] },
+  { word: "Mountain", taboo: ["climb", "peak", "high", "snow", "hike"], alts: [] },
+  { word: "Island", taboo: ["water", "ocean", "sand", "surrounded", "beach"], alts: [] },
+  { word: "Haunted house", taboo: ["ghosts", "scary", "spooky", "Halloween", "creepy"], alts: [] },
+  { word: "Car wash", taboo: ["soap", "clean", "water", "brushes", "vehicle"], alts: ["carwash"] },
+  { word: "Space station", taboo: ["astronaut", "orbit", "rocket", "zero gravity", "space"], alts: ["iss"] },
 ];
 
 const FOOD = [
@@ -125,6 +165,20 @@ const FOOD = [
   { word: "Espresso", taboo: ["coffee", "shot", "strong", "Italian", "caffeine"], alts: [] },
   { word: "Pancake", taboo: ["syrup", "breakfast", "flip", "batter", "griddle"], alts: [] },
   { word: "Bagel", taboo: ["bread", "hole", "cream cheese", "round", "toast"], alts: [] },
+  { word: "Hot dog", taboo: ["sausage", "bun", "mustard", "ketchup", "frankfurter"], alts: ["hotdog"] },
+  { word: "French fries", taboo: ["potato", "chips", "salt", "ketchup", "fried"], alts: ["fries", "chips"] },
+  { word: "Peanut butter", taboo: ["jelly", "spread", "nuts", "sandwich", "jar"], alts: [] },
+  { word: "Chocolate", taboo: ["cocoa", "sweet", "bar", "candy", "brown"], alts: [] },
+  { word: "Lemonade", taboo: ["lemon", "drink", "sour", "stand", "summer"], alts: [] },
+  { word: "Watermelon", taboo: ["seeds", "green", "red", "fruit", "summer"], alts: [] },
+  { word: "Spring roll", taboo: ["Chinese", "crispy", "wrap", "fried", "vegetables"], alts: ["springroll", "egg roll"] },
+  { word: "Ramen", taboo: ["noodles", "Japanese", "broth", "soup", "instant"], alts: [] },
+  { word: "Cupcake", taboo: ["frosting", "cake", "muffin", "sprinkles", "birthday"], alts: [] },
+  { word: "Hot chocolate", taboo: ["cocoa", "marshmallows", "warm", "drink", "milk"], alts: ["hot cocoa", "cocoa"] },
+  { word: "Mac and cheese", taboo: ["macaroni", "pasta", "cheesy", "orange", "noodles"], alts: ["macaroni and cheese", "mac n cheese"] },
+  { word: "Fried chicken", taboo: ["KFC", "crispy", "wings", "drumstick", "batter"], alts: [] },
+  { word: "Banana", taboo: ["yellow", "peel", "monkey", "fruit", "split"], alts: [] },
+  { word: "Grilled cheese", taboo: ["sandwich", "melted", "bread", "toasted", "cheddar"], alts: ["cheese toastie", "toastie"] },
 ];
 
 const ANIMALS = [
@@ -154,6 +208,20 @@ const ANIMALS = [
   { word: "Porcupine", taboo: ["quills", "spikes", "rodent", "sharp", "defense"], alts: [] },
   { word: "Hippopotamus", taboo: ["river", "big", "mouth", "Africa", "water"], alts: ["hippo"] },
   { word: "Ostrich", taboo: ["bird", "fast", "run", "eggs", "neck"], alts: [] },
+  { word: "Zebra", taboo: ["stripes", "horse", "black", "white", "Africa"], alts: [] },
+  { word: "Shark", taboo: ["fins", "teeth", "ocean", "Jaws", "fish"], alts: [] },
+  { word: "Gorilla", taboo: ["ape", "monkey", "chest", "jungle", "banana"], alts: [] },
+  { word: "Snail", taboo: ["shell", "slow", "slime", "slug", "garden"], alts: [] },
+  { word: "Spider", taboo: ["web", "eight", "legs", "creepy", "silk"], alts: [] },
+  { word: "Polar bear", taboo: ["Arctic", "white", "ice", "snow", "north"], alts: [] },
+  { word: "Rabbit", taboo: ["bunny", "ears", "hop", "carrot", "Easter"], alts: ["bunny"] },
+  { word: "Panda", taboo: ["bamboo", "black", "white", "China", "bear"], alts: [] },
+  { word: "Butterfly", taboo: ["wings", "caterpillar", "colorful", "flutter", "insect"], alts: [] },
+  { word: "Parrot", taboo: ["bird", "talk", "colorful", "pirate", "feathers"], alts: [] },
+  { word: "Lobster", taboo: ["claws", "red", "seafood", "shell", "ocean"], alts: [] },
+  { word: "Skunk", taboo: ["smell", "stink", "black", "white", "spray"], alts: [] },
+  { word: "Seahorse", taboo: ["ocean", "horse", "tiny", "curly", "fish"], alts: ["sea horse"] },
+  { word: "Tortoise", taboo: ["shell", "slow", "turtle", "old", "hare"], alts: [] },
 ];
 
 const ACTIVITIES = [
@@ -183,6 +251,20 @@ const ACTIVITIES = [
   { word: "Origami", taboo: ["paper", "fold", "crane", "Japanese", "shapes"], alts: [] },
   { word: "Snowboarding", taboo: ["snow", "board", "mountain", "slope", "ride"], alts: [] },
   { word: "Pottery", taboo: ["clay", "wheel", "kiln", "bowl", "spin"], alts: [] },
+  { word: "Swimming", taboo: ["pool", "water", "strokes", "laps", "goggles"], alts: [] },
+  { word: "Dancing", taboo: ["music", "moves", "party", "steps", "ballroom"], alts: [] },
+  { word: "Singing", taboo: ["voice", "song", "karaoke", "choir", "notes"], alts: [] },
+  { word: "Reading", taboo: ["book", "pages", "library", "words", "novel"], alts: [] },
+  { word: "Sailing", taboo: ["boat", "wind", "sea", "mast", "sails"], alts: [] },
+  { word: "Ice skating", taboo: ["rink", "blades", "ice", "spin", "winter"], alts: ["skating"] },
+  { word: "Horse riding", taboo: ["saddle", "pony", "gallop", "stable", "reins"], alts: ["horseback riding"] },
+  { word: "Kayaking", taboo: ["paddle", "river", "boat", "canoe", "water"], alts: [] },
+  { word: "Jogging", taboo: ["running", "run", "shoes", "park", "exercise"], alts: ["running"] },
+  { word: "Magic tricks", taboo: ["cards", "rabbit", "hat", "wand", "illusion"], alts: ["magic"] },
+  { word: "Sewing", taboo: ["needle", "thread", "fabric", "machine", "stitch"], alts: [] },
+  { word: "Cooking", taboo: ["kitchen", "chef", "recipe", "food", "stove"], alts: [] },
+  { word: "Video gaming", taboo: ["controller", "console", "screen", "play", "PlayStation"], alts: ["gaming", "video games"] },
+  { word: "Treasure hunting", taboo: ["map", "gold", "dig", "pirate", "chest"], alts: ["treasure hunt"] },
 ];
 
 // Each bank gets its items tagged with their category key so a pooled draw

@@ -1,6 +1,12 @@
+import { tapProps } from './tap'
+
 // MEMORY DISPLAY: a big display number, four labelled buttons (positions
-// 1-4 from the left) and five stage lights.
-export default function Memory({ view, interactive, onAct }) {
+// 1-4 from the left) and five stage lights. The next press depends on the
+// NEXT display, so the buttons wait for each press's ack; every press says
+// which stage it is for, so a double tap can't be judged against the next
+// stage.
+export default function Memory({ view, pending = 0, interactive, onAct }) {
+  const busy = pending > 0
   return (
     <div className="bs-memory">
       <div className="bs-memory-top">
@@ -19,8 +25,8 @@ export default function Memory({ view, interactive, onAct }) {
             key={pos}
             type="button"
             className="bs-memory-btn"
-            disabled={!interactive}
-            onClick={() => onAct({ kind: 'press', position: pos })}
+            disabled={!interactive || busy}
+            {...tapProps(() => onAct({ kind: 'press', position: pos, stage: view.stage }))}
             aria-label={`Position ${pos + 1}, labelled ${label}`}
           >
             {label}

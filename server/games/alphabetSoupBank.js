@@ -187,6 +187,32 @@ export const RARE_EXAMPLES = {
   disney: {
     Z: ["Zazu", "Zurg", "Zeus", "Zero", "Zira"],
   },
+  songs: {
+    U: ["Umbrella", "Uptown Funk", "Under Pressure", "Unwritten", "U Can't Touch This"],
+    V: ["Viva la Vida", "Vogue", "Valerie", "Video Killed the Radio Star", "Venus"],
+    Y: ["Yesterday", "Yellow", "YMCA", "Yellow Submarine", "You Belong with Me"],
+  },
+  capitals: {
+    V: ["Vienna", "Vilnius", "Valletta", "Vaduz", "Victoria"],
+  },
+  landmarks: {
+    V: ["Vatican City", "Versailles", "Victoria Falls", "Venice Canals", "Valley of the Kings"],
+  },
+  wedding: {
+    V: ["Veil", "Vows", "Venue", "Violinist", "Vicar"],
+  },
+  concert: {
+    V: ["Vocalist", "Venue", "Violin", "VIP pass", "Vinyl"],
+  },
+  hotel: {
+    V: ["Valet", "Vending machine", "View", "VIP suite", "Visitors"],
+  },
+  supermarket: {
+    V: ["Vegetables", "Vinegar", "Vanilla", "Vitamins", "Veggie burgers"],
+  },
+  "noisy-things": {
+    V: ["Vacuum cleaner", "Violin", "Vuvuzela", "Volcano", "Video game"],
+  },
 };
 
 // The rare letters a category may draw: those with enough examples.
@@ -252,6 +278,51 @@ const RAW = [
   ["dog-breeds", "Dog Breeds", "BCDGHLPRST", LEAD_WORD],
   ["disney", "Disney Characters", "ABCDEGMPSTW"],
   ["wallet", "Things in a Bag or Wallet", "CGKLMPRST", LEAD_WORD],
+  ["pets", "Pets", "BCFGHMPRST", LEAD_WORD],
+  ["garden", "Things in a Garden", "BFGHLPRSTW", LEAD_WORD],
+  ["supermarket", "Things in a Supermarket", "ABCFMPST", LEAD_WORD],
+  ["things-that-fly", "Things That Fly", "BDHKPRS", LEAD_WORD],
+  ["red-things", "Things That Are Red", "BCLRST", LEAD_WORD],
+  ["green-things", "Things That Are Green", "ACFGLPS", LEAD_WORD],
+  ["yellow-things", "Things That Are Yellow", "BCLST", LEAD_WORD],
+  ["books", "Book Titles", "ABCDFGHLMPRST", SEQUELS],
+  ["songs", "Song Titles", "ABCDHLMRST", SEQUELS],
+  ["animated-movies", "Animated Movies", "ABCFMST", SEQUELS],
+  ["things-you-ride", "Things You Can Ride", "BCEHMPRST", LEAD_WORD],
+  ["ice-cream", "Ice Cream Flavors", "BCMPRS", LEAD_WORD],
+  ["snacks", "Snacks", "BCGPST", LEAD_WORD],
+  ["sweet-things", "Things That Are Sweet", "BCHJLMPS", LEAD_WORD],
+  ["landmarks", "Famous Landmarks", "BCGLMST"],
+  ["capitals", "Capital Cities", "ABCDLMPRSTW"],
+  ["wheels", "Things With Wheels", "BCMSTW", LEAD_WORD],
+  ["car-parts", "Things in a Car", "BDGHRSTW", LEAD_WORD],
+  ["hospital", "Things in a Hospital", "BDMNPSW", LEAD_WORD],
+  ["office", "Things in an Office", "CDFMPSTW", LEAD_WORD],
+  ["airport", "Things at the Airport", "BCLPST", LEAD_WORD],
+  ["bedroom", "Things in a Bedroom", "BCDLMPSTW", LEAD_WORD],
+  ["living-room", "Things in a Living Room", "BCLPST", LEAD_WORD],
+  ["fridge", "Things in a Fridge", "BCJLMP", LEAD_WORD],
+  ["camping", "Camping Gear", "BCFLMST", LEAD_WORD],
+  ["sports-gear", "Sports Equipment", "BGHRS", LEAD_WORD],
+  ["soft-things", "Things That Are Soft", "BCFPST", LEAD_WORD],
+  ["hot-things", "Things That Are Hot", "BCFHST", LEAD_WORD],
+  ["noisy-things", "Things That Make Noise", "ABDFST", LEAD_WORD],
+  ["things-you-throw", "Things You Can Throw", "BDFPRS", LEAD_WORD],
+  ["things-you-collect", "Things People Collect", "BCMPRST", LEAD_WORD],
+  ["farm", "Things on a Farm", "BCFGHPSTW", LEAD_WORD],
+  ["forest", "Things in a Forest", "BFLMPSTW", LEAD_WORD],
+  ["city-things", "Things in a City", "BCPST", LEAD_WORD],
+  ["wedding", "Things at a Wedding", "BCDFGRST", LEAD_WORD],
+  ["restaurant", "Things at a Restaurant", "BCDFMPSTW", LEAD_WORD],
+  ["gym", "Things at the Gym", "BMRSTW", LEAD_WORD],
+  ["hotel", "Things at a Hotel", "BLPRS", LEAD_WORD],
+  ["concert", "Things at a Concert", "BCDGLMST", LEAD_WORD],
+  ["fair", "Things at a Fair", "BCFGPRST", LEAD_WORD],
+  ["winter", "Things in Winter", "CFHIS", LEAD_WORD],
+  ["summer", "Things in Summer", "BFHIPSW", LEAD_WORD],
+  ["halloween", "Halloween Things", "BCGMPSTW", LEAD_WORD],
+  ["dances", "Dances", "BCFHMST", LEAD_WORD],
+  ["myth", "Mythical Creatures", "CFGMP", LEAD_WORD],
 ];
 
 export const CATEGORIES = RAW.map(([key, name, letters, flags = {}]) => ({

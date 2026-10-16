@@ -1,6 +1,8 @@
 // Shared sound-effect engine — one instance for the whole app.
 //
-// Everything routes through `soundEngine.play(key)`. Keys live in
+// The low-level player. Nothing calls it directly: every sound goes
+// through soundManager.play() (cooldowns, coalescing, the 3/sec cap, no
+// sound while hidden or catching up), which calls this. Keys live in
 // SOUND_MANIFEST; each maps to a file in /public/sounds plus a per-sound
 // `gain` (0..1) so a booming crowd cheer and a tiny UI tick can sit at
 // sensible relative levels under one master volume.
@@ -33,7 +35,8 @@ export const SOUND_MANIFEST = {
   wrong: { src: 'wrong.mp3', gain: 0.6 },
   confirm: { src: 'confirm.mp3', gain: 0.45 },
   // Someone new in the lobby — a soft, welcoming blip, nothing more.
-  'player-join': { src: 'player-join.mp3', gain: 0.35 },
+  // Coalesced (soundManager.js): a burst of joins is ONE blip.
+  'player-join': { src: 'player-join.mp3', gain: 0.35, coalesceMs: 1200 },
   // A mechanical spin bed; cut short when the wheel lands. TournamentWheel
   // ramps its playbackRate down over the spin so the ticking decelerates
   // with the wheel instead of racing at a flat tempo.
@@ -48,7 +51,7 @@ export const SOUND_MANIFEST = {
   // tick under the stirring swirl (SoupReveal rides its playbackRate up and
   // back down with the stir), then one clean landing chime when the letter
   // tile settles — same arcade family as the wheel, no whooshes.
-  'soup-stir': { src: 'wheel-spin.mp3', gain: 0.18 },
+  'soup-stir': { src: 'wheel-spin.mp3', gain: 0.18, rhythm: true },
   'soup-land': { src: 'wheel-land.mp3', gain: 0.5 },
   // Tournament grand finale — a short, crisp rising achievement chime.
   // Triumphant and clean, not a long sting or a crowd.
@@ -60,19 +63,21 @@ export const SOUND_MANIFEST = {
   //   pass — a short rising "plip" on every pass.
   //   pop  — a soft, rounded cartoon pop for the explosion: a pitch drop
   //          with a little body, no noise crack.
-  'potato-tick': { src: 'potato-tick.wav', gain: 0.35 },
-  'potato-pass': { src: 'potato-pass.wav', gain: 0.45 },
+  // `rhythm` (here, the Echo notes and the soup stir): these ARE the
+  // gameplay, so they skip the sound manager's 3-per-second cap.
+  'potato-tick': { src: 'potato-tick.wav', gain: 0.35, rhythm: true },
+  'potato-pass': { src: 'potato-pass.wav', gain: 0.45, rhythm: true },
   'potato-pop': { src: 'potato-pop.wav', gain: 0.7 },
   // Echo Chain tile notes (client/scripts/make-echo-sounds.mjs): soft bells
   // on a C major pentatonic scale, C5 to A6. Which tile plays which note
   // is client/src/games/echoChain/board.js.
   ...Object.fromEntries(
-    Array.from({ length: 10 }, (_, i) => [`echo-note-${i}`, { src: `echo-note-${i}.wav`, gain: 0.5 }]),
+    Array.from({ length: 10 }, (_, i) => [`echo-note-${i}`, { src: `echo-note-${i}.wav`, gain: 0.5, rhythm: true }]),
   ),
 }
 
 // Vite serves /public at BASE_URL (normally "/").
-const BASE_PATH = `${import.meta.env.BASE_URL}sounds/`
+const BASE_PATH = `${import.meta.env?.BASE_URL ?? '/'}sounds/`
 
 function loadState() {
   try {
@@ -175,18 +180,21 @@ class SoundEngine {
   unlock() {
     if (this.unlocked) return
     this.unlocked = true
+    // MUTED: unlocking must never be heard. (It used to play every
+    // preloaded sound at full volume for a moment on the first tap, a burst
+    // of noise in the lobby / menu.) Plays clone the master, and a clone
+    // doesn't inherit the muted state, so real plays are unaffected.
     for (const el of this.masters.values()) {
       try {
-        const p = el.play()
-        if (p && typeof p.then === 'function') {
-          p.then(() => {
-            el.pause()
-            el.currentTime = 0
-          }).catch(() => {})
-        } else {
+        el.muted = true
+        const reset = () => {
           el.pause()
           el.currentTime = 0
+          el.muted = false
         }
+        const p = el.play()
+        if (p && typeof p.then === 'function') p.then(reset).catch(() => (el.muted = false))
+        else reset()
       } catch {
         // ignore — we'll just try again on the next real play
       }
@@ -198,7 +206,7 @@ class SoundEngine {
     if (this.muted || this.volume === 0) return null
     const entry = SOUND_MANIFEST[key]
     if (!entry) {
-      if (import.meta.env.DEV) console.warn('[sound] unknown key:', key)
+      if (import.meta.env?.DEV) console.warn('[sound] unknown key:', key)
       return null
     }
     const master = this._master(key)

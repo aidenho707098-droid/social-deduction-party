@@ -15,25 +15,25 @@
 //   modes — only where a mode's minimum differs: { [options.mode]: { label,
 //     minPlayers } }. The menu shows it ("2–10, Spoken 3+") and the setup
 //     screen locks that mode below it.
-//   tags — filter chips (see FILTERS); every game needs at least one.
+//   tags — filter chips (see CHIP_LABELS): at least one, at most two.
 //   isNew — shows the mustard NEW pill.
 
 // Echo Chain's tier names (plain data, like this file).
 import { TIERS as ECHO_TIERS } from './echoChain/tiers.js'
 
-export const FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'deduction', label: 'Deduction' },
-  { key: 'bluffing', label: 'Bluffing' },
-  { key: 'trivia', label: 'Trivia' },
-  { key: 'word', label: 'Word' },
-  { key: 'draw-act', label: 'Draw & Act' },
-  { key: 'guessing', label: 'Guessing' },
-  { key: 'quick', label: 'Quick' },
-  { key: 'memory', label: 'Memory' },
-  { key: 'co-op', label: 'Co-op' },
-  { key: 'talking', label: 'Talking' },
-]
+// The menu's filter chips, in order: key -> label. The ONE place to rename
+// a chip (labels are single words). Shared by the host's game menu, the
+// lobby catalogue, Tournament Mode's lineup builder and Surprise me (which
+// picks from whichever chip is on).
+export const CHIP_LABELS = {
+  all: 'All',
+  deduction: 'Deduction', // find the liar, work out the secret
+  words: 'Words', // describe, list, spell
+  brain: 'Brain', // guess, remember, think fast
+  active: 'Active', // draw, shout, pass, talk it down together
+}
+
+export const FILTERS = Object.entries(CHIP_LABELS).map(([key, label]) => ({ key, label }))
 
 export const CATALOG = [
   {
@@ -43,7 +43,7 @@ export const CATALOG = [
     description: 'Everyone shares a secret word except the Imposter, who only knows the category. Talk around it and sniff out the faker.',
     minPlayers: 3,
     maxPlayers: null,
-    tags: ['deduction', 'word'],
+    tags: ['deduction'],
   },
   {
     id: 'would-you-rather',
@@ -52,7 +52,7 @@ export const CATALOG = [
     description: 'Everyone answers the same question in secret. You score by matching the crowd, not by picking your favourite.',
     minPlayers: 2,
     maxPlayers: null,
-    tags: ['guessing', 'quick'],
+    tags: ['brain'],
   },
   {
     id: 'emoji-movie',
@@ -61,7 +61,7 @@ export const CATALOG = [
     description: 'A title spelled out in emojis, revealed one at a time. Type it the moment you crack it: fewer emojis, more points.',
     minPlayers: 2,
     maxPlayers: null,
-    tags: ['trivia', 'guessing', 'quick'],
+    tags: ['brain'],
   },
   {
     id: 'fibbage',
@@ -70,7 +70,7 @@ export const CATALOG = [
     description: 'Fill the blank in an obscure true fact with a convincing fake, then spot the real answer among everyone’s lies.',
     minPlayers: 3,
     maxPlayers: null,
-    tags: ['bluffing', 'trivia'],
+    tags: ['deduction', 'brain'],
   },
   {
     id: 'black-magic',
@@ -88,7 +88,7 @@ export const CATALOG = [
     description: 'A clue points at a secret number on a scale like Quiet ↔ Loud. Guess where it lands: the closer, the more you score.',
     minPlayers: 2,
     maxPlayers: null,
-    tags: ['guessing'],
+    tags: ['brain'],
   },
   {
     id: 'taboo',
@@ -97,7 +97,7 @@ export const CATALOG = [
     description: 'Describe the secret word without saying any of the forbidden ones while everyone races to type it.',
     minPlayers: 2,
     maxPlayers: null,
-    tags: ['word'],
+    tags: ['words'],
   },
   {
     id: 'fake-artist',
@@ -106,7 +106,7 @@ export const CATALOG = [
     description: 'Everyone adds one stroke to a shared drawing of a secret word. One artist is faking it. Vote them out.',
     minPlayers: 3,
     maxPlayers: null,
-    tags: ['deduction', 'draw-act'],
+    tags: ['deduction', 'active'],
   },
   {
     id: 'who-am-i',
@@ -115,7 +115,7 @@ export const CATALOG = [
     description: 'Everyone can see your secret identity but you. Ask yes/no questions out loud until you can name yourself.',
     minPlayers: 2,
     maxPlayers: 10,
-    tags: ['deduction', 'guessing'],
+    tags: ['deduction', 'brain'],
     isNew: true,
   },
   {
@@ -126,7 +126,7 @@ export const CATALOG = [
     minPlayers: 2,
     maxPlayers: 10,
     modes: { spoken: { label: 'Spoken', minPlayers: 3 } },
-    tags: ['word'],
+    tags: ['words'],
     isNew: true,
   },
   {
@@ -136,7 +136,7 @@ export const CATALOG = [
     description: 'Shout something that fits the category and pass the potato on before it blows up in your hands.',
     minPlayers: 3,
     maxPlayers: 10,
-    tags: ['word', 'quick'],
+    tags: ['words', 'active'],
     isNew: true,
   },
   {
@@ -148,7 +148,7 @@ export const CATALOG = [
     description: 'Everyone memorizes the same secret sequence, then one player loses theirs. Talk it out, spot the bluffer, and vote them out.',
     minPlayers: 3,
     maxPlayers: 10,
-    tags: ['deduction', 'memory'],
+    tags: ['deduction', 'brain'],
     isNew: true,
   },
   {
@@ -158,7 +158,7 @@ export const CATALOG = [
     description: `Tap back the whole chain of tiles from memory, then add one more. Miss and lose a life. From ${ECHO_TIERS.recall.name} up to ${ECHO_TIERS.savant.name}, where a miss is never replayed.`,
     minPlayers: 2,
     maxPlayers: 10,
-    tags: ['memory', 'quick'],
+    tags: ['brain'],
     isNew: true,
   },
   {
@@ -170,7 +170,7 @@ export const CATALOG = [
     description: 'Everyone secretly sets one word, then cracks someone else’s, Wordle-style. Crack it fast to score, or set a word that stumps your solver.',
     minPlayers: 2,
     maxPlayers: 10,
-    tags: ['word', 'guessing'],
+    tags: ['words', 'brain'],
     isNew: true,
   },
   {
@@ -182,7 +182,7 @@ export const CATALOG = [
     description: 'One of you sees the bomb, the other has the manual. Talk each other through the wires before the fuse runs out.',
     minPlayers: 2,
     maxPlayers: 10,
-    tags: ['co-op', 'talking'],
+    tags: ['active'],
     isNew: true,
   },
 ]

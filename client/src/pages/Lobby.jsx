@@ -13,12 +13,14 @@ import TournamentIntro from '../tournament/TournamentIntro'
 import TournamentBetween from '../tournament/TournamentBetween'
 import TournamentComplete from '../tournament/TournamentComplete'
 import { useSoundDirector } from '../sound/useSoundDirector'
+import { soundManager } from '../sound/soundManager'
 import ChaosOverlay from '../chaos/ChaosOverlay'
 import ChaosStatusBar from '../chaos/ChaosStatusBar'
 import ChaosVignette from '../chaos/ChaosVignette'
 import FirstTimeWalkthrough from '../walkthrough/FirstTimeWalkthrough'
 import StepBadge from '../walkthrough/StepBadge'
 import { walkthroughDeferred, walkthroughKeyForGame } from '../walkthrough/keyFor'
+import { seenKeyForGame } from '../walkthrough/seen'
 
 export default function Lobby() {
   const { code } = useParams()
@@ -80,6 +82,17 @@ export default function Lobby() {
   // server to reclaim our seat. On the server side that cancels the
   // "remove this player" countdown and catches us back up on room + role.
   useEffect(() => {
+    // Sounds are for events, never for state sync: from mount, and from
+    // every disconnect, until the server has caught us up (resume ack +
+    // the sound manager's short grace), nothing sounds. The state we start
+    // from (location.state, or nothing on a reload) is stale, so the first
+    // real room would otherwise "sound" every difference as news.
+    soundManager.beginCatchUp('initial sync')
+    const caughtUp = () => {
+      soundManager.endCatchUp('initial sync')
+      soundManager.endCatchUp('reconnect')
+    }
+
     function goToJoin() {
       if (redirectedRef.current) return
       redirectedRef.current = true
@@ -90,6 +103,7 @@ export default function Lobby() {
       const s = loadSession()
       if (!s || s.code !== code || !s.playerId || !s.token) {
         // We have no proof we belong here — send them through Join.
+        caughtUp()
         goToJoin()
         return
       }
@@ -97,6 +111,7 @@ export default function Lobby() {
         'resume_session',
         { code, playerId: s.playerId, token: s.token },
         (res) => {
+          caughtUp()
           if (res?.error) {
             // Seat expired or token rejected — start over cleanly.
             clearSession()
@@ -158,6 +173,7 @@ export default function Lobby() {
 
     function handleDisconnect() {
       setConnected(false)
+      soundManager.beginCatchUp('reconnect')
     }
 
     socket.on('connect', handleConnect)
@@ -181,6 +197,7 @@ export default function Lobby() {
       socket.off('your_role', handleYourRole)
       socket.off('kicked', handleKicked)
       socket.off('room_closed', handleRoomClosed)
+      caughtUp()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code])
@@ -275,7 +292,12 @@ export default function Lobby() {
     wordHeistConfirm: (yes, cb) => socket.emit('word_heist_confirm', { code, yes }, cb),
     wordHeistGuess: (guess, cb) => socket.emit('word_heist_guess', { code, guess }, cb),
     wordHeistNext: (cb) => socket.emit('word_heist_next', { code }, cb),
-    bombAct: (action, cb) => socket.emit('bomb_squad_act', { code, ...action }, cb),
+    // Never buffered: socket.io would flush a press made while offline
+    // before the seat is resumed, where it can't count. Say so instead.
+    bombAct: (action, cb) =>
+      socket.connected
+        ? socket.emit('bomb_squad_act', { code, ...action }, cb)
+        : cb?.({ ok: false, reason: 'reconnecting', message: 'Reconnecting…' }),
     bombBet: (choice, cb) => socket.emit('bomb_squad_bet', { code, choice }, cb),
     // "All pairs at once": which pair to skip (one at a time: the current one).
     bombSkip: (groupId = null, cb) => socket.emit('bomb_squad_skip', { code, groupId }, cb),
@@ -379,7 +401,7 @@ export default function Lobby() {
           connected={connected}
           disconnectedPlayers={disconnectedPlayers}
         />
-        <FirstTimeWalkthrough walkthroughKey="tournament" />
+        <FirstTimeWalkthrough walkthroughKey="tournament" seenKey="tournament" room={room} myId={myPlayerId} />
         <StepBadge walkthroughKey="tournament" phase={tour.phase} />
         {node}
       </>
@@ -442,7 +464,13 @@ export default function Lobby() {
           connected={connected}
           disconnectedPlayers={disconnectedPlayers}
         />
-        <FirstTimeWalkthrough walkthroughKey={wtKey} deferred={walkthroughDeferred(room.game, myPlayerId)} />
+        <FirstTimeWalkthrough
+          walkthroughKey={wtKey}
+          seenKey={seenKeyForGame(room.game.id)}
+          room={room}
+          myId={myPlayerId}
+          deferred={walkthroughDeferred(room.game, myPlayerId)}
+        />
         <StepBadge walkthroughKey={wtKey} phase={room.game.phase} />
         <activeGame.Game
           game={room.game}
@@ -452,7 +480,7 @@ export default function Lobby() {
           myId={myPlayerId}
           actions={gameActions}
         />
-        <HowToPlay gameId={room.game.id} variant="fab" />
+        <HowToPlay gameId={room.game.id} variant="fab" walkthroughKey={wtKey} />
       </>
     )
   }

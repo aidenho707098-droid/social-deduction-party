@@ -14,6 +14,10 @@ export const CATEGORIES = {
     "Butterfly", "Spider", "Crab", "Whale", "Octopus",
     "Frog", "Bee", "Ladybug", "Duck", "Horse",
     "Giraffe", "Bat", "Shark", "Dinosaur",
+    "Lion", "Zebra", "Kangaroo", "Pig", "Cow",
+    "Chicken", "Mouse", "Monkey", "Peacock", "Flamingo",
+    "Hedgehog", "Squirrel", "Jellyfish", "Starfish", "Camel",
+    "Crocodile",
   ],
   "Food & Drink": [
     "Pizza", "Ice Cream Cone", "Banana", "Apple", "Hamburger",
@@ -21,6 +25,10 @@ export const CATEGORIES = {
     "Pineapple", "Carrot", "Watermelon Slice", "Taco", "Sushi Roll",
     "Coffee Cup", "Milkshake", "Lollipop", "Pretzel", "Baguette",
     "Cherry", "Popsicle", "Fortune Cookie", "Corn on the Cob",
+    "Cake", "Croissant", "Strawberry", "Grapes", "Pear",
+    "French Fries", "Sandwich", "Cookie", "Pancakes", "Bacon",
+    "Broccoli", "Spaghetti", "Teacup", "Wine Glass", "Lemon",
+    "Popcorn",
   ],
   "Household Objects": [
     "Umbrella", "Key", "Scissors", "Toothbrush", "Light Bulb",
@@ -28,6 +36,10 @@ export const CATEGORIES = {
     "Teapot", "Candle", "Anchor", "Padlock", "Paperclip",
     "Sunglasses", "Backpack", "Balloon", "Wristwatch", "Frying Pan",
     "Broom", "Bell", "Magnet", "Envelope",
+    "Chair", "Lamp", "Bed", "Bathtub", "Toilet",
+    "Television", "Telephone", "Bucket", "Pencil", "Book",
+    "Glasses", "Comb", "Mug", "Kettle", "Remote Control",
+    "Rubber Duck",
   ],
   Places: [
     "House", "Castle", "Lighthouse", "Tent", "Igloo",
@@ -35,6 +47,10 @@ export const CATEGORIES = {
     "Bridge", "Treehouse", "Ferris Wheel", "Volcano", "Island",
     "Well", "Fire Hydrant", "Mailbox", "Bus Stop", "Fountain",
     "Campfire", "Hot Air Balloon", "Sandcastle", "Beach Chair",
+    "School", "Hospital", "Farm", "Zoo", "Desert",
+    "Playground", "Garage", "Swimming Pool", "Stadium", "Haunted House",
+    "Space Station", "Train Station", "Cave", "Beach Hut", "Eiffel Tower",
+    "Statue of Liberty",
   ],
   Nature: [
     "Tree", "Flower", "Cactus", "Mushroom", "Sun",
@@ -42,6 +58,10 @@ export const CATEGORIES = {
     "Star", "Mountain", "Leaf", "Acorn", "Pinecone",
     "Wave", "Tornado", "Palm Tree", "Rose", "Sunflower",
     "Iceberg", "Raindrop", "Seashell", "Coral",
+    "Waterfall", "River", "Puddle", "Snowman", "Planet",
+    "Comet", "Feather", "Tulip", "Daisy", "Bamboo",
+    "Rock", "Grass", "Sunset", "Spiderweb", "Bird's Nest",
+    "Apple Tree",
   ],
   "Vehicles & Transport": [
     "Car", "Bicycle", "Airplane", "Rocket", "Sailboat",
@@ -49,6 +69,10 @@ export const CATEGORIES = {
     "Scooter", "Tractor", "Fire Truck", "Hot Air Balloon", "Canoe",
     "Motorcycle", "Bus", "Ambulance", "Pirate Ship", "Wheelbarrow",
     "Unicycle", "Jet Ski", "Cable Car", "Blimp",
+    "Truck", "Taxi", "Tank", "Spaceship", "Kayak",
+    "Sled", "Roller Skate", "Tricycle", "Ice Cream Truck", "Steam Train",
+    "Speedboat", "Parachute", "Monster Truck", "Go-Kart", "Tram",
+    "Police Car",
   ],
 };
 

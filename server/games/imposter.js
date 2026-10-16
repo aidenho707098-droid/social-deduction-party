@@ -6,42 +6,73 @@ const CATEGORIES = {
     "Dolphin", "Tiger", "Panda", "Flamingo", "Koala",
     "Hedgehog", "Raccoon", "Platypus", "Otter", "Sloth",
     "Walrus", "Peacock", "Chameleon", "Meerkat", "Armadillo",
+    "Lion", "Zebra", "Gorilla", "Crocodile", "Owl",
+    "Shark", "Camel", "Squirrel", "Parrot", "Hippo",
+    "Rhino", "Polar Bear", "Bat", "Moose", "Beaver",
+    "Jellyfish", "Ostrich", "Wolf", "Llama", "Seahorse",
   ],
   Food: [
     "Pizza", "Sushi", "Taco", "Pancake", "Burger",
     "Spaghetti", "Sandwich", "Waffle", "Popcorn", "Donut",
     "Burrito", "Lasagna", "Pretzel", "Nachos", "Dumpling",
     "Croissant", "Meatball", "Cheesecake", "Omelette", "Pudding",
+    "Hot Dog", "Ice Cream", "French Fries", "Ramen", "Pie",
+    "Bagel", "Cupcake", "Quesadilla", "Mac and Cheese", "Fried Chicken",
+    "Curry", "Kebab", "Muffin", "Cereal", "Soup",
+    "Brownie", "Paella", "Spring Roll", "Fondue", "Smoothie",
   ],
   Places: [
     "Beach", "Hospital", "Library", "Airport", "Castle",
     "Zoo", "Concert", "Volcano", "Submarine", "Space Station",
     "Lighthouse", "Aquarium", "Casino", "Greenhouse", "Cemetery",
     "Ski Lodge", "Subway", "Campsite", "Courtroom", "Farm",
+    "Museum", "Bakery", "Gym", "Movie Theater", "Pyramid",
+    "Jungle", "Desert", "Igloo", "Prison", "Stadium",
+    "Haunted House", "Cruise Ship", "Train Station", "Waterpark", "Pirate Ship",
+    "Theme Park", "Hair Salon", "Bowling Alley", "Supermarket", "Treehouse",
   ],
   Movies: [
     "Titanic", "Frozen", "Jaws", "Avatar", "Shrek",
     "Inception", "Gladiator", "Cinderella", "Rocky", "Matrix",
     "Jurassic Park", "Ghostbusters", "Casablanca", "Interstellar", "Braveheart",
     "Grease", "Twister", "Aladdin", "Coco", "Up",
+    "Toy Story", "Star Wars", "Finding Nemo", "Harry Potter", "Moana",
+    "The Lion King", "Home Alone", "Jumanji", "Mary Poppins", "E.T.",
+    "Back to the Future", "Ratatouille", "Encanto", "Godzilla", "King Kong",
+    "Mean Girls", "Top Gun", "Wall-E", "Spider-Man", "The Incredibles",
   ],
   Sports: [
     "Soccer", "Basketball", "Tennis", "Bowling", "Surfing",
     "Boxing", "Golf", "Archery", "Skateboarding", "Volleyball",
     "Hockey", "Fencing", "Curling", "Gymnastics", "Rowing",
     "Badminton", "Cricket", "Snowboarding",
+    "Baseball", "Rugby", "Swimming", "Skiing", "Wrestling",
+    "Karate", "Cycling", "Table Tennis", "Ice Skating", "Water Polo",
+    "Rock Climbing", "Darts", "Sumo", "Judo", "Lacrosse",
+    "Diving", "Sailing", "Horse Racing", "Marathon", "Kayaking",
+    "Pole Vault", "Polo",
   ],
   Jobs: [
     "Firefighter", "Astronaut", "Plumber", "Chef", "Dentist",
     "Lifeguard", "Electrician", "Librarian", "Barber", "Pilot",
     "Farmer", "Judge", "Nurse", "Carpenter", "Journalist",
     "Zookeeper", "Accountant", "Magician",
+    "Teacher", "Doctor", "Police Officer", "Baker", "Mail Carrier",
+    "Photographer", "Veterinarian", "Mechanic", "Lawyer", "Scientist",
+    "Waiter", "Architect", "Hairdresser", "Taxi Driver", "Painter",
+    "Gardener", "Detective", "Flight Attendant", "Clown", "Lumberjack",
+    "Tour Guide", "Referee",
   ],
   "Around the House": [
     "Toaster", "Umbrella", "Pillow", "Vacuum", "Doorbell",
     "Mirror", "Blender", "Ladder", "Thermostat", "Bathtub",
     "Broom", "Mousetrap", "Chandelier", "Fireplace", "Hairdryer",
     "Ironing Board", "Coat Rack", "Piggy Bank",
+    "Fridge", "Microwave", "Sofa", "Bookshelf", "Lamp",
+    "Washing Machine", "Toothbrush", "Remote Control", "Alarm Clock", "Shower",
+    "Curtains", "Doormat", "Kettle", "Dishwasher", "Light Switch",
+    "Rug", "Laundry Basket", "Smoke Alarm", "Cookie Jar", "Bunk Bed",
+    "Ceiling Fan", "Mailbox",
   ],
 };
 
@@ -302,3 +333,6 @@ export function tournamentOptions() {
   const category = CATEGORY_NAMES[Math.floor(Math.random() * CATEGORY_NAMES.length)];
   return { imposterCount: 1, category };
 }
+
+// The built-in content banks, for server/content-audit.mjs.
+export { CATEGORIES };

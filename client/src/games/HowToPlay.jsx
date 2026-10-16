@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { getGame } from './registry'
+import WalkthroughOverlay from '../walkthrough/WalkthroughOverlay'
+import { WALKTHROUGHS } from '../walkthrough/content'
 
 // Shared, reusable "How to Play" affordance. Drop it anywhere with a
 // `gameId` and it renders a small trigger that opens a closable popup of
@@ -13,8 +15,14 @@ import { getGame } from './registry'
 // variant:
 //   'link' (default) — a small underlined text button, for setup screens
 //   'fab'            — a floating "?" button, for use during a live game
-export default function HowToPlay({ gameId, variant = 'link', label = 'How to Play' }) {
+//
+// `walkthroughKey` (in a game): the popup also offers the game's guided
+// walkthrough again — the only way to see it after its one automatic
+// showing (walkthrough/FirstTimeWalkthrough.jsx).
+export default function HowToPlay({ gameId, variant = 'link', label = 'How to Play', walkthroughKey = null }) {
   const [open, setOpen] = useState(false)
+  const [tour, setTour] = useState(false)
+  const wt = walkthroughKey ? WALKTHROUGHS[walkthroughKey] : null
   const game = getGame(gameId)
   if (!game?.rules) return null
 
@@ -33,9 +41,21 @@ export default function HowToPlay({ gameId, variant = 'link', label = 'How to Pl
         {iconOnly ? '?' : label}
       </button>
       {open && createPortal(
-        <RulesModal game={game} onClose={() => setOpen(false)} />,
+        <RulesModal
+          game={game}
+          onClose={() => setOpen(false)}
+          onWalkthrough={
+            wt
+              ? () => {
+                  setOpen(false)
+                  setTour(true)
+                }
+              : null
+          }
+        />,
         document.body
       )}
+      {tour && wt && <WalkthroughOverlay title={wt.title} steps={wt.steps} onDone={() => setTour(false)} />}
     </>
   )
 }
@@ -58,7 +78,7 @@ export function RulesBody({ rules }) {
   )
 }
 
-export function RulesModal({ game, onClose }) {
+export function RulesModal({ game, onClose, onWalkthrough = null }) {
 
   // Close on Escape, like a normal dialog.
   useEffect(() => {
@@ -92,6 +112,11 @@ export function RulesModal({ game, onClose }) {
 
         <RulesBody rules={game.rules} />
 
+        {onWalkthrough && (
+          <button type="button" className="btn btn-text" onClick={onWalkthrough}>
+            Show the walkthrough again
+          </button>
+        )}
         <button type="button" className="btn btn-secondary" onClick={onClose}>
           Got it
         </button>

@@ -47,6 +47,10 @@ export const CONFIG = {
   symbols: { pool: 24, columns: 6, perColumn: 7, shown: 4 },
   memory: { stages: 5 },
   switches: { count: 5, patterns: 8 },
+  // Simon Lights playback, run by the server (the client draws it from
+  // these): a lead-in, then each flash on for onMs with gapMs after it.
+  // With no press for idleMs the stage replays (progress is kept).
+  simon: { leadMs: 400, onMs: 520, gapMs: 260, idleMs: 8_000 },
 };
 
 export const DIFFICULTY_KEYS = Object.keys(CONFIG.difficulties);

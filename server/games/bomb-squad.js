@@ -197,7 +197,7 @@ function makeBomb(game, group, now) {
     const inst = makeRng(seed);
     const modules = types.map((type) => {
       const rules = MODULES[type].generateRules(hashSeed(`${seed}:${type}`), params[type]);
-      return { type, rules, state: MODULES[type].createInstance(inst, rules, params[type]), solved: false };
+      return { type, rules, state: MODULES[type].createInstance(inst, rules, params[type]), solved: false, rev: 0 };
     });
     const serialNo = makeSerial(inst);
     try {
@@ -226,6 +226,7 @@ function makeBomb(game, group, now) {
     broken: !built,
     strikes: 0,
     strikeLog: [],
+    lastSeq: 0, // the Defuser's last processed action number (see act)
     fuse: { totalMs: fuseMs, leftMs: fuseMs, anchorAt: null, rate: 1, paused: false },
     bets: new Map(),
     outcome: built ? null : "forfeit",
@@ -260,7 +261,22 @@ function lightFuses(game, now) {
   game.phase = "live";
   game.deadline = null;
   game.windowMs = null;
-  for (const bomb of bombsOf(game)) if (!bomb.outcome) bomb.fuse.anchorAt = now; // the same server instant for all
+  for (const bomb of bombsOf(game)) {
+    if (bomb.outcome) continue;
+    bomb.fuse.anchorAt = now; // the same server instant for all
+    startModules(bomb, now, "start");
+  }
+}
+
+// Modules with a live clock of their own (Simon's flashes) start, or
+// restart after a pause, here.
+function startModules(turn, now, reason) {
+  for (const m of turn.modules) {
+    const mod = MODULES[m.type];
+    if (m.solved || !mod.start) continue;
+    mod.start(m.state, now, reason);
+    m.rev += 1;
+  }
 }
 
 function pause(turn, now) {
@@ -273,6 +289,7 @@ function resume(turn, now) {
   if (!turn.fuse.paused) return;
   turn.fuse.paused = false;
   turn.fuse.anchorAt = now;
+  startModules(turn, now, "resume"); // the Defuser is back: show them the flashes again
 }
 
 // Every bomb this round: the one in play ("turns"), or all ("together").
@@ -291,28 +308,53 @@ export function bombFor(game, pid) {
 // actions
 // =====================================================================
 
+// The ack every action gets back: the module's fresh view and revision, so
+// the client never drifts from the server (it keeps whichever view of a
+// module has the highest rev, ack or push).
+function ackOf(turn, m, now) {
+  return { module: { index: turn.modules.indexOf(m), rev: m.rev, solved: m.solved, view: MODULES[m.type].view(m.state, now) }, lastSeq: turn.lastSeq, strikes: turn.strikes };
+}
+
 // The Defuser acts on one module of THEIR bomb. `halfRttMs` (from
 // server/latency.js) backs the moment out to when the player actually did it.
-export function act(game, pid, { turn: turnSerial, module: idx, ...a }, { now = Date.now(), halfRttMs = 0 } = {}) {
+//
+// `seq` is the client's action number for this bomb (1, 2, 3 …, carried on
+// from the bomb's lastSeq after a reload). Actions are processed in order;
+// one numbered at or below the last processed is a duplicate (a resend, or
+// a stale copy that arrived late) and is dropped without being judged.
+// Then the module's own gate (if any) checks the action is for the step
+// the server is on (Simon: not during playback, the right stage + index).
+// Every outcome is acked with the module's fresh view.
+export function act(game, pid, { turn: turnSerial, module: idx, seq, ...a }, { now = Date.now(), halfRttMs = 0 } = {}) {
   const turn = bombsOf(game).find((b) => b.defuserId === pid);
   if (!turn) return { ok: false, message: "Only the Defuser can touch the bomb." };
   if (game.phase !== "live" || turn.outcome || turn.serial !== turnSerial) return { ok: false, message: "That bomb isn't live." };
-  if (turn.fuse.paused) return { ok: false, message: "Paused: waiting for your partner." };
   const m = turn.modules[idx];
-  if (!m || m.solved) return { ok: false };
+  if (!m) return { ok: false };
+  if (Number.isInteger(seq)) {
+    if (seq <= turn.lastSeq) return { ok: false, reason: "duplicate", ...ackOf(turn, m, now) };
+    turn.lastSeq = seq;
+  }
+  if (turn.fuse.paused) return { ok: false, reason: "paused", message: "Paused: waiting for your partner.", ...ackOf(turn, m, now) };
+  if (m.solved) return { ok: false, reason: "solved", ...ackOf(turn, m, now) };
+  const mod = MODULES[m.type];
+  const gated = mod.gate?.(m.state, a, now);
+  if (gated) return { ok: false, ...gated, ...ackOf(turn, m, now) };
   const at = now - Math.min(Math.max(0, halfRttMs), CONFIG.button.maxHalfRttMs);
   const ctx = {
     serial: turn.serialNo,
     strikes: turn.strikes,
     at,
+    now,
     secondsAt: (ms) => secondsAt(turn, ms),
     timeAt: (ms) => clock(fuseLeft(turn, ms)),
   };
-  const mod = MODULES[m.type];
   const before = structuredClone(m.state);
   const res = mod.act(m.rules, m.state, a, ctx);
-  if (!res.valid) return { ok: false };
+  if (!res.valid) return { ok: false, reason: "invalid", ...ackOf(turn, m, now) };
+  m.rev += 1;
   const out = { ok: true, strike: !!res.strike, solved: !!res.solved };
+  const ack = () => Object.assign(out, ackOf(turn, m, now));
   if (res.strike) {
     // "What went wrong", revealed only after the bomb ends.
     const entry = mod.describe(m.rules, before, a, ctx);
@@ -323,7 +365,7 @@ export function act(game, pid, { turn: turnSerial, module: idx, ...a }, { now = 
     if (turn.strikes >= CONFIG.strikesToExplode) {
       endBomb(game, turn, "exploded", now, "strikes");
       out.exploded = true;
-      return out;
+      return ack();
     }
   }
   if (res.solved) {
@@ -333,7 +375,7 @@ export function act(game, pid, { turn: turnSerial, module: idx, ...a }, { now = 
       out.defused = true;
     }
   }
-  return out;
+  return ack();
 }
 
 // Spectators ("turns" only): "defused" or "boom", during the get-ready.
@@ -429,6 +471,14 @@ export function tick(game, presentPlayerIds, now = Date.now()) {
           endBomb(game, turn, "exploded", now, "time");
           changed = true;
           if (game.phase !== "live") break;
+        } else if (!turn.fuse.paused) {
+          // Module clocks: Simon's playback ending / its inactivity replay.
+          for (const m of turn.modules) {
+            const mod = MODULES[m.type];
+            if (m.solved || !mod.tick || !mod.tick(m.state, now)) continue;
+            m.rev += 1;
+            changed = true;
+          }
         }
       }
       return changed;
@@ -616,10 +666,13 @@ export function getPublicState(game, presentPlayerIds, now = Date.now()) {
 }
 
 // What the Defuser and spectators see of the bomb: never the rules.
-function bombView(turn) {
+// `lastSeq` lets a reloaded Defuser carry on numbering its actions; `rev`
+// orders this push against acks (the client keeps the newest).
+function bombView(turn, now) {
   return {
     serialNo: turn.serialNo,
-    modules: turn.modules.map((m, i) => ({ index: i, type: m.type, solved: m.solved, view: MODULES[m.type].view(m.state) })),
+    lastSeq: turn.lastSeq,
+    modules: turn.modules.map((m, i) => ({ index: i, type: m.type, solved: m.solved, rev: m.rev, view: MODULES[m.type].view(m.state, now) })),
   };
 }
 
@@ -641,14 +694,14 @@ export function getPrivateState(game, pid, now = Date.now()) {
     const turn = bombFor(game, pid);
     if (!turn || game.phase === "summary") return null;
     const base = { serial: turn.serial, roundIndex: game.roundIndex, turn: turnView(game, turn, now) };
-    if (pid === turn.defuserId) return { bombSquad: { ...base, role: "defuser", bomb: game.phase === "ready" ? null : bombView(turn) } };
+    if (pid === turn.defuserId) return { bombSquad: { ...base, role: "defuser", bomb: game.phase === "ready" ? null : bombView(turn, now) } };
     return { bombSquad: { ...base, role: "expert", manual: manualFor(turn, pid) } };
   }
   const turn = game.turn;
   if (!turn || game.phase === "summary") return null;
   const base = { serial: turn.serial, roundIndex: game.roundIndex };
   if (pid === turn.defuserId) {
-    return { bombSquad: { ...base, role: "defuser", bomb: game.phase === "ready" ? null : bombView(turn) } };
+    return { bombSquad: { ...base, role: "defuser", bomb: game.phase === "ready" ? null : bombView(turn, now) } };
   }
   if (turn.expertIds.includes(pid)) {
     return { bombSquad: { ...base, role: "expert", manual: manualFor(turn, pid) } };
@@ -656,6 +709,6 @@ export function getPrivateState(game, pid, now = Date.now()) {
   // A partner of this group who is no longer on it (left) gets nothing.
   if (game.groups[turn.groupId].members.includes(pid)) return null;
   return {
-    bombSquad: { ...base, role: "spectator", bomb: game.phase === "ready" ? null : bombView(turn), myBet: turn.bets.get(pid) ?? null },
+    bombSquad: { ...base, role: "spectator", bomb: game.phase === "ready" ? null : bombView(turn, now), myBet: turn.bets.get(pid) ?? null },
   };
 }

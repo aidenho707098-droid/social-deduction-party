@@ -356,7 +356,7 @@ section("(d) Short Rounds + Elimination");
 section("(e) integrations");
 {
   check("registered with the server", GAMES["hot-potato"] === hp || GAMES["hot-potato"]?.id === "hot-potato");
-  check("shares Alphabet Soup's 50+ category bank", CATEGORIES.length >= 50 && CATEGORY_KEYS.includes(hp.createGame(P3, {}).potato.categoryKey));
+  check("shares Alphabet Soup's 100+ category bank", CATEGORIES.length >= 100 && CATEGORY_KEYS.includes(hp.createGame(P3, {}).potato.categoryKey));
   const fewCats = hp.createGame(P3, { categories: ["animals", "foods"] });
   check("category toggles respected", ["animals", "foods"].includes(fewCats.potato.categoryKey));
 

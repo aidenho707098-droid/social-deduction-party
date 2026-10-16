@@ -516,3 +516,6 @@ export function getPrivateState(game, playerId) {
 export function tournamentOptions() {
   return { rounds: 2, assignment: "rotation" };
 }
+
+// The built-in content banks, for server/content-audit.mjs.
+export { CURSES };
